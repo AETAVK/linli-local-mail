@@ -1,0 +1,31 @@
+{
+  "name": "linli-local-mail-bridge",
+  "version": "0.6.0",
+  "private": true,
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "SOURCE_REPOSITORY_URL"
+  },
+  "type": "module",
+  "description": "BSide Olivia Lin .627 local text-letter bridge and model orchestrator",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "doctor": "node tools/doctor.mjs",
+    "backup": "node tools/backup.mjs create",
+    "patch:install": "node tools/feapp.mjs install",
+    "patch:verify": "node tools/feapp.mjs verify",
+    "patch:restore": "node tools/feapp.mjs restore",
+    "baseline:import": "node tools/feapp.mjs import-baseline",
+    "release": "node tools/release.mjs",
+    "history:validate": "node tools/history.mjs validate",
+    "history:import": "node tools/history.mjs import",
+    "installer:build": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-installer.ps1",
+    "launcher:build": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-launcher-wrapper.ps1",
+    "launcher:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/install-launcher-wrapper.ps1",
+    "launcher:restore": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/restore-launcher.ps1"
+  }
+}

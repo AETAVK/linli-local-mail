@@ -1,0 +1,215 @@
+﻿# 林离本地回信桥：一键安装脚本
+# 面向接收者：验证/安装 Node.js、校验游戏目录、导入兼容基线、安装前端补丁，并可立即启动。
+# 用法：双击仓库根目录的 Install.cmd，或 powershell -File tools\install.ps1 [-NoLaunch]
+
+param(
+  [switch]$NoLaunch,
+  [switch]$NonInteractive
+)
+
+$ErrorActionPreference = "Stop"
+$serviceRoot = Split-Path -Parent $PSScriptRoot
+$gameRoot = Split-Path -Parent $serviceRoot
+$requiredNodeMajor = 24
+
+function Write-Step($message) { Write-Host ""
+  Write-Host "==> $message" -ForegroundColor Cyan }
+function Write-Ok($message) { Write-Host "    $message" -ForegroundColor Green }
+function Write-Warn2($message) { Write-Host "    $message" -ForegroundColor Yellow }
+function Die($message) {
+  Write-Host ""
+  Write-Host "安装中止：$message" -ForegroundColor Red
+  if (-not $NonInteractive) { Read-Host "按回车键退出" }
+  exit 1
+}
+
+Write-Host "林离本地回信桥 - 一键安装" -ForegroundColor White
+Write-Host "项目目录：$serviceRoot"
+Write-Host "游戏目录：$gameRoot"
+
+# ---- 步骤 1：游戏目录检查 ----
+Write-Step "检查游戏目录"
+$officialPack = Join-Path $gameRoot "0.0.9.627\resources\feapp.dat"
+$launcher = Join-Path $gameRoot "launcher.exe"
+if (-not (Test-Path $officialPack)) {
+  Die "未找到 $officialPack。请确认 linli-local-mail 文件夹放在 0.0.9.627 版本的游戏根目录内（与 0.0.9.627、launcher.exe 平级）。"
+}
+if (-not (Test-Path $launcher)) {
+  Die "未找到 $launcher。请确认这是 BSide Olivia Lin 的游戏根目录。"
+}
+Write-Ok "游戏目录结构正确（0.0.9.627 本体 + launcher.exe）"
+
+# ---- 步骤 2：验证内置或系统 Node.js（>= 24）----
+Write-Step "检查 Node.js（需要 >= $requiredNodeMajor）"
+
+function Get-NodeVersion([string]$nodePath) {
+  if ($nodePath -and (Test-Path -LiteralPath $nodePath -PathType Leaf)) {
+    try { return ((& $nodePath --version 2>$null) -replace '^v', '').Trim() } catch { return $null }
+  }
+  return $null
+}
+
+function Add-KnownNodePaths {
+  $candidates = @(
+    (Join-Path $env:ProgramFiles "nodejs"),
+    (Join-Path ${env:ProgramFiles(x86)} "nodejs"),
+    (Join-Path $env:LOCALAPPDATA "Programs\nodejs")
+  ) | Where-Object { $_ -and (Test-Path (Join-Path $_ "node.exe")) }
+  foreach ($directory in $candidates) {
+    if (($env:Path -split ';') -notcontains $directory) { $env:Path = "$env:Path;$directory" }
+  }
+}
+
+$bundledNodePath = Join-Path $serviceRoot "runtime\node.exe"
+$nodePath = $null
+$nodeVersion = $null
+$usingBundledNode = Test-Path -LiteralPath $bundledNodePath -PathType Leaf
+if ($usingBundledNode) {
+  $nodePath = (Resolve-Path -LiteralPath $bundledNodePath).Path
+  $nodeVersion = Get-NodeVersion $nodePath
+  if (-not $nodeVersion) {
+    Die "内置 Node.js 无法运行：$nodePath"
+  }
+  if ([int]($nodeVersion.Split('.')[0]) -lt $requiredNodeMajor) {
+    Die "内置 Node.js $nodeVersion 版本过旧（本项目需要 >= $requiredNodeMajor）。"
+  }
+  Write-Ok "使用内置 Node.js $nodeVersion"
+}
+
+if (-not $usingBundledNode) {
+  Add-KnownNodePaths
+  $systemNode = Get-Command node.exe -ErrorAction SilentlyContinue
+  if ($systemNode) { $nodePath = $systemNode.Source }
+  $nodeVersion = Get-NodeVersion $nodePath
+}
+$needsInstall = $false
+if (-not $usingBundledNode -and -not $nodeVersion) {
+  Write-Warn2 "未检测到 Node.js。"
+  $needsInstall = $true
+} elseif (-not $usingBundledNode -and [int]($nodeVersion.Split('.')[0]) -lt $requiredNodeMajor) {
+  Write-Warn2 "Node.js $nodeVersion 版本过旧（本项目需要 >= $requiredNodeMajor，因为使用了内置 SQLite）。"
+  $needsInstall = $true
+} elseif (-not $usingBundledNode) {
+  Write-Ok "Node.js $nodeVersion 满足要求"
+}
+
+if ($needsInstall) {
+  $answer = Read-Host "是否现在通过 winget 自动安装 Node.js LTS？[Y/n]"
+  if ($answer -match '^(n|N)') {
+    Die "请手动安装 Node.js LTS（https://nodejs.org/，版本 >= $requiredNodeMajor）后重新运行本脚本。"
+  }
+  $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+  if (-not $winget) {
+    Start-Process "https://nodejs.org/en/download"
+    Die "未检测到 winget。已打开 Node.js 下载页，请安装 LTS 版本（>= $requiredNodeMajor）后重新运行本脚本。"
+  }
+  Write-Host "    正在通过 winget 安装 OpenJS.NodeJS.LTS（可能需要几分钟）……"
+  & winget.exe install --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
+  if ($LASTEXITCODE -ne 0) {
+    Start-Process "https://nodejs.org/en/download"
+    Die "winget 安装失败。已打开 Node.js 下载页，请手动安装 LTS 版本后重新运行本脚本。"
+  }
+  Add-KnownNodePaths
+  $systemNode = Get-Command node.exe -ErrorAction SilentlyContinue
+  if ($systemNode) { $nodePath = $systemNode.Source }
+  $nodeVersion = Get-NodeVersion $nodePath
+  if (-not $nodeVersion -or [int]($nodeVersion.Split('.')[0]) -lt $requiredNodeMajor) {
+    Die "Node.js 已安装但当前会话无法找到新版本；请关闭本窗口，重新打开后再次运行 Install.cmd。"
+  }
+  Write-Ok "Node.js $nodeVersion 安装完成"
+}
+
+function Invoke-NodeCommand([string[]]$arguments) {
+  $previousErrorAction = $ErrorActionPreference
+  try {
+    # Windows PowerShell 可能把原生程序的 stderr（包括 Node 的错误堆栈）
+    # 转换成 NativeCommandError；这里必须先允许输出，才能根据退出码走回退路径。
+    $ErrorActionPreference = "Continue"
+    $output = & $nodePath @arguments 2>&1
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorAction
+  }
+  [pscustomobject]@{
+    Output = @($output)
+    ExitCode = $exitCode
+  }
+}
+
+# ---- 步骤 3：确认游戏本体是未打补丁的官方包或已完成安装 ----
+Write-Step "检查前端补丁状态"
+Push-Location $serviceRoot
+try {
+  $verifyResult = Invoke-NodeCommand @("tools\feapp.mjs", "verify")
+  if ($verifyResult.ExitCode -eq 0) {
+    Write-Ok "前端补丁已安装且与本机源码一致，无需重装"
+  } else {
+    Write-Warn2 "补丁尚未安装或与当前版本不一致，开始安装……"
+
+    # 基线缺失时先从官方包导入（幂等；官方包已被打补丁且基线仍在时会跳过导入直接安装）
+    $baselinePath = Join-Path $serviceRoot "backups\required\official-compatible-0.0.9.627\feapp.dat"
+    if (-not (Test-Path $baselinePath)) {
+      Write-Host "    从官方包导入兼容基线（按 SHA-256 校验）……"
+      $importResult = Invoke-NodeCommand @("tools\feapp.mjs", "import-baseline")
+      $importResult.Output | Out-Host
+      if ($importResult.ExitCode -ne 0 -and -not (Test-Path $baselinePath)) {
+        Die "导入兼容基线失败。通常是因为官方 feapp.dat 已被修改且本机没有可用基线；请恢复原始 0.0.9.627 官方文件后重试。"
+      }
+    }
+
+    $installResult = Invoke-NodeCommand @("tools\feapp.mjs", "install")
+    $installResult.Output | Out-Host
+    if ($installResult.ExitCode -ne 0) { Die "前端补丁安装失败，请把上方错误信息反馈给维护者。" }
+    Write-Ok "前端补丁安装完成（安装前的官方包已自动备份）"
+  }
+} finally {
+  Pop-Location
+}
+
+# ---- 步骤 4：把启动入口复制到游戏根目录 ----
+Write-Step "配置游戏根目录启动入口"
+$shortcuts = Join-Path $serviceRoot "game-root-shortcuts"
+$installed = 0
+if (Test-Path $shortcuts) {
+  foreach ($file in Get-ChildItem $shortcuts -Filter "*.cmd") {
+    Copy-Item $file.FullName (Join-Path $gameRoot $file.Name) -Force
+    $installed += 1
+  }
+}
+if ($installed -gt 0) {
+  Write-Ok "已复制 $installed 个启动脚本到游戏根目录（Start / Stop / ServiceOnly）"
+} else {
+  Write-Warn2 "未找到 game-root-shortcuts 模板；如需启动脚本，请按 README 中的模板手动创建。"
+}
+
+# ---- 步骤 5：安装直接运行 launcher.exe 的本地服务包装器 ----
+Write-Step "安装直接运行 launcher.exe 的本地服务包装器"
+$launcherWrapperInstaller = Join-Path $PSScriptRoot "install-launcher-wrapper.ps1"
+& $launcherWrapperInstaller
+if ($LASTEXITCODE -ne 0) { Die "本地服务包装器安装失败，请把上方错误信息反馈给维护者。" }
+Write-Ok "包装器已安装；官方 launcher.exe 已保留为 launcher.original.exe"
+
+# ---- 步骤 6：完成并选择启动 ----
+Write-Step "安装完成"
+Write-Host "后续步骤："
+Write-Host "  1. 打开游戏，进入设置页『本地回信』→『模型管理』，接入你的模型服务并填写 API Key。"
+Write-Host "  2. 写一封信测试；等待回信变为未读即表示链路正常。"
+Write-Host "  3. 可选：在信箱页『导入』弹窗导入你自己的历史信件（分享链接或 JSON）。"
+Write-Host "  4. 之后可直接双击游戏根目录 launcher.exe；它会先确认本地服务，再启动官方启动器。"
+Write-Host "  5. 可选：在项目目录运行 npm run doctor 做全面体检（模型未配置时提示未就绪属正常）。"
+
+if ($NoLaunch) {
+  Write-Host ""
+  Write-Host "已按 -NoLaunch 跳过启动。之后可双击游戏根目录的 launcher.exe 或 Start-LinliLocalMail.cmd 开始使用。"
+  exit 0
+}
+
+$answer = Read-Host "是否立即启动本地服务并打开游戏？[Y/n]"
+if ($answer -match '^(n|N)') {
+  Write-Host "完成。之后可双击游戏根目录的 launcher.exe 或 Start-LinliLocalMail.cmd 开始使用。"
+  exit 0
+}
+
+& (Join-Path $serviceRoot "Start-LinliLocalMail.ps1")
+Write-Host ""
+Write-Host "本地服务已启动，游戏启动器已打开。祝你和林离通信愉快。" -ForegroundColor Green
