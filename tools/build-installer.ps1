@@ -54,7 +54,7 @@ function Find-OsslSignCode([string]$cachePath, [string]$extractRoot) {
   $fromPath = Get-Command osslsigncode.exe -ErrorAction SilentlyContinue
   if ($fromPath) { return $fromPath.Source }
   if (-not (Test-Path -LiteralPath $cachePath -PathType Leaf)) {
-    Invoke-Checked "node.exe" @(
+    $null = Invoke-Checked "node.exe" @(
       "tools/download-osslsigncode.mjs",
       "--cache-dir",
       (Split-Path -Parent $cachePath)
