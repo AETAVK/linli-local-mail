@@ -57,8 +57,8 @@ Node.js 运行时与签名工具，然后从 `native/*.rs` 编译启动包装器
 npm run installer:build
 ```
 
-在首次公开构建前，必须把 `package.json` 和 `SOURCE_CODE.md` 中的
-`SOURCE_REPOSITORY_URL` 替换为真实公开仓库地址。默认构建会拒绝带占位符的发布包。
+公开构建使用 `package.json` 和 `SOURCE_CODE.md` 中记录的 GitHub 仓库地址。
+如果维护者派生或迁移本项目，必须同步更新这两个位置；默认构建会拒绝带占位符的发布包。
 
 当前构建使用临时自签名证书。自签名只能证明同一个安装包在签名后没有被修改，不能消除 Windows
 SmartScreen 的未知发布者提示，也不能替代受信任的商业代码签名证书。

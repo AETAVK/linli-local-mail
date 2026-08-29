@@ -5,7 +5,7 @@
   "license": "MPL-2.0",
   "repository": {
     "type": "git",
-    "url": "SOURCE_REPOSITORY_URL"
+    "url": "https://github.com/AETAVK/linli-local-mail.git"
   },
   "type": "module",
   "description": "BSide Olivia Lin .627 local text-letter bridge and model orchestrator",

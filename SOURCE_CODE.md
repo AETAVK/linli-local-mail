@@ -1,6 +1,6 @@
 # Corresponding Source Code
 
-Repository: SOURCE_REPOSITORY_URL
+Repository: https://github.com/AETAVK/linli-local-mail
 
 本安装包对应的源码应位于上述公开仓库中。安装包版本取自 `package.json`，对应源码以同版本 Git 标签
 `v<version>` 标记；例如安装包 `0.6.0` 对应标签 `v0.6.0`。
