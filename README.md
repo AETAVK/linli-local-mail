@@ -20,8 +20,10 @@
 
 ### 第一步：下载安装程序
 
-- [直接下载一键安装程序（v0.6.0）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.6.0/LinliLocalMail-0.6.0-Setup.exe)
-- [查看最新版、更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/latest)
+- [Gitee 国内镜像：直接下载一键安装程序（v0.6.0）](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.6.0/LinliLocalMail-0.6.0-Setup.exe)
+- [GitHub：直接下载一键安装程序（v0.6.0）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.6.0/LinliLocalMail-0.6.0-Setup.exe)
+- [Gitee：查看 v0.6.0 更新说明和 SHA-256 校验值](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.6.0)
+- [GitHub：查看最新版、更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/latest)
 
 普通玩家只需要下载 `LinliLocalMail-0.6.0-Setup.exe`，不需要下载页面下方的 `Source code`、
 `.json`、`.sha256` 或 `.cer` 文件。
