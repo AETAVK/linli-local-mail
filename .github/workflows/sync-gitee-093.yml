@@ -1,0 +1,25 @@
+name: Sync v0.9.3 to Gitee (one-off)
+on:
+  workflow_dispatch:
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch published assets from GitHub Release
+        run: |
+          mkdir -p dist
+          gh release download v0.9.3 --repo AETAVK/linli-local-mail --dir dist --clobber 2>/dev/null || true
+          gh release download v0.9.3 --repo AETAVK/linli-local-mail --pattern 'LinliLocalMail-0.9.3-Setup.exe' --dir dist --clobber
+          gh release download v0.9.3 --repo AETAVK/linli-local-mail --pattern '*Setup.exe*' --dir dist --clobber
+          gh release download v0.9.3 --repo AETAVK/linli-local-mail --pattern '*SelfSigned.cer' --dir dist --clobber
+          ls -la dist/
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Run Gitee publish script
+        run: node .github/scripts/publish-gitee-release.mjs
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPOSITORY: sforlife/linli-local-mail
+          GITEE_RELEASE_TAG: v0.9.3
+          GITEE_TARGET_COMMIT: v0.9.3
