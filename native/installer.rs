@@ -18,6 +18,9 @@ const IDYES: i32 = 6;
 const BIF_RETURNONLYFSDIRS: u32 = 0x0000_0001;
 const BIF_NEWDIALOGSTYLE: u32 = 0x0000_0040;
 const COINIT_APARTMENTTHREADED: u32 = 0x0000_0002;
+const SYNCHRONIZE: u32 = 0x0010_0000;
+const WAIT_OBJECT_0: u32 = 0x0000_0000;
+const WAIT_TIMEOUT: u32 = 0x0000_0102;
 
 static PAYLOAD: &[u8] = include_bytes!(env!("LINLI_INSTALLER_PAYLOAD"));
 
@@ -54,6 +57,13 @@ extern "system" {
         caption: *const u16,
         kind: u32,
     ) -> i32;
+}
+
+#[link(name = "kernel32")]
+extern "system" {
+    fn OpenProcess(desired_access: u32, inherit_handle: i32, process_id: u32) -> *mut c_void;
+    fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
+    fn CloseHandle(handle: *mut c_void) -> i32;
 }
 
 fn wide_null(value: &str) -> Vec<u16> {
@@ -119,6 +129,22 @@ fn argument_value(name: &str) -> Option<String> {
 
 fn has_argument(name: &str) -> bool {
     env::args().any(|argument| argument == name)
+}
+
+fn wait_for_process_exit(process_id: u32) -> Result<(), String> {
+    let handle = unsafe { OpenProcess(SYNCHRONIZE, 0, process_id) };
+    if handle.is_null() {
+        return Ok(());
+    }
+    let result = unsafe { WaitForSingleObject(handle, 15_000) };
+    unsafe { CloseHandle(handle) };
+    if result == WAIT_OBJECT_0 {
+        Ok(())
+    } else if result == WAIT_TIMEOUT {
+        Err("本地回信服务未能及时退出，请关闭游戏后重新运行安装包。".to_string())
+    } else {
+        Err("等待本地回信服务退出时发生系统错误。".to_string())
+    }
 }
 
 fn is_game_root(path: &Path) -> bool {
@@ -213,11 +239,11 @@ fn run_install_script(script: &Path, service_root: &Path) -> Result<Output, Stri
         .map_err(|error| format!("无法启动安装脚本：{error}"))
 }
 
-fn install(game_root: &Path, silent: bool) -> Result<(), String> {
+fn install(game_root: &Path, silent: bool, confirmed_update: bool) -> Result<(), String> {
     let service_root = game_root.join("linli-local-mail");
-    if service_root.exists() && !silent {
+    if service_root.exists() && !silent && !confirmed_update {
         let answer = show_message(
-            "检测到已有林离本地回信目录。安装器只会覆盖程序文件，不会删除 data、logs 或 backups。是否继续？",
+            "检测到已有林离本地回信目录。请先关闭正在运行的游戏窗口；安装器只会覆盖程序文件，不会删除 data、logs 或 backups。是否继续？",
             "林离本地回信 - 更新安装",
             MB_YESNO | MB_ICONQUESTION,
         );
@@ -290,10 +316,17 @@ Expand-Archive -LiteralPath $Zip -DestinationPath $Destination -Force
 
 fn run() -> Result<(), String> {
     let silent = has_argument("--silent");
+    let confirmed_update = has_argument("--confirmed-update");
+    if let Some(value) = argument_value("--wait-pid") {
+        let process_id = value
+            .parse::<u32>()
+            .map_err(|_| "更新等待进程 ID 无效。".to_string())?;
+        wait_for_process_exit(process_id)?;
+    }
     let Some(game_root) = resolve_game_root()? else {
         return Ok(());
     };
-    install(&game_root, silent)
+    install(&game_root, silent, confirmed_update)
 }
 
 fn main() {

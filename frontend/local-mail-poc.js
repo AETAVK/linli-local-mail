@@ -7,6 +7,8 @@
   var MAILBOX_IMPORT_BUTTON_ID = "local-mail-mailbox-import-button";
   var MAILBOX_IMPORT_MODAL_ID = "local-mail-import-modal";
   var LETTERS_MODAL_ID = "local-mail-letters-modal";
+  var UPDATE_MENU_ITEM_ID = "local-mail-check-update-menu-item";
+  var UPDATE_MODAL_ID = "local-mail-update-modal";
   var state = {
     config: null,
     runtime: null,
@@ -19,7 +21,8 @@
     modal: { providerId: null, draft: null, suggestions: [], addModelOpen: false, editingModelId: null },
     lettersModal: { mode: "export", items: [], selected: {}, busy: false },
     remoteImport: { checked: false, checking: false, candidate: false, running: false, pollTimer: null, lastStatus: null, retryAfter: 0 },
-    remotePromptSettings: null
+    remotePromptSettings: null,
+    update: { autoStarted: false, checking: false, applying: false, result: null }
   };
   var sessionPromise = null;
 
@@ -320,10 +323,233 @@
       ".lm-letter-summary{display:block;font-size:13px;color:var(--tp-text-title,#e8e9eb);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
       ".lm-letter-sub{display:block;margin-top:2px;font-size:11px;color:var(--tp-text-tertiary,#7d818c)}",
       ".lm-letter-status{flex:0 0 auto;font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);color:var(--tp-text-secondary,#a1a5ad)}",
+      ".lm-update-menu-item{user-select:none}",
+      ".lm-update-menu-icon{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;flex:0 0 auto;color:currentColor}",
+      ".lm-update-menu-icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}",
+      ".lm-update-dialog{width:min(520px,92vw);padding:24px}",
+      ".lm-update-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}",
+      ".lm-update-heading .lm-modal-title{margin:0;font-size:18px}",
+      ".lm-update-version{display:flex;align-items:center;gap:10px;margin:14px 0;padding:12px 14px;border:1px solid rgba(255,255,255,.09);border-radius:10px;background:rgba(0,0,0,.14)}",
+      ".lm-update-version-current,.lm-update-version-latest{font-size:14px;font-weight:600;color:var(--tp-text-title,#e8e9eb)}",
+      ".lm-update-version-arrow{color:var(--tp-text-tertiary,#7d818c)}",
+      ".lm-update-copy{font-size:13px;line-height:1.65;color:var(--tp-text-secondary,#a1a5ad);white-space:pre-line}",
+      ".lm-update-meta{margin-top:9px;font-size:11px;color:var(--tp-text-tertiary,#7d818c)}",
+      ".lm-update-warning{margin-top:14px;padding:10px 12px;border-left:2px solid #d8b98f;background:rgba(216,185,143,.08);color:#d7c3a6;font-size:12px;line-height:1.6}",
       "@media(max-width:900px){.lm-grid,.lm-provider-grid,.lm-parameter-grid{grid-template-columns:1fr}.lm-provider-grid .lm-wide,.lm-parameter-wide{grid-column:auto}.lm-toolbar{align-items:flex-start;flex-direction:column}.lm-config-item{flex-direction:column;align-items:flex-start}.lm-import-methods{grid-template-columns:1fr}.lm-model-manager-body{grid-template-columns:210px minmax(0,1fr)}.lm-provider-detail-scroll{padding:18px}.lm-model-edit-grid{grid-template-columns:1fr}}",
       "@media(max-width:680px){.lm-modal.lm-model-manager{height:90vh}.lm-model-manager-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.lm-provider-nav{max-height:190px;border-right:0;border-bottom:1px solid rgba(255,255,255,.09)}.lm-provider-detail-head{flex-direction:column}.lm-provider-detail-actions{justify-content:flex-start}}"
     ].join("");
     document.head.appendChild(style);
+  }
+
+  function formatUpdateBytes(value) {
+    var bytes = Number(value);
+    if (!Number.isFinite(bytes) || bytes < 0) return "大小未知";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function updateSourceLabel(source) {
+    if (source === "gitee") return "Gitee 国内镜像";
+    if (source === "github") return "GitHub Releases";
+    return "公开发布源";
+  }
+
+  function ensureUpdateModal() {
+    var backdrop = document.getElementById(UPDATE_MODAL_ID);
+    if (backdrop) return backdrop;
+    installStyles();
+    backdrop = document.createElement("div");
+    backdrop.id = UPDATE_MODAL_ID;
+    backdrop.className = "lm-modal-backdrop";
+    backdrop.hidden = true;
+    backdrop.innerHTML =
+      '<div class="lm-modal lm-update-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-update-title">' +
+      '<div class="lm-update-heading"><div class="lm-modal-title" id="lm-update-title" data-role="update-title">检查补丁更新</div></div>' +
+      '<div class="lm-update-copy" data-role="update-copy"></div>' +
+      '<div class="lm-update-version" data-role="update-version" hidden>' +
+      '<span class="lm-update-version-current" data-role="update-current"></span>' +
+      '<span class="lm-update-version-arrow">→</span>' +
+      '<span class="lm-update-version-latest" data-role="update-latest"></span></div>' +
+      '<div class="lm-update-meta" data-role="update-meta"></div>' +
+      '<div class="lm-update-warning" data-role="update-warning" hidden></div>' +
+      '<div class="lm-modal-actions"><span class="lm-modal-status" data-role="update-status"></span>' +
+      '<button class="lm-button" type="button" data-update-action="close">稍后</button>' +
+      '<button class="lm-button lm-button-primary" type="button" data-update-action="apply" hidden>下载并安装</button></div>' +
+      '</div>';
+    backdrop.addEventListener("click", function (event) {
+      var button = event.target.closest("[data-update-action]");
+      if (button) {
+        if (button.dataset.updateAction === "close") closeUpdateModal();
+        else if (button.dataset.updateAction === "apply") applyUpdate();
+        return;
+      }
+      if (event.target === backdrop) closeUpdateModal();
+    });
+    backdrop.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") closeUpdateModal();
+    });
+    document.body.appendChild(backdrop);
+    return backdrop;
+  }
+
+  function renderUpdateModal(kind, result, errorMessage) {
+    var modal = ensureUpdateModal();
+    var title = modal.querySelector('[data-role="update-title"]');
+    var copy = modal.querySelector('[data-role="update-copy"]');
+    var version = modal.querySelector('[data-role="update-version"]');
+    var current = modal.querySelector('[data-role="update-current"]');
+    var latest = modal.querySelector('[data-role="update-latest"]');
+    var meta = modal.querySelector('[data-role="update-meta"]');
+    var warning = modal.querySelector('[data-role="update-warning"]');
+    var status = modal.querySelector('[data-role="update-status"]');
+    var close = modal.querySelector('[data-update-action="close"]');
+    var apply = modal.querySelector('[data-update-action="apply"]');
+    version.hidden = true;
+    warning.hidden = true;
+    apply.hidden = true;
+    close.hidden = false;
+    close.disabled = false;
+    close.textContent = "关闭";
+    status.textContent = "";
+    status.dataset.kind = "";
+    meta.textContent = "";
+
+    if (kind === "checking") {
+      title.textContent = "检查补丁更新";
+      copy.textContent = "正在连接公开发布源，请稍候……";
+      close.textContent = "取消显示";
+    } else if (kind === "available") {
+      title.textContent = "发现补丁更新";
+      copy.textContent = "检测到新的林离本地回信补丁。确认后会在本机下载并校验安装包，再启动更新程序。";
+      current.textContent = "v" + result.currentVersion;
+      latest.textContent = "v" + result.latestVersion;
+      version.hidden = false;
+      meta.textContent = updateSourceLabel(result.source) + " · " + formatUpdateBytes(result.installer && result.installer.size);
+      warning.textContent = "更新会停止本地回信服务。安装完成前请勿寄信；安装成功后需要重新启动游戏。";
+      warning.hidden = false;
+      close.textContent = "稍后";
+      apply.hidden = false;
+      apply.disabled = false;
+      apply.textContent = "下载并安装";
+    } else if (kind === "current") {
+      title.textContent = "补丁已是最新版本";
+      copy.textContent = "当前安装的是 v" + result.currentVersion + "，公开发布源没有更高的稳定版本。";
+      meta.textContent = "检查时间：" + new Date(result.checkedAt).toLocaleString();
+    } else if (kind === "failed") {
+      title.textContent = "检查更新失败";
+      copy.textContent = "暂时无法完成补丁更新检查。现有本地回信功能不会受到影响。";
+      status.textContent = errorMessage || "请稍后重试";
+      status.dataset.kind = "error";
+    } else if (kind === "applying") {
+      title.textContent = "正在准备更新";
+      copy.textContent = "正在下载安装包并进行 SHA-256 完整性校验，可能需要几分钟。请保持网络连接。";
+      if (result) {
+        current.textContent = "v" + result.currentVersion;
+        latest.textContent = "v" + result.latestVersion;
+        version.hidden = false;
+      }
+      warning.textContent = "校验通过前不会运行安装包。请不要关闭游戏或本地回信服务。";
+      warning.hidden = false;
+      close.disabled = true;
+      close.textContent = "正在处理";
+    } else if (kind === "launched") {
+      title.textContent = "更新程序已启动";
+      copy.textContent = "安装程序已经打开，本地回信服务将自动退出。请按安装程序提示完成更新，然后重新启动游戏。";
+      warning.textContent = "如果安装窗口被其他窗口遮挡，请在任务栏中查找“林离本地回信”安装程序。";
+      warning.hidden = false;
+      status.textContent = "目标版本：v" + (result && result.version ? result.version : "");
+      status.dataset.kind = "success";
+    }
+    modal.hidden = false;
+  }
+
+  function closeUpdateModal() {
+    if (state.update.applying) return;
+    var modal = document.getElementById(UPDATE_MODAL_ID);
+    if (modal) modal.hidden = true;
+  }
+
+  async function checkForUpdate(manual) {
+    if (state.update.checking || state.update.applying) {
+      if (manual && state.update.checking) renderUpdateModal("checking");
+      return;
+    }
+    state.update.checking = true;
+    if (manual) renderUpdateModal("checking");
+    try {
+      var result = await callApi("/api/update/check", { params: { force: manual ? 1 : 0 } });
+      state.update.result = result;
+      if (result.updateAvailable) renderUpdateModal("available", result);
+      else if (manual) renderUpdateModal("current", result);
+    } catch (error) {
+      if (manual) renderUpdateModal("failed", null, error.message);
+    } finally {
+      state.update.checking = false;
+    }
+  }
+
+  async function applyUpdate() {
+    var result = state.update.result;
+    if (!result || !result.updateAvailable || state.update.applying) return;
+    state.update.applying = true;
+    renderUpdateModal("applying", result);
+    try {
+      var applied = await callApi("/api/update/apply", {
+        method: "POST",
+        body: { version: result.latestVersion }
+      });
+      state.update.applying = false;
+      renderUpdateModal("launched", applied);
+    } catch (error) {
+      state.update.applying = false;
+      renderUpdateModal("available", result);
+      var modal = document.getElementById(UPDATE_MODAL_ID);
+      var status = modal && modal.querySelector('[data-role="update-status"]');
+      if (status) {
+        status.textContent = "更新失败：" + error.message;
+        status.dataset.kind = "error";
+      }
+    }
+  }
+
+  function findUserMenu() {
+    var trigger = document.querySelector('button[aria-label="User menu"]');
+    if (!trigger || !trigger.parentElement) return null;
+    var menu = Array.prototype.slice.call(trigger.parentElement.children).find(function (child) {
+      return child !== trigger && child.matches && child.matches("div.absolute");
+    });
+    if (!menu) return null;
+    return { trigger: trigger, menu: menu };
+  }
+
+  function mountUpdateMenuItem() {
+    if (document.getElementById(UPDATE_MENU_ITEM_ID)) return;
+    var context = findUserMenu();
+    if (!context) return;
+    var settingsItem = Array.prototype.slice.call(context.menu.querySelectorAll("div")).find(function (item) {
+      return item.textContent.trim() === "设置" && item.classList.contains("cursor-pointer");
+    });
+    if (!settingsItem || !settingsItem.parentElement) return;
+    installStyles();
+    var item = document.createElement("div");
+    item.id = UPDATE_MENU_ITEM_ID;
+    item.className = settingsItem.className + " lm-update-menu-item";
+    item.setAttribute("role", "menuitem");
+    item.innerHTML = '<span class="lm-update-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14.8 4.2"></path><path d="M4 12A8 8 0 0 1 18.8 7.8"></path><path d="m5 20 .2-3.8L9 16"></path><path d="m19 4-.2 3.8L15 8"></path></svg></span><span>检查补丁更新</span>';
+    item.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      context.trigger.click();
+      checkForUpdate(true);
+    });
+    settingsItem.insertAdjacentElement("afterend", item);
+  }
+
+  function scheduleAutomaticUpdateCheck() {
+    if (state.update.autoStarted) return;
+    state.update.autoStarted = true;
+    window.setTimeout(function () { checkForUpdate(false); }, 8000);
   }
 
   function mailboxImportModalHtml() {
@@ -1130,7 +1356,7 @@
       '  </div>',
       '</div>',
       '<div class="lm-card">',
-      '  <div class="lm-card-head"><div class="lm-card-title">服务与数据</div><div class="lm-actions"><button class="lm-button lm-button-small" type="button" data-action="refresh-diagnostics">刷新</button><button class="lm-button lm-button-small" type="button" data-action="export-backup">导出 JSON 备份</button><button class="lm-button lm-button-small" type="button" data-action="restore-remote-prompt" hidden>恢复历史导入提示</button></div></div>',
+      '  <div class="lm-card-head"><div class="lm-card-title">服务与数据</div><div class="lm-actions"><button class="lm-button lm-button-small" type="button" data-action="check-update">检查补丁更新</button><button class="lm-button lm-button-small" type="button" data-action="refresh-diagnostics">刷新</button><button class="lm-button lm-button-small" type="button" data-action="export-backup">导出 JSON 备份</button><button class="lm-button lm-button-small" type="button" data-action="restore-remote-prompt" hidden>恢复历史导入提示</button></div></div>',
       '  <div class="lm-diagnostics" data-role="diagnostics">正在读取服务状态…</div>',
       '</div>',
       '<div class="lm-card">',
@@ -2049,6 +2275,7 @@
       }
       else if (action === "save-all") saveAllSettings();
       else if (action === "test-model") testCurrentModel();
+      else if (action === "check-update") checkForUpdate(true);
       else if (action === "refresh-diagnostics") refreshDiagnostics();
       else if (action === "export-backup") exportBackup();
       else if (action === "restore-remote-prompt") {
@@ -2129,6 +2356,8 @@
       hideWatermark();
       mountSettingsSection();
       mountMailboxTools();
+      mountUpdateMenuItem();
+      scheduleAutomaticUpdateCheck();
     });
   }
 

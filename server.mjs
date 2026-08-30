@@ -3,7 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ALLOWED_API_STYLES, ALLOWED_BROWSER_ORIGINS, API_KEY_MASK, HOST, PORT as PORT_FROM_CONSTANTS } from "./src/constants.mjs";
+import { ALLOWED_API_STYLES, ALLOWED_BROWSER_ORIGINS, API_KEY_MASK, HOST, PORT as PORT_FROM_CONSTANTS, SERVICE_VERSION } from "./src/constants.mjs";
 import { MailDatabase } from "./src/database.mjs";
 import { importFileEntries } from "./src/file-import.mjs";
 import {
@@ -18,6 +18,7 @@ import { RemoteImportManager } from "./src/remote-import.mjs";
 import { SecretStore } from "./src/secrets.mjs";
 import { extractSharedLetters } from "./src/share-import.mjs";
 import { normalizeHttpUrl, readJsonBody, safeErrorMessage } from "./src/utils.mjs";
+import { UpdateManager } from "./src/updater.mjs";
 import { VideoAssetStore, parseByteRange } from "./src/video-assets.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -28,7 +29,7 @@ const LEGACY_JSON_PATH = path.join(ROOT, "imports", "legacy", "data.json");
 const CONFIG_ROOT = path.join(ROOT, "config");
 const SECRETS_PATH = path.join(ROOT, "data", "secrets.dpapi.json");
 const MEDIA_ROOT = process.env.LINLI_MAIL_MEDIA_PATH || path.join(path.dirname(DB_PATH), "media");
-const SERVICE_VERSION = "0.8.1";
+const UPDATE_ROOT = process.env.LINLI_MAIL_UPDATE_PATH || path.join(path.dirname(DB_PATH), "updates");
 const SESSION_TOKEN = crypto.randomBytes(32).toString("base64url");
 
 const database = new MailDatabase(DB_PATH, LEGACY_JSON_PATH);
@@ -36,6 +37,7 @@ const secretStore = new SecretStore(SECRETS_PATH);
 const worker = new GenerationWorker({ database, configRoot: CONFIG_ROOT, secretStore });
 const videoStore = new VideoAssetStore(MEDIA_ROOT);
 const remoteImporter = new RemoteImportManager({ database, mediaStore: videoStore });
+const updateManager = new UpdateManager({ currentVersion: SERVICE_VERSION, serviceRoot: ROOT, updateRoot: UPDATE_ROOT });
 
 function isAllowedOrigin(req) {
   const origin = req.headers.origin;
@@ -398,6 +400,16 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/settings") {
       ok(req, res, database.updateRuntimeSettings(await readJsonBody(req)));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/update/check") {
+      ok(req, res, await updateManager.check({ force: url.searchParams.get("force") === "1" }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/update/apply") {
+      const result = await updateManager.apply(await readJsonBody(req));
+      ok(req, res, result);
+      setTimeout(closeAndExit, 250).unref();
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/model-config") {
