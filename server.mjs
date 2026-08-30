@@ -3,8 +3,9 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ALLOWED_API_STYLES, ALLOWED_BROWSER_ORIGINS, API_KEY_MASK, HOST, PORT } from "./src/constants.mjs";
+import { ALLOWED_API_STYLES, ALLOWED_BROWSER_ORIGINS, API_KEY_MASK, HOST, PORT as PORT_FROM_CONSTANTS } from "./src/constants.mjs";
 import { MailDatabase } from "./src/database.mjs";
+import { importFileEntries } from "./src/file-import.mjs";
 import {
   cacheProviderModelCapacities,
   getInternalModelConfig,
@@ -13,21 +14,25 @@ import {
 } from "./src/model-config.mjs";
 import { GenerationWorker } from "./src/orchestrator.mjs";
 import { listProviderModels } from "./src/providers.mjs";
+import { RemoteImportManager } from "./src/remote-import.mjs";
 import { SecretStore } from "./src/secrets.mjs";
 import { extractSharedLetters } from "./src/share-import.mjs";
 import { normalizeHttpUrl, readJsonBody, safeErrorMessage } from "./src/utils.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(ROOT, "data", "mail-poc.sqlite3");
+// LINLI_MAIL_PORT / LINLI_MAIL_DB_PATH 仅用于并行冒烟测试；日常启动保持默认 27149 与项目数据库。
+const PORT = Number(process.env.LINLI_MAIL_PORT) || PORT_FROM_CONSTANTS;
+const DB_PATH = process.env.LINLI_MAIL_DB_PATH || path.join(ROOT, "data", "mail-poc.sqlite3");
 const LEGACY_JSON_PATH = path.join(ROOT, "imports", "legacy", "data.json");
 const CONFIG_ROOT = path.join(ROOT, "config");
 const SECRETS_PATH = path.join(ROOT, "data", "secrets.dpapi.json");
-const SERVICE_VERSION = "0.6.0";
+const SERVICE_VERSION = "0.7.1";
 const SESSION_TOKEN = crypto.randomBytes(32).toString("base64url");
 
 const database = new MailDatabase(DB_PATH, LEGACY_JSON_PATH);
 const secretStore = new SecretStore(SECRETS_PATH);
 const worker = new GenerationWorker({ database, configRoot: CONFIG_ROOT, secretStore });
+const remoteImporter = new RemoteImportManager({ database });
 
 function isAllowedOrigin(req) {
   const origin = req.headers.origin;
@@ -223,11 +228,19 @@ function settingsPage() {
 
 async function diagnostics() {
   const modelConfig = await getPublicModelConfig(database, secretStore);
+  const remoteStatus = remoteImporter.status();
   return {
     serviceVersion: SERVICE_VERSION,
     listeningOn: `http://${HOST}:${PORT}`,
     database: database.health(),
     worker: worker.diagnostics(),
+    remoteImport: {
+      state: remoteStatus.state,
+      stage: remoteStatus.stage,
+      message: remoteStatus.message,
+      errorCode: remoteStatus.errorCode,
+      promptDisabled: database.getRemoteImportSettings().promptDisabled
+    },
     model: {
       orchestrationVersion: modelConfig.readiness?.orchestrationVersion,
       ready: modelConfig.readiness?.ready ?? false,
@@ -348,6 +361,36 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/import") {
       ok(req, res, database.importLetters(await readJsonBody(req, { maximumBytes: 16 * 1024 * 1024 })));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/import/files") {
+      const body = await readJsonBody(req, { maximumBytes: 40 * 1024 * 1024 });
+      const entries = Array.isArray(body.files) ? body.files : [];
+      ok(req, res, importFileEntries(entries, {
+        importFn: (items) => database.importLetters({ letters: items })
+      }));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/remote-import/detect") {
+      ok(req, res, remoteImporter.detect());
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/remote-import/start") {
+      ok(req, res, remoteImporter.start());
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/remote-import/status") {
+      ok(req, res, remoteImporter.status());
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/remote-import/cancel") {
+      ok(req, res, remoteImporter.cancel());
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/remote-import/prompt") {
+      const body = await readJsonBody(req);
+      const action = String(body.action || "");
+      ok(req, res, database.updateRemoteImportPrompt(action));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/import/share-link") {

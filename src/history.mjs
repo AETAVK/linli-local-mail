@@ -52,7 +52,7 @@ export function importedLetterId(item, index) {
   return `import-${Date.now()}-${index}`;
 }
 
-export function normalizeImportedLetter(item, index = 0) {
+export function normalizeImportedLetter(item, index = 0, options = {}) {
   if (!item || typeof item !== "object") throw new Error(`Imported item ${index} is not an object`);
   const now = nowSeconds();
   const sent = item.sent && typeof item.sent === "object" ? item.sent : {};
@@ -78,16 +78,20 @@ export function normalizeImportedLetter(item, index = 0) {
     throw new Error(`Imported item ${index} has neither sent nor reply content`);
   }
 
+  // keepUnknownTime：远端历史导入使用。时间缺失时保持为空（epoch 0 / null），
+  // 不从文件名、当前时间或列表顺序伪造。
+  const unknownTimeFallback = options.keepUnknownTime ? 0 : now - index;
   const created = normalizeDateTime(
     item.createdAt ?? sent.timestamp ?? item.writtenAt ?? sent.date ?? item.sourceDate,
-    now - index
+    unknownTimeFallback
   );
   const replied = normalizeDateTime(
     item.repliedAt ?? reply.timestamp ?? reply.date,
     created.epoch
   );
   const hasReply = Boolean(replyText || replyVideoUrl || videoOnlyReply);
-  const repliedAt = hasReply ? Math.max(created.epoch, replied.epoch) : null;
+  const createdUnknown = created.epoch <= 0;
+  const repliedAt = hasReply && !createdUnknown ? Math.max(created.epoch, replied.epoch) : null;
   const inferredReplyType = hasReply
     ? String(reply.type || "").toLowerCase() === "video" || replyVideoUrl
       ? REPLY_TYPE.SPEECH
@@ -107,7 +111,7 @@ export function normalizeImportedLetter(item, index = 0) {
     createdAt: created.epoch,
     createdPrecision: item.createdPrecision ?? created.precision,
     repliedAt,
-    repliedPrecision: hasReply ? item.repliedPrecision ?? replied.precision : null,
+    repliedPrecision: hasReply && !createdUnknown ? item.repliedPrecision ?? replied.precision : null,
     readyAtMs: null,
     source: String(item.source ?? (item.shareId ? "history-share-json" : "import-json")),
     raw: item,

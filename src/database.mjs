@@ -176,6 +176,11 @@ export class MailDatabase {
     insertSetting.run("model_config_json", JSON.stringify(DEFAULT_MODEL_CONFIG));
     insertSetting.run("legacy_json_migrated", "0");
     insertSetting.run("debug_mode", "0");
+    insertSetting.run("remoteImport.promptDisabled", "0");
+    insertSetting.run("remoteImport.snoozedUntil", "0");
+    insertSetting.run("remoteImport.lastSuccessAt", "");
+    insertSetting.run("remoteImport.lastImportedAccount", "");
+    insertSetting.run("remoteImport.lastImportedIdsHash", "");
     this.db.exec("PRAGMA user_version = 2");
   }
 
@@ -424,6 +429,84 @@ export class MailDatabase {
       throw error;
     }
     return { imported: inserted + updated, inserted, updated, skipped, errors };
+  }
+
+  // 远端历史导入：只新增不存在的记录；已存在且来源为远端导入的记录允许更新
+  // （重复导入幂等、新回信补全）；已存在但来源不是远端导入的记录视为本地内容，
+  // 保留不动并报告 conflict，绝不由远端同步静默覆盖。
+  importRemoteLetters(records) {
+    let inserted = 0;
+    let updated = 0;
+    let skipped = 0;
+    let conflicts = 0;
+    const importedIds = [];
+    const errors = [];
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      records.forEach((record, index) => {
+        try {
+          if (record?.ok === false) throw new Error(String(record.error || "Remote letter is marked ok=false"));
+          const letter = normalizeImportedLetter(record, index, { keepUnknownTime: true });
+          const existing = this.statements.letterGet.get(letter.letterId);
+          if (!existing) {
+            this.writeLetter(this.statements.letterInsert, letter);
+            inserted += 1;
+            importedIds.push(letter.letterId);
+          } else if (existing.source === "remote-history") {
+            this.writeLetter(this.statements.letterUpsert, letter);
+            updated += 1;
+            importedIds.push(letter.letterId);
+          } else {
+            conflicts += 1;
+          }
+        } catch (error) {
+          skipped += 1;
+          errors.push({
+            index,
+            fileName: record?.fileName ?? null,
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
+      });
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return { imported: inserted + updated, inserted, updated, skipped, conflicts, importedIds, errors };
+  }
+
+  getRemoteImportSettings() {
+    return {
+      promptDisabled: this.getSetting("remoteImport.promptDisabled") === "1",
+      snoozedUntil: Number(this.getSetting("remoteImport.snoozedUntil") || 0),
+      lastSuccessAt: this.getSetting("remoteImport.lastSuccessAt") || null,
+      lastImportedAccount: this.getSetting("remoteImport.lastImportedAccount") || null,
+      lastImportedIdsHash: this.getSetting("remoteImport.lastImportedIdsHash") || null
+    };
+  }
+
+  updateRemoteImportPrompt(action) {
+    const timestamp = nowSeconds();
+    if (action === "snooze") {
+      this.setSetting("remoteImport.promptDisabled", "0");
+      this.setSetting("remoteImport.snoozedUntil", String(timestamp + 6 * 3600));
+    } else if (action === "disable") {
+      this.setSetting("remoteImport.promptDisabled", "1");
+      this.setSetting("remoteImport.snoozedUntil", "0");
+    } else if (action === "enable") {
+      this.setSetting("remoteImport.promptDisabled", "0");
+      this.setSetting("remoteImport.snoozedUntil", "0");
+      this.setSetting("remoteImport.lastImportedAccount", "");
+      this.setSetting("remoteImport.lastImportedIdsHash", "");
+    }
+    return this.getRemoteImportSettings();
+  }
+
+  markRemoteImportSuccess({ account, idsHash }) {
+    this.setSetting("remoteImport.lastSuccessAt", new Date().toISOString());
+    this.setSetting("remoteImport.lastImportedAccount", String(account || ""));
+    this.setSetting("remoteImport.lastImportedIdsHash", String(idsHash || ""));
   }
 
   createLetter(content, material, raw, delayMs) {

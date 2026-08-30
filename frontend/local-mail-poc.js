@@ -13,11 +13,13 @@
     diagnostics: null,
     debugMode: false,
     mounting: false,
-    importMode: "share",
+    importMode: "file",
     importFiles: [],
     importBusy: false,
     modal: { providerId: null, draft: null, suggestions: [], addModelOpen: false, editingModelId: null },
-    lettersModal: { mode: "export", items: [], selected: {}, busy: false }
+    lettersModal: { mode: "export", items: [], selected: {}, busy: false },
+    remoteImport: { checked: false, checking: false, candidate: false, running: false, pollTimer: null, lastStatus: null, retryAfter: 0 },
+    remotePromptSettings: null
   };
   var sessionPromise = null;
 
@@ -265,6 +267,7 @@
       ".lm-import-close:hover{background:rgba(255,255,255,.08);color:var(--tp-text-title,#e8e9eb)}",
       ".lm-import-description{margin-bottom:16px;color:var(--tp-text-secondary,#a1a5ad);font-size:13px;line-height:1.55}",
       ".lm-import-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}",
+      ".lm-import-methods-two{grid-template-columns:repeat(2,minmax(0,1fr))}",
       ".lm-import-method{display:flex;align-items:flex-start;gap:12px;min-height:92px;padding:14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(0,0,0,.12);text-align:left;cursor:pointer}",
       ".lm-import-method:hover{border-color:rgba(255,255,255,.24);background:rgba(255,255,255,.04)}",
       ".lm-import-method[data-active='true']{border-color:var(--tp-primary-2,#d8d1c5);background:rgba(216,209,197,.08)}",
@@ -284,6 +287,29 @@
       ".lm-raw-json{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}",
       ".lm-import-placeholder{display:flex;min-height:72px;align-items:center;justify-content:center;flex-direction:column;gap:4px;color:var(--tp-text-secondary,#a1a5ad);font-size:13px;text-align:center}",
       ".lm-import-placeholder small{color:var(--tp-text-tertiary,#7d818c);font-size:11px}",
+      ".lm-file-import-list{margin-top:10px;display:flex;flex-direction:column;gap:6px;max-height:190px;overflow:auto}",
+      ".lm-file-import-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(0,0,0,.12);font-size:12px}",
+      ".lm-file-import-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tp-text-title,#e8e9eb)}",
+      ".lm-file-import-kind{flex:0 0 auto;padding:1px 7px;border-radius:999px;background:rgba(255,255,255,.08);color:var(--tp-text-secondary,#a1a5ad);font-size:11px}",
+      ".lm-file-import-status{flex:0 0 auto;max-width:48%;color:var(--tp-text-secondary,#a1a5ad);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".lm-file-import-status[data-kind='success']{color:#a9d9c0}",
+      ".lm-file-import-status[data-kind='partial']{color:#d8b98f}",
+      ".lm-file-import-status[data-kind='error']{color:#e5aaa5}",
+      ".lm-file-import-status[data-kind='unsupported']{color:#d8b98f}",
+      ".local-mail-remote-import-toast{position:fixed;right:18px;bottom:18px;z-index:999999;width:min(360px,calc(100vw - 36px));padding:14px 16px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(30,31,35,.97);color:var(--tp-text-body,#ced2d4);box-shadow:0 12px 32px rgba(0,0,0,.5);font-size:13px;line-height:1.55;color-scheme:dark}",
+      ".local-mail-remote-import-toast[hidden]{display:none}",
+      ".local-mail-remote-import-title{font-size:14px;font-weight:600;color:var(--tp-text-title,#e8e9eb);margin-bottom:6px;padding-right:18px}",
+      ".local-mail-remote-import-body{margin-bottom:10px;color:var(--tp-text-secondary,#a1a5ad)}",
+      ".local-mail-remote-import-actions{display:flex;gap:8px;flex-wrap:wrap}",
+      ".local-mail-remote-import-button{height:30px;padding:0 12px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:transparent;color:var(--tp-text-body,#ced2d4);font:inherit;font-size:12px;cursor:pointer}",
+      ".local-mail-remote-import-button:hover{background:rgba(255,255,255,.08)}",
+      ".local-mail-remote-import-button-primary{background:#ece8df;color:#27251f;border-color:#ece8df;font-weight:600}",
+      ".local-mail-remote-import-button-primary:hover{background:#fffaf0}",
+      ".local-mail-remote-import-close{position:absolute;top:10px;right:10px;display:flex;align-items:center;justify-content:center;width:24px;height:24px;border:0;border-radius:50%;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font-size:16px;line-height:1;cursor:pointer}",
+      ".local-mail-remote-import-close:hover{background:rgba(255,255,255,.08);color:var(--tp-text-title,#e8e9eb)}",
+      ".local-mail-remote-import-status{margin-top:9px;font-size:12px;color:var(--tp-text-secondary,#a1a5ad);white-space:pre-line}",
+      ".local-mail-remote-import-status[data-kind='success']{color:#a9d9c0}",
+      ".local-mail-remote-import-status[data-kind='error']{color:#e5aaa5}",
       ".lm-letter-toolbar{display:flex;align-items:center;gap:12px;margin:12px 0 4px;font-size:12px;color:var(--tp-text-secondary,#a1a5ad)}",
       ".lm-letter-toolbar .lm-check{margin-top:0}",
       ".lm-letter-list{margin-top:8px;max-height:44vh;overflow:auto;display:flex;flex-direction:column;gap:6px}",
@@ -305,24 +331,21 @@
       '<div class="lm-import-title-row"><div class="lm-modal-title" id="lm-import-title">导入信件</div>' +
       '<button class="lm-import-close" type="button" aria-label="关闭" data-import-action="close">×</button></div>' +
       '<div class="lm-import-description">选择导入方式。导入后的信件会保存在本机，并显示在原信箱列表中。</div>' +
-      '<div class="lm-import-methods">' +
-      '<button class="lm-import-method" type="button" data-import-mode="image"><span class="lm-import-method-icon">图片</span>' +
-      '<span class="lm-import-method-copy"><span class="lm-import-method-title">图片导入</span>' +
-      '<span class="lm-import-method-desc">从信件截图识别正文与日期</span><span class="lm-import-method-note">当前仅占位</span></span></button>' +
+      '<div class="lm-import-methods lm-import-methods-two">' +
+      '<button class="lm-import-method" type="button" data-import-mode="file"><span class="lm-import-method-icon">文件</span>' +
+      '<span class="lm-import-method-copy"><span class="lm-import-method-title">文件导入</span>' +
+      '<span class="lm-import-method-desc">一次选择多个 JSON 或图片文件</span><span class="lm-import-method-note">JSON 可导入；图片 OCR 尚未实现</span></span></button>' +
        '<button class="lm-import-method" type="button" data-import-mode="share"><span class="lm-import-method-icon">链接</span>' +
        '<span class="lm-import-method-copy"><span class="lm-import-method-title">分享链接导入</span>' +
        '<span class="lm-import-method-desc">读取官方分享页对应的去信与回信</span><span class="lm-import-method-note">官方清理数据前可用</span></span></button>' +
-       '<button class="lm-import-method" type="button" data-import-mode="json"><span class="lm-import-method-icon">JSON</span>' +
-       '<span class="lm-import-method-copy"><span class="lm-import-method-title">JSON 文件导入</span>' +
-       '<span class="lm-import-method-desc">导入已整理的历史去信与回信</span><span class="lm-import-method-note">支持多选</span></span></button>' +
        '</div>' +
        '<div class="lm-import-panel" data-import-panel="share">' +
        '<label class="lm-field"><span>信件分享链接（一个链接一行）</span><textarea class="lm-textarea lm-share-import-input" data-role="share-import-url" rows="4" autocomplete="off" spellcheck="false" placeholder="https://web-…/single-pages/letterShare.html?uid=…&shareId=…\nhttps://web-…/single-pages/letterShare.html?uid=…&shareId=…"></textarea></label>' +
        '<div class="lm-note">支持一次粘贴多个链接，也支持从 Markdown 文本中逐行识别链接。重复导入同一封信会更新现有记录。</div></div>' +
-       '<div class="lm-import-panel" data-import-panel="image" hidden><div class="lm-import-placeholder">图片导入尚未开放<small>入口已预留，后续接入 OCR 后可在这里选择截图。</small></div></div>' +
-       '<div class="lm-import-panel" data-import-panel="json" hidden>' +
-       '<label class="lm-field"><span>历史信件 JSON（可多选）</span><input class="lm-file" type="file" accept=".json,application/json" multiple data-role="json-import-files"></label>' +
-       '<div class="lm-note">默认一份 JSON 对应一封历史邮件；也支持一个文件包含 letters 数组。支持 fileName、sourceUrl、finalUrl、uid、shareId、writtenAt、sent、reply 等字段。</div></div>' +
+       '<div class="lm-import-panel" data-import-panel="file">' +
+       '<label class="lm-field"><span>选择文件（JSON / PNG / JPG / WEBP，可多选混合）</span><input class="lm-file" type="file" accept=".json,application/json,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" multiple data-role="file-import-files"></label>' +
+       '<div class="lm-file-import-list" data-role="file-import-list"></div>' +
+       '<div class="lm-note">JSON 支持单封、数组或 { "letters": [...] }；重复导入同一封信会更新原记录。图片识别尚未实现：选择图片会在结果中明确标注“未导入”，不会影响同批 JSON 的导入。</div></div>' +
        '<div class="lm-modal-actions"><span class="lm-modal-status" data-role="share-import-status">等待导入</span>' +
       '<button class="lm-button" type="button" data-import-action="close">取消</button>' +
       '<button class="lm-button lm-button-primary" type="button" data-import-action="submit">导入</button></div>' +
@@ -337,8 +360,35 @@
     status.dataset.kind = kind || "";
   }
 
+  function fileImportKind(file) {
+    var match = /\.(json|png|jpe?g|webp)$/i.exec(file.name || "");
+    var extension = match ? match[1].toLowerCase() : "";
+    if (extension === "json") return { kind: "json", label: "JSON" };
+    if (extension === "png" || extension === "jpg" || extension === "jpeg" || extension === "webp") {
+      return { kind: "image", label: "图片" };
+    }
+    return { kind: "unsupported", label: "不支持" };
+  }
+
+  function renderFileImportList() {
+    var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
+    var list = modal && modal.querySelector('[data-role="file-import-list"]');
+    if (!list) return;
+    if (!state.importFiles.length) {
+      list.innerHTML = "";
+      return;
+    }
+    list.innerHTML = state.importFiles.map(function (entry) {
+      var statusHtml = entry.status
+        ? '<span class="lm-file-import-status" data-kind="' + escapeHtml(entry.status) + '">' + escapeHtml(entry.message || "") + '</span>'
+        : "";
+      return '<div class="lm-file-import-row"><span class="lm-file-import-name">' + escapeHtml(entry.name) + '</span>' +
+        '<span class="lm-file-import-kind">' + escapeHtml(entry.label) + '</span>' + statusHtml + '</div>';
+    }).join("");
+  }
+
   function setMailboxImportMode(mode) {
-    state.importMode = mode === "image" || mode === "json" ? mode : "share";
+    state.importMode = mode === "file" ? "file" : "share";
     var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
     if (!modal) return;
     Array.prototype.forEach.call(modal.querySelectorAll("[data-import-mode]"), function (button) {
@@ -348,12 +398,16 @@
       panel.hidden = panel.dataset.importPanel !== state.importMode;
     });
     var submit = modal.querySelector('[data-import-action="submit"]');
-    submit.hidden = state.importMode === "image";
-    submit.disabled = state.importMode === "json" && state.importFiles.length === 0;
-    if (state.importMode === "share") setMailboxImportStatus("等待导入", "");
-    else if (state.importMode === "json") {
-      setMailboxImportStatus(state.importFiles.length ? "已选择 " + state.importFiles.length + " 个 JSON 文件" : "请选择一个或多个 JSON 文件", "");
-    } else setMailboxImportStatus("图片导入当前仅占位", "");
+    submit.hidden = false;
+    submit.disabled = state.importMode === "file" && state.importFiles.length === 0;
+    if (state.importMode === "share") {
+      setMailboxImportStatus("等待导入", "");
+    } else {
+      renderFileImportList();
+      setMailboxImportStatus(state.importFiles.length
+        ? "已选择 " + state.importFiles.length + " 个文件（JSON 会导入，图片暂不支持）"
+        : "请选择一个或多个 JSON / 图片文件", "");
+    }
   }
 
   function closeMailboxImportModal() {
@@ -410,48 +464,77 @@
     }
   }
 
-  async function submitJsonImport() {
+  async function submitFileImport() {
     var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
-    if (!modal || state.importBusy || state.importMode !== "json") return;
-    var input = modal.querySelector('[data-role="json-import-files"]');
+    if (!modal || state.importBusy || state.importMode !== "file") return;
+    var input = modal.querySelector('[data-role="file-import-files"]');
     var submit = modal.querySelector('[data-import-action="submit"]');
     if (!state.importFiles.length) {
-      setMailboxImportStatus("请先选择一个或多个 JSON 文件", "error");
+      setMailboxImportStatus("请先选择一个或多个文件", "error");
       input.focus();
       return;
     }
     state.importBusy = true;
     submit.disabled = true;
     submit.textContent = "正在导入…";
-    setMailboxImportStatus("正在读取和导入 JSON…", "");
+    setMailboxImportStatus("正在读取文件…", "");
+    var files = state.importFiles;
+    var jsonFiles = files.filter(function (entry) { return entry.kind === "json"; });
+    files.forEach(function (entry) {
+      entry.status = entry.kind === "json" ? "pending" : entry.kind;
+      entry.message = "";
+    });
+    renderFileImportList();
     try {
-      var letters = [];
-      for (var i = 0; i < state.importFiles.length; i += 1) {
-        var file = state.importFiles[i];
-        var parsed = JSON.parse(await file.text());
-        var items = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.letters) ? parsed.letters : [parsed];
-        items.forEach(function (item) {
-          if (item && typeof item === "object" && !item.fileName) item.fileName = file.name;
-          letters.push(item);
+      var server = null;
+      if (jsonFiles.length) {
+        var entries = [];
+        for (var i = 0; i < jsonFiles.length; i += 1) {
+          entries.push({ name: jsonFiles[i].file.name, content: await jsonFiles[i].file.text() });
+        }
+        server = await callApi("/api/import/files", {
+          method: "POST",
+          body: JSON.stringify({ files: entries })
         });
       }
-      var result = await callApi("/api/import", {
-        method: "POST",
-        body: JSON.stringify({ letters: letters })
+      if (server && Array.isArray(server.results)) {
+        server.results.forEach(function (item, index) {
+          var entry = jsonFiles[index];
+          if (!entry) return;
+          if (item.ok) {
+            if (item.partial || Number(item.skipped || 0) > 0) {
+              entry.status = "partial";
+              entry.message = "部分导入（新增 " + Number(item.inserted || 0) + "，更新 " + Number(item.updated || 0) +
+                "，跳过 " + Number(item.skipped || 0) + "）";
+            } else {
+              entry.status = "success";
+              entry.message = "已导入（新增 " + Number(item.inserted || 0) + "，更新 " + Number(item.updated || 0) + "）";
+            }
+          } else {
+            entry.status = "error";
+            entry.message = item.message || "导入失败";
+          }
+        });
+      }
+      files.forEach(function (entry) {
+        if (entry.kind === "image") {
+          entry.status = "unsupported";
+          entry.message = "图片识别功能尚未实现，文件未导入";
+        } else if (entry.kind === "unsupported") {
+          entry.status = "error";
+          entry.message = "不支持的文件类型";
+        }
       });
-      var message = "处理完成：导入 " + Number(result.imported || 0) + " 封（新增 " + Number(result.inserted || 0) + "，更新 " + Number(result.updated || 0) + "）";
-      if (result.skipped) {
-        var details = (Array.isArray(result.errors) ? result.errors : []).slice(0, 4).map(function (item) {
-          return (item.fileName ? item.fileName + "：" : "") + item.message;
-        });
-        message += "，跳过 " + Number(result.skipped);
-        if (details.length) message += "\n" + details.join("；");
-        setMailboxImportStatus(message, result.imported ? "success" : "error");
-      } else {
-        state.importFiles = [];
-        input.value = "";
-        setMailboxImportStatus(message + "；信箱会自动刷新。", "success");
-      }
+      renderFileImportList();
+      var counts = server || { imported: 0, inserted: 0, updated: 0, skipped: 0, unsupported: 0, failed: 0 };
+      var unsupportedCount = files.filter(function (entry) { return entry.kind === "image" || entry.kind === "unsupported"; }).length;
+      var message = "处理完成：共 " + files.length + " 个文件，导入 " + Number(counts.imported || 0) + " 封（新增 " +
+        Number(counts.inserted || 0) + "，更新 " + Number(counts.updated || 0) + "）";
+      if (unsupportedCount) message += "，未支持 " + unsupportedCount + " 个（图片 OCR 尚未实现）";
+      if (counts.failed) message += "，失败 " + counts.failed + " 个";
+      if (counts.skipped) message += "，跳过 " + counts.skipped + " 封";
+      message += "；信箱会自动刷新。";
+      setMailboxImportStatus(message, Number(counts.failed) && !Number(counts.imported) ? "error" : "success");
       await refreshDiagnostics();
     } catch (error) {
       setMailboxImportStatus("导入失败：" + error.message, "error");
@@ -471,14 +554,18 @@
       if (!actionButton) return;
       if (actionButton.dataset.importAction === "close") closeMailboxImportModal();
        else if (actionButton.dataset.importAction === "submit") {
-         if (state.importMode === "json") submitJsonImport();
+         if (state.importMode === "file") submitFileImport();
          else submitShareLinkImport();
        }
      });
     modal.addEventListener("change", function (event) {
-      if (event.target.dataset.role !== "json-import-files") return;
-      state.importFiles = Array.prototype.slice.call(event.target.files || []);
-      setMailboxImportMode("json");
+      if (event.target.dataset.role !== "file-import-files") return;
+      state.importFiles = Array.prototype.slice.call(event.target.files || []).map(function (file) {
+        var kind = fileImportKind(file);
+        return { file: file, name: file.name, kind: kind.kind, label: kind.label, status: "", message: "" };
+      });
+      renderFileImportList();
+      setMailboxImportMode("file");
     });
     modal.addEventListener("keydown", function (event) {
       if (event.key === "Enter" && event.ctrlKey && event.target.matches('[data-role="share-import-url"]')) {
@@ -500,7 +587,7 @@
     modal.innerHTML = mailboxImportModalHtml();
     document.body.appendChild(modal);
     bindMailboxImportModal(modal);
-    setMailboxImportMode("share");
+    setMailboxImportMode("file");
     return modal;
   }
 
@@ -508,9 +595,221 @@
     installStyles();
     var modal = ensureMailboxImportModal();
     modal.hidden = false;
-    setMailboxImportMode("share");
-    var input = modal.querySelector('[data-role="share-import-url"]');
-    window.setTimeout(function () { input.focus(); }, 0);
+    setMailboxImportMode("file");
+  }
+
+  var REMOTE_TOAST_ID = "local-mail-remote-import-toast";
+  var REMOTE_ACTIVE_STATES = ["detecting", "authenticating", "fetching_letters", "fetching_details", "importing"];
+
+  function mailboxHeader() {
+    var header = document.querySelector("main .mail-header");
+    return header && header.querySelector(".text-text-title.text-title-m") ? header : null;
+  }
+
+  function syncRemoteToastVisibility() {
+    var toast = document.getElementById(REMOTE_TOAST_ID);
+    if (!toast) return;
+    toast.hidden = !mailboxHeader() || !state.remoteImport.candidate;
+  }
+
+  function remoteToastHtml() {
+    return '<div class="local-mail-remote-import-title">检测到本机可能存在官方信箱历史记录</div>' +
+      '<button class="local-mail-remote-import-close" type="button" aria-label="关闭" data-remote-action="close">×</button>' +
+      '<div class="local-mail-remote-import-body">可以读取官方客户端的最近信箱记录并写入本地邮箱。导入不占用每日写信额度，也不会自动触发模型回复；只有点击“导入历史”后才会访问官方接口。</div>' +
+      '<div class="local-mail-remote-import-actions" data-role="remote-actions">' +
+      '<button class="local-mail-remote-import-button local-mail-remote-import-button-primary" type="button" data-remote-action="start">导入历史</button>' +
+      '<button class="local-mail-remote-import-button" type="button" data-remote-action="snooze">稍后</button>' +
+      '<button class="local-mail-remote-import-button" type="button" data-remote-action="disable">不再提示</button>' +
+      '</div>' +
+      '<div class="local-mail-remote-import-status" data-role="remote-status"></div>';
+  }
+
+  function ensureRemoteImportToast() {
+    var toast = document.getElementById(REMOTE_TOAST_ID);
+    if (toast) return toast;
+    toast = document.createElement("div");
+    toast.id = REMOTE_TOAST_ID;
+    toast.className = "local-mail-remote-import-toast";
+    toast.hidden = true;
+    toast.innerHTML = remoteToastHtml();
+    document.body.appendChild(toast);
+    bindRemoteImportToast(toast);
+    return toast;
+  }
+
+  function setRemoteStatus(message, kind) {
+    var toast = document.getElementById(REMOTE_TOAST_ID);
+    var status = toast && toast.querySelector('[data-role="remote-status"]');
+    if (!status) return;
+    status.textContent = message;
+    status.dataset.kind = kind || "";
+  }
+
+  function renderRemoteActions(mode) {
+    var toast = document.getElementById(REMOTE_TOAST_ID);
+    var actions = toast && toast.querySelector('[data-role="remote-actions"]');
+    if (!actions) return;
+    if (mode === "running") {
+      actions.innerHTML = '<button class="local-mail-remote-import-button" type="button" data-remote-action="cancel">取消</button>';
+    } else if (mode === "retry") {
+      actions.innerHTML = '<button class="local-mail-remote-import-button local-mail-remote-import-button-primary" type="button" data-remote-action="retry">重试</button>' +
+        '<button class="local-mail-remote-import-button" type="button" data-remote-action="snooze">稍后</button>' +
+        '<button class="local-mail-remote-import-button" type="button" data-remote-action="disable">不再提示</button>';
+    } else if (mode === "done") {
+      actions.innerHTML = "";
+    } else {
+      actions.innerHTML = '<button class="local-mail-remote-import-button local-mail-remote-import-button-primary" type="button" data-remote-action="start">导入历史</button>' +
+        '<button class="local-mail-remote-import-button" type="button" data-remote-action="snooze">稍后</button>' +
+        '<button class="local-mail-remote-import-button" type="button" data-remote-action="disable">不再提示</button>';
+    }
+  }
+
+  function hideRemoteToast() {
+    var toast = document.getElementById(REMOTE_TOAST_ID);
+    if (toast) toast.hidden = true;
+  }
+
+  function stopRemotePolling() {
+    if (state.remoteImport.pollTimer) {
+      window.clearInterval(state.remoteImport.pollTimer);
+      state.remoteImport.pollTimer = null;
+    }
+  }
+
+  async function setRemotePrompt(action) {
+    try {
+      await callApi("/api/remote-import/prompt", {
+        method: "POST",
+        body: JSON.stringify({ action: action })
+      });
+    } catch (error) {
+      // 非阻塞：提示偏好保存失败不打断用户
+    }
+  }
+
+  async function startRemoteImport() {
+    var toast = document.getElementById(REMOTE_TOAST_ID);
+    if (!toast || state.remoteImport.running) return;
+    state.remoteImport.candidate = true;
+    state.remoteImport.running = true;
+    renderRemoteActions("running");
+    setRemoteStatus("正在开始导入…", "");
+    try {
+      await callApi("/api/remote-import/start", { method: "POST", body: "{}" });
+      pollRemoteStatus();
+    } catch (error) {
+      state.remoteImport.running = false;
+      setRemoteStatus(error.message + "\n可以点击“重试”再次尝试。", "error");
+      renderRemoteActions("retry");
+    }
+  }
+
+  function pollRemoteStatus() {
+    stopRemotePolling();
+    state.remoteImport.pollTimer = window.setInterval(async function () {
+      var status;
+      try {
+        status = await callApi("/api/remote-import/status");
+      } catch (error) {
+        setRemoteStatus("读取导入状态失败：" + error.message, "error");
+        return;
+      }
+      state.remoteImport.lastStatus = status;
+      if (REMOTE_ACTIVE_STATES.indexOf(status.state) !== -1) {
+        var text = status.message || "正在导入…";
+        if (Number.isFinite(status.percent) && status.percent > 0) text += "（" + status.percent + "%）";
+        setRemoteStatus(text, "");
+        return;
+      }
+      stopRemotePolling();
+      state.remoteImport.running = false;
+      if (status.state === "completed" || status.state === "partial") {
+        var summary = "已导入 " + status.imported + " 封，新增 " + status.inserted + " 封，更新 " + status.updated +
+          " 封，跳过 " + status.skipped + " 封，失败 " + status.failed + " 封";
+        if (status.conflicts) summary += "，冲突 " + status.conflicts + " 封（本地内容已保留）";
+        setRemoteStatus(summary + "\n邮箱即将自动刷新…", "success");
+        renderRemoteActions("done");
+        window.setTimeout(function () {
+          if (!mailboxHeader()) return;
+          try { window.location.reload(); } catch (error) { /* 刷新失败不阻塞 */ }
+        }, 4000);
+      } else {
+        setRemoteStatus((status.message || "导入失败。") + "\n可以点击“重试”再次尝试。", "error");
+        renderRemoteActions("retry");
+      }
+    }, 800);
+  }
+
+  function bindRemoteImportToast(toast) {
+    toast.addEventListener("click", function (event) {
+      var button = event.target.closest("[data-remote-action]");
+      if (!button) return;
+      var action = button.dataset.remoteAction;
+      if (action === "start") startRemoteImport();
+      else if (action === "retry") startRemoteImport();
+      else if (action === "cancel") {
+        callApi("/api/remote-import/cancel", { method: "POST", body: "{}" }).catch(function () {});
+        setRemoteStatus("正在取消…", "");
+      } else if (action === "snooze") {
+        setRemotePrompt("snooze");
+        stopRemotePolling();
+        state.remoteImport.running = false;
+        state.remoteImport.candidate = false;
+        hideRemoteToast();
+      } else if (action === "disable") {
+        setRemotePrompt("disable");
+        stopRemotePolling();
+        state.remoteImport.running = false;
+        state.remoteImport.candidate = false;
+        hideRemoteToast();
+        state.remotePromptSettings = { promptDisabled: true };
+        applyRemotePromptVisibility();
+      } else if (action === "close") {
+        state.remoteImport.candidate = false;
+        hideRemoteToast();
+      }
+    });
+  }
+
+  // 只在信箱页检测；网络或本地服务的瞬时失败不会锁死本次 CEF 会话，之后重新
+  // 进入信箱仍可再试。候选状态与 DOM 节点分离，离开信箱时节点会立即隐藏。
+  async function detectRemoteHistoryOnce() {
+    if (state.remoteImport.checked || state.remoteImport.checking || Date.now() < state.remoteImport.retryAfter || !mailboxHeader()) return;
+    state.remoteImport.checking = true;
+    try {
+      var data = await callApi("/api/remote-import/detect");
+      state.remoteImport.checked = true;
+      state.remoteImport.retryAfter = 0;
+      state.remotePromptSettings = data.prompt || {};
+      state.remoteImport.candidate = false;
+      if (!data.found) return;
+      var prompt = data.prompt || {};
+      if (prompt.promptDisabled) return;
+      if (Number(prompt.snoozedUntil) > Date.now() / 1000) return;
+      if (prompt.lastSuccessAt && prompt.lastImportedAccount && prompt.lastImportedAccount === data.account) {
+        var lastAt = Date.parse(prompt.lastSuccessAt);
+        if (Number.isFinite(lastAt) && Date.now() - lastAt < 24 * 3600 * 1000) return;
+      }
+      ensureRemoteImportToast();
+      renderRemoteActions("idle");
+      setRemoteStatus("", "");
+      state.remoteImport.candidate = true;
+      syncRemoteToastVisibility();
+    } catch (error) {
+      // 检测失败不打扰邮箱其他功能
+      state.remoteImport.checked = false;
+      state.remoteImport.retryAfter = Date.now() + 5000;
+    } finally {
+      state.remoteImport.checking = false;
+    }
+  }
+
+  function applyRemotePromptVisibility() {
+    var section = document.getElementById(SECTION_ID);
+    var button = section && section.querySelector('[data-action="restore-remote-prompt"]');
+    if (!button) return;
+    var disabled = Boolean(state.remotePromptSettings && state.remotePromptSettings.promptDisabled);
+    button.hidden = !disabled;
   }
 
   var LETTER_STATUS_LABELS = {
@@ -737,8 +1036,11 @@
   }
 
   function mountMailboxTools() {
-    var header = document.querySelector("main .mail-header");
-    if (!header || !header.querySelector(".text-text-title.text-title-m")) return;
+    var header = mailboxHeader();
+    if (!header) {
+      hideRemoteToast();
+      return;
+    }
     installStyles();
     if (!document.getElementById(MAILBOX_TOOLS_ID)) {
       var tools = document.createElement("div");
@@ -758,6 +1060,8 @@
       header.appendChild(tools);
     }
     applyMailboxDebugVisibility();
+    if (state.remoteImport.candidate) syncRemoteToastVisibility();
+    else detectRemoteHistoryOnce();
   }
 
   function applyMailboxDebugVisibility() {
@@ -824,7 +1128,7 @@
       '  </div>',
       '</div>',
       '<div class="lm-card">',
-      '  <div class="lm-card-head"><div class="lm-card-title">服务与数据</div><div class="lm-actions"><button class="lm-button lm-button-small" type="button" data-action="refresh-diagnostics">刷新</button><button class="lm-button lm-button-small" type="button" data-action="export-backup">导出 JSON 备份</button></div></div>',
+      '  <div class="lm-card-head"><div class="lm-card-title">服务与数据</div><div class="lm-actions"><button class="lm-button lm-button-small" type="button" data-action="refresh-diagnostics">刷新</button><button class="lm-button lm-button-small" type="button" data-action="export-backup">导出 JSON 备份</button><button class="lm-button lm-button-small" type="button" data-action="restore-remote-prompt" hidden>恢复历史导入提示</button></div></div>',
       '  <div class="lm-diagnostics" data-role="diagnostics">正在读取服务状态…</div>',
       '</div>',
       '<div class="lm-card">',
@@ -1745,6 +2049,21 @@
       else if (action === "test-model") testCurrentModel();
       else if (action === "refresh-diagnostics") refreshDiagnostics();
       else if (action === "export-backup") exportBackup();
+      else if (action === "restore-remote-prompt") {
+        callApi("/api/remote-import/prompt", { method: "POST", body: JSON.stringify({ action: "enable" }) })
+          .then(function (prompt) {
+            state.remotePromptSettings = prompt;
+            state.remoteImport.checked = false;
+            state.remoteImport.candidate = false;
+            state.remoteImport.retryAfter = 0;
+            applyRemotePromptVisibility();
+            setStatus("model-status", "已恢复官方历史导入提示。", "success");
+            if (mailboxHeader()) detectRemoteHistoryOnce();
+          })
+          .catch(function (error) {
+            setStatus("model-status", "恢复失败：" + error.message, "error");
+          });
+      }
     });
   }
 
@@ -1753,14 +2072,17 @@
       var loaded = await Promise.all([
         callApi("/api/model-config"),
         callApi("/api/settings"),
-        callApi("/api/diagnostics")
+        callApi("/api/diagnostics"),
+        callApi("/api/remote-import/detect").catch(function () { return { found: false, prompt: {} }; })
       ]);
       state.config = loaded[0];
       state.runtime = loaded[1];
       state.diagnostics = loaded[2];
+      state.remotePromptSettings = (loaded[3] && loaded[3].prompt) || {};
       state.debugMode = Boolean(state.runtime && state.runtime.debugMode);
       syncActiveSelectors();
       renderDiagnostics();
+      applyRemotePromptVisibility();
       setStatus("model-status", "配置已从本机 SQLite 读取；模型调用与关系时间线已接入。", "success");
     } catch (error) {
       setStatus("model-status", "无法连接本地回信服务：" + error.message, "error");
