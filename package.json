@@ -1,6 +1,6 @@
 {
   "name": "linli-local-mail-bridge",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": true,
   "license": "MPL-2.0",
   "repository": {
@@ -8,7 +8,7 @@
     "url": "https://github.com/AETAVK/linli-local-mail.git"
   },
   "type": "module",
-  "description": "BSide Olivia Lin .627 local letter bridge, video archive, and model orchestrator",
+  "description": "BSide Olivia Lin .627 local letter bridge, official history restore, and model orchestrator",
   "engines": {
     "node": ">=24.0.0"
   },

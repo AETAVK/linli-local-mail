@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { SERVICE_VERSION } from "./constants.mjs";
+
 // 官方日志自动检测与远端历史读取。
 //
 // 安全边界：
@@ -59,7 +61,7 @@ const LIST_PAGE_SIZE = 50;
 
 const TERMINAL_STATES = new Set(["completed", "partial", "failed", "cancelled"]);
 
-const OFFICIAL_USER_AGENT = "LinliLocalMail/0.8.1 (official-history-restore)";
+const OFFICIAL_USER_AGENT = `LinliLocalMail/${SERVICE_VERSION} (official-history-restore)`;
 
 export class RemoteImportError extends Error {
   constructor(message, { code = "remote_import_error", status = 400 } = {}) {
