@@ -41,7 +41,9 @@ if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) {
   throw "Game launcher was not found: $launcherPath"
 }
 if (-not (Test-Path -LiteralPath $wrapperPath -PathType Leaf)) {
-  throw "Built launcher wrapper was not found: $wrapperPath. Run tools\\build-launcher-wrapper.ps1 on the maintainer machine first."
+  # install.ps1 会在调用本脚本前先检查同一个文件并给出完整指引，正常不会走到这里；
+  # 保留兜底报错，但把矛头指向真正的原因：源码归档不含编译产物。
+  throw "Built launcher wrapper was not found: $wrapperPath. You are probably running from a source-code archive; download LinliLocalMail-Setup.exe from the Release page instead (it bundles the built wrapper)."
 }
 
 $wrapperHash = Get-Sha256 $wrapperPath
