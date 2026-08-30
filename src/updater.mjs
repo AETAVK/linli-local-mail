@@ -102,6 +102,7 @@ function normalizeRelease({ source, release, assets, fallbackPageUrl }) {
     version: parsed.text,
     tag: `v${parsed.text}`,
     name: String(release.name || release.tag_name || `v${parsed.text}`),
+    notes: String(release.body || release.description || "").trim().slice(0, 12000),
     releasePageUrl: String(release.html_url || fallbackPageUrl || ""),
     publishedAt: release.published_at || release.created_at || null,
     installer,
@@ -109,7 +110,30 @@ function normalizeRelease({ source, release, assets, fallbackPageUrl }) {
   };
 }
 
-function publicCheck(candidate, currentVersion, checkedAt) {
+function publicReleaseSummary(candidate) {
+  return {
+    version: candidate.version,
+    tag: candidate.tag,
+    name: candidate.name,
+    notes: candidate.notes,
+    releasePageUrl: candidate.releasePageUrl,
+    publishedAt: candidate.publishedAt
+  };
+}
+
+function publicCheck(candidate, currentVersion, checkedAt, candidates) {
+  const pendingByVersion = new Map();
+  for (const item of candidates) {
+    if (compareVersions(item.version, currentVersion) <= 0) continue;
+    const existing = pendingByVersion.get(item.version);
+    // GitHub is the release-note source of truth when both mirrors have the same version.
+    if (!existing || (item.source === "github" && existing.source !== "github")) {
+      pendingByVersion.set(item.version, item);
+    }
+  }
+  const pendingReleases = Array.from(pendingByVersion.values())
+    .sort((left, right) => compareVersions(left.version, right.version))
+    .map(publicReleaseSummary);
   return {
     currentVersion,
     latestVersion: candidate.version,
@@ -122,6 +146,7 @@ function publicCheck(candidate, currentVersion, checkedAt) {
       name: candidate.installer.name,
       size: candidate.installer.size
     },
+    pendingReleases,
     checkedAt
   };
 }
@@ -201,18 +226,21 @@ export class UpdateManager {
   }
 
   async queryGitHub() {
-    const release = await this.fetchJson(`${GITHUB_API_ROOT}/releases/latest`, {
+    const releases = await this.fetchJson(`${GITHUB_API_ROOT}/releases?per_page=100&page=1`, {
       headers: {
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28"
       }
     });
-    return normalizeRelease({
-      source: "github",
-      release,
-      assets: release?.assets,
-      fallbackPageUrl: "https://github.com/AETAVK/linli-local-mail/releases/latest"
-    });
+    if (!Array.isArray(releases)) throw new UpdateError("GitHub Release 列表响应不是数组", { status: 502 });
+    return releases
+      .map((release) => normalizeRelease({
+        source: "github",
+        release,
+        assets: release?.assets,
+        fallbackPageUrl: `https://github.com/AETAVK/linli-local-mail/releases/tag/${encodeURIComponent(String(release?.tag_name || ""))}`
+      }))
+      .filter(Boolean);
   }
 
   async check({ force = false } = {}) {
@@ -224,7 +252,7 @@ export class UpdateManager {
     const settled = await Promise.allSettled([this.queryGitee(), this.queryGitHub()]);
     const candidates = settled
       .filter((item) => item.status === "fulfilled" && item.value)
-      .map((item) => item.value);
+      .flatMap((item) => Array.isArray(item.value) ? item.value : [item.value]);
     if (!candidates.length) {
       const reasons = settled
         .filter((item) => item.status === "rejected")
@@ -250,7 +278,7 @@ export class UpdateManager {
 
     const checkedAt = new Date(timestamp).toISOString();
     this.cachedCandidate = candidate;
-    this.cachedPublicCheck = publicCheck(candidate, this.currentVersion, checkedAt);
+    this.cachedPublicCheck = publicCheck(candidate, this.currentVersion, checkedAt, candidates);
     this.cacheExpiresAt = timestamp + this.cacheMilliseconds;
     return this.cachedPublicCheck;
   }

@@ -335,6 +335,16 @@
       ".lm-update-copy{font-size:13px;line-height:1.65;color:var(--tp-text-secondary,#a1a5ad);white-space:pre-line}",
       ".lm-update-meta{margin-top:9px;font-size:11px;color:var(--tp-text-tertiary,#7d818c)}",
       ".lm-update-warning{margin-top:14px;padding:10px 12px;border-left:2px solid #d8b98f;background:rgba(216,185,143,.08);color:#d7c3a6;font-size:12px;line-height:1.6}",
+      ".lm-update-releases{margin-top:16px;padding-top:13px;border-top:1px solid rgba(255,255,255,.08)}",
+      ".lm-update-releases[hidden]{display:none}",
+      ".lm-update-releases-title{margin-bottom:8px;color:var(--tp-text-title,#e8e9eb);font-size:13px;font-weight:600}",
+      ".lm-update-release-list{display:flex;max-height:220px;flex-direction:column;gap:8px;overflow:auto;padding-right:4px}",
+      ".lm-update-release{padding:10px 11px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(0,0,0,.13)}",
+      ".lm-update-release-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}",
+      ".lm-update-release-version{color:var(--tp-text-title,#e8e9eb);font-size:12px;font-weight:600}",
+      ".lm-update-release-name{min-width:0;overflow:hidden;color:var(--tp-text-tertiary,#7d818c);font-size:11px;text-align:right;text-overflow:ellipsis;white-space:nowrap}",
+      ".lm-update-release-date{margin-top:3px;color:var(--tp-text-tertiary,#7d818c);font-size:10px}",
+      ".lm-update-release-notes{margin-top:6px;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word}",
       "@media(max-width:900px){.lm-grid,.lm-provider-grid,.lm-parameter-grid{grid-template-columns:1fr}.lm-provider-grid .lm-wide,.lm-parameter-wide{grid-column:auto}.lm-toolbar{align-items:flex-start;flex-direction:column}.lm-config-item{flex-direction:column;align-items:flex-start}.lm-import-methods{grid-template-columns:1fr}.lm-model-manager-body{grid-template-columns:210px minmax(0,1fr)}.lm-provider-detail-scroll{padding:18px}.lm-model-edit-grid{grid-template-columns:1fr}}",
       "@media(max-width:680px){.lm-modal.lm-model-manager{height:90vh}.lm-model-manager-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.lm-provider-nav{max-height:190px;border-right:0;border-bottom:1px solid rgba(255,255,255,.09)}.lm-provider-detail-head{flex-direction:column}.lm-provider-detail-actions{justify-content:flex-start}}"
     ].join("");
@@ -372,10 +382,13 @@
       '<span class="lm-update-version-arrow">→</span>' +
       '<span class="lm-update-version-latest" data-role="update-latest"></span></div>' +
       '<div class="lm-update-meta" data-role="update-meta"></div>' +
+      '<div class="lm-update-releases" data-role="update-releases" hidden>' +
+      '<div class="lm-update-releases-title">未更新版本的更新说明</div>' +
+      '<div class="lm-update-release-list" data-role="update-release-list"></div></div>' +
       '<div class="lm-update-warning" data-role="update-warning" hidden></div>' +
       '<div class="lm-modal-actions"><span class="lm-modal-status" data-role="update-status"></span>' +
       '<button class="lm-button" type="button" data-update-action="close">稍后</button>' +
-      '<button class="lm-button lm-button-primary" type="button" data-update-action="apply" hidden>下载并安装</button></div>' +
+      '<button class="lm-button lm-button-primary" type="button" data-update-action="apply" hidden>更新到最新版</button></div>' +
       '</div>';
     backdrop.addEventListener("click", function (event) {
       var button = event.target.closest("[data-update-action]");
@@ -393,6 +406,48 @@
     return backdrop;
   }
 
+  function renderUpdateReleaseNotes(modal, result) {
+    var section = modal.querySelector('[data-role="update-releases"]');
+    var list = modal.querySelector('[data-role="update-release-list"]');
+    if (!section || !list) return;
+    list.textContent = "";
+    var releases = result && Array.isArray(result.pendingReleases) ? result.pendingReleases : [];
+    if (!releases.length) {
+      section.hidden = true;
+      return;
+    }
+    releases.forEach(function (release) {
+      var card = document.createElement("div");
+      card.className = "lm-update-release";
+      var head = document.createElement("div");
+      head.className = "lm-update-release-head";
+      var version = document.createElement("span");
+      version.className = "lm-update-release-version";
+      version.textContent = "v" + String(release.version || "");
+      var name = document.createElement("span");
+      name.className = "lm-update-release-name";
+      name.textContent = String(release.name || release.tag || "");
+      head.appendChild(version);
+      head.appendChild(name);
+      card.appendChild(head);
+      if (release.publishedAt) {
+        var date = document.createElement("div");
+        date.className = "lm-update-release-date";
+        var parsedDate = new Date(release.publishedAt);
+        date.textContent = Number.isNaN(parsedDate.getTime())
+          ? String(release.publishedAt)
+          : parsedDate.toLocaleDateString();
+        card.appendChild(date);
+      }
+      var notes = document.createElement("div");
+      notes.className = "lm-update-release-notes";
+      notes.textContent = String(release.notes || "该版本未提供更新说明。");
+      card.appendChild(notes);
+      list.appendChild(card);
+    });
+    section.hidden = false;
+  }
+
   function renderUpdateModal(kind, result, errorMessage) {
     var modal = ensureUpdateModal();
     var title = modal.querySelector('[data-role="update-title"]');
@@ -401,11 +456,13 @@
     var current = modal.querySelector('[data-role="update-current"]');
     var latest = modal.querySelector('[data-role="update-latest"]');
     var meta = modal.querySelector('[data-role="update-meta"]');
+    var releases = modal.querySelector('[data-role="update-releases"]');
     var warning = modal.querySelector('[data-role="update-warning"]');
     var status = modal.querySelector('[data-role="update-status"]');
     var close = modal.querySelector('[data-update-action="close"]');
     var apply = modal.querySelector('[data-update-action="apply"]');
     version.hidden = true;
+    releases.hidden = true;
     warning.hidden = true;
     apply.hidden = true;
     close.hidden = false;
@@ -426,12 +483,13 @@
       latest.textContent = "v" + result.latestVersion;
       version.hidden = false;
       meta.textContent = updateSourceLabel(result.source) + " · " + formatUpdateBytes(result.installer && result.installer.size);
+      renderUpdateReleaseNotes(modal, result);
       warning.textContent = "更新会停止本地回信服务。安装完成前请勿寄信；安装成功后需要重新启动游戏。";
       warning.hidden = false;
       close.textContent = "稍后";
       apply.hidden = false;
       apply.disabled = false;
-      apply.textContent = "下载并安装";
+      apply.textContent = "更新到最新版";
     } else if (kind === "current") {
       title.textContent = "补丁已是最新版本";
       copy.textContent = "当前安装的是 v" + result.currentVersion + "，公开发布源没有更高的稳定版本。";
@@ -1356,7 +1414,7 @@
       '  </div>',
       '</div>',
       '<div class="lm-card">',
-      '  <div class="lm-card-head"><div class="lm-card-title">服务与数据</div><div class="lm-actions"><button class="lm-button lm-button-small" type="button" data-action="check-update">检查补丁更新</button><button class="lm-button lm-button-small" type="button" data-action="refresh-diagnostics">刷新</button><button class="lm-button lm-button-small" type="button" data-action="export-backup">导出 JSON 备份</button><button class="lm-button lm-button-small" type="button" data-action="restore-remote-prompt" hidden>恢复历史导入提示</button></div></div>',
+      '  <div class="lm-card-head"><div class="lm-card-title">服务与数据</div><div class="lm-actions"><button class="lm-button lm-button-small" type="button" data-action="refresh-diagnostics">刷新</button><button class="lm-button lm-button-small" type="button" data-action="export-backup">导出 JSON 备份</button><button class="lm-button lm-button-small" type="button" data-action="restore-remote-prompt" hidden>恢复历史导入提示</button></div></div>',
       '  <div class="lm-diagnostics" data-role="diagnostics">正在读取服务状态…</div>',
       '</div>',
       '<div class="lm-card">',
@@ -2275,7 +2333,6 @@
       }
       else if (action === "save-all") saveAllSettings();
       else if (action === "test-model") testCurrentModel();
-      else if (action === "check-update") checkForUpdate(true);
       else if (action === "refresh-diagnostics") refreshDiagnostics();
       else if (action === "export-backup") exportBackup();
       else if (action === "restore-remote-prompt") {
