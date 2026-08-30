@@ -9,8 +9,7 @@
 
 当前公开源码版本为 `0.9.0`。该版本在 `0.8.1` 官方 `.627` 兼容基线之上，修复官方历史检测落到旧
 会话凭证的问题，并加入游戏内自动/手动检查补丁、确认、下载校验和安装器启动。图片导入仍是占位功能，
-不包含 OCR，也不会生成视频或转写音频。下方下载链接仍明确指向已经发布的 `0.8.1`；在 `v0.9.0`
-Release 实际创建前，不把尚不存在的安装包链接描述为可下载版本。
+不包含 OCR，也不会生成视频或转写音频。当前可下载的稳定版为 `v0.9.0`。
 
 ## 快速安装与启动（零基础）
 
@@ -30,12 +29,12 @@ Release 实际创建前，不把尚不存在的安装包链接描述为可下载
 
 ### 第一步：下载安装程序
 
-- [Gitee 国内镜像：直接下载一键安装程序（v0.8.1）](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.8.1/LinliLocalMail-0.8.1-Setup.exe)
-- [Gitee：查看 v0.8.1 更新说明和 SHA-256 校验值](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.8.1)
-- [GitHub：直接下载一键安装程序（v0.8.1）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.8.1/LinliLocalMail-0.8.1-Setup.exe)
-- [GitHub：查看 v0.8.1 更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.8.1)
+- [Gitee 国内镜像：直接下载一键安装程序（v0.9.0）](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.9.0/LinliLocalMail-0.9.0-Setup.exe)
+- [Gitee：查看 v0.9.0 更新说明和 SHA-256 校验值](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.9.0)
+- [GitHub：直接下载一键安装程序（v0.9.0）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.9.0/LinliLocalMail-0.9.0-Setup.exe)
+- [GitHub：查看 v0.9.0 更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.9.0)
 
-普通玩家只需要下载 `LinliLocalMail-0.8.1-Setup.exe`，不需要下载页面下方的 `Source code`、
+普通玩家只需要下载 `LinliLocalMail-0.9.0-Setup.exe`，不需要下载页面下方的 `Source code`、
 `.json`、`.sha256` 或 `.cer` 文件。
 
 ### 第二步：找到游戏目录
@@ -47,12 +46,12 @@ Release 实际创建前，不把尚不存在的安装包链接描述为可下载
 launcher.exe
 ```
 
-把刚下载的 `LinliLocalMail-0.8.1-Setup.exe` 移动到这个目录。这样安装器可以自动识别游戏，
+把刚下载的 `LinliLocalMail-0.9.0-Setup.exe` 移动到这个目录。这样安装器可以自动识别游戏，
 不需要手动选择路径。
 
 ### 第三步：安装
 
-双击运行 `LinliLocalMail-0.8.1-Setup.exe`，等待“安装完成”提示。
+双击运行 `LinliLocalMail-0.9.0-Setup.exe`，等待“安装完成”提示。
 
 安装器使用自签名证书，因此 Windows 可能显示“Windows 已保护你的电脑”或“未知发布者”。
 请先确认文件来自本仓库的 Release 页面；确认无误后，可以点击“更多信息”→“仍要运行”。
@@ -179,7 +178,7 @@ Release 中的同名附件，不会删除其他附件；也可以通过 `workflo
 GitHub Release 成功后，再在已经下载该版本四个附件的本机或 Gitee Go 环境执行 Gitee 同步脚本。脚本
 要求工作目录中的 `dist/` 包含以下文件：安装器 EXE、同名 `.sha256`、同名 `.json` 和
 `LinliLocalMail-SelfSigned.cer`；将 `GITEE_TOKEN` 作为临时环境变量注入，完成后立即清除。当前
-`v0.8.1` 已按此方式验证 GitHub 与 Gitee 的四个附件一致。
+`v0.9.0` 已按此方式验证 GitHub 与 Gitee 的四个附件一致。
 
 ## 数据与隐私
 
