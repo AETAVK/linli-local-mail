@@ -6,6 +6,9 @@
 本项目不是官方项目，不隶属于、未经原游戏开发商或发行商认可。仓库和安装包均不包含游戏本体、
 官方启动器、图片、音乐、视频、字体、DLL、历史信件或其他官方资源。使用者必须自行准备原版客户端。
 
+当前公开源码版本为 `0.7.1`。该版本新增本地文件批量导入，以及从本机官方客户端日志中自动检测并
+恢复本人官方历史信件的实验性流程；图片导入仍是占位功能，不包含 OCR。
+
 ## 快速安装与启动（零基础）
 
 ### 准备
@@ -20,12 +23,11 @@
 
 ### 第一步：下载安装程序
 
-- [Gitee 国内镜像：直接下载一键安装程序（v0.6.0）](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.6.0/LinliLocalMail-0.6.0-Setup.exe)
-- [GitHub：直接下载一键安装程序（v0.6.0）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.6.0/LinliLocalMail-0.6.0-Setup.exe)
-- [Gitee：查看 v0.6.0 更新说明和 SHA-256 校验值](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.6.0)
-- [GitHub：查看最新版、更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/latest)
+- [GitHub：直接下载一键安装程序（v0.7.1）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.7.1/LinliLocalMail-0.7.1-Setup.exe)
+- [GitHub：查看 v0.7.1 更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.7.1)
+- [Gitee 国内镜像：当前仍为 v0.6.0](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.6.0)
 
-普通玩家只需要下载 `LinliLocalMail-0.6.0-Setup.exe`，不需要下载页面下方的 `Source code`、
+普通玩家只需要下载 `LinliLocalMail-0.7.1-Setup.exe`，不需要下载页面下方的 `Source code`、
 `.json`、`.sha256` 或 `.cer` 文件。
 
 ### 第二步：找到游戏目录
@@ -37,12 +39,12 @@
 launcher.exe
 ```
 
-把刚下载的 `LinliLocalMail-0.6.0-Setup.exe` 移动到这个目录。这样安装器可以自动识别游戏，
+把刚下载的 `LinliLocalMail-0.7.1-Setup.exe` 移动到这个目录。这样安装器可以自动识别游戏，
 不需要手动选择路径。
 
 ### 第三步：安装
 
-双击运行 `LinliLocalMail-0.6.0-Setup.exe`，等待“安装完成”提示。
+双击运行 `LinliLocalMail-0.7.1-Setup.exe`，等待“安装完成”提示。
 
 安装器使用自签名证书，因此 Windows 可能显示“Windows 已保护你的电脑”或“未知发布者”。
 请先确认文件来自本仓库的 Release 页面；确认无误后，可以点击“更多信息”→“仍要运行”。
@@ -77,12 +79,18 @@ launcher.exe
 - 在本机启动 HTTP 服务，接管客户端的写信与回信请求。
 - 使用 SQLite 保存信件、异步生成状态和本地记忆。
 - 配置多个兼容 OpenAI、Anthropic 或 Gemini 风格接口的模型供应商。
-- 在信箱页通过 JSON 或仍然有效的官方分享链接导入用户自己的历史信件。
+- 在信箱页批量导入 JSON 文件；图片文件可以选择，但在接入 OCR 前会明确报告未支持。
+- 通过仍然有效的官方分享链接导入用户自己的历史信件。
+- 从本机官方客户端日志中只读检测当前登录会话，并在用户确认后恢复本人官方历史信件。
 - 将前端补丁安装到已有的 `0.0.9.627` 客户端，并保留可恢复备份。
 - 安装启动包装器，使游戏启动时同时确认本地服务已经运行。
 
 当前只支持 Windows。API Key 通过当前 Windows 账户的 DPAPI 加密保存在本机，
 不会写入 SQLite、备份 JSON 或源码仓库。
+
+官方历史恢复依赖仍可访问的官方接口；`0.7.1` 已通过自动测试和脱敏日志检测，但尚未完成一次真实远端
+历史导入的人工实机验收。该功能只接受官方 Olivia 域名、固定请求头白名单和本机日志中的会话信息，
+不会把 Token 写入数据库、日志、导出文件或模型上下文。
 
 ## 从源码运行
 
