@@ -155,9 +155,9 @@ SmartScreen 的未知发布者提示，也不能替代受信任的商业代码�
 正式版本由 GitHub Actions 在 Windows Runner 上只构建一次，并自动发布到 GitHub Release。工作流文件位于
 `.github/workflows/release.yml`，只服务于发布流程，不会进入游戏运行载荷。
 
-每个版本发布前必须新增对应的 `.github/release-notes/v<版本>.md`，内容应只描述该版本相对上一版本的实际
-用户可见改动；说明文件为空或缺失时工作流会拒绝发布。重新运行既有标签的工作流会同时更新 GitHub Release
-正文，不会继续保留旧的通用模板。
+每个版本发布前必须新增对应的 `.github/release-notes/v<版本>.md`，内容应只描述该版本相对上一已发布版本的
+实际用户可见改动；中间没有单独创建 Release 的版本变更，应合并到实际发布标签的说明中。说明文件为空或
+缺失时工作流会拒绝发布。重新运行既有标签的工作流会同时更新 GitHub Release 正文，不会继续保留旧的通用模板。
 
 Gitee 使用同一批已构建文件，不在 Gitee 上重复编译、签名或生成另一份校验值。由于 GitHub-hosted
 Runner 到 Gitee 附件上传接口的网络连接不稳定，Gitee 同步脚本
