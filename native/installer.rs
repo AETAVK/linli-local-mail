@@ -264,7 +264,30 @@ param(
   [Parameter(Mandatory=$true)][string]$Destination
 )
 $ErrorActionPreference = "Stop"
-Expand-Archive -LiteralPath $Zip -DestinationPath $Destination -Force
+# 预清理：zip 中是文件、目标中却存在同名【目录】的冲突。
+# 常见于此前用其他工具（资源管理器/部分解压器）解压过旧 zip 的机器——目录条目
+# 处理出错会把 backup.mjs 等文件名建成目录，Expand-Archive 写入被拒后在回滚时
+# 又报 PathNotFound，掩盖真实原因。
+$tar = Join-Path $env:SystemRoot "system32\tar.exe"
+if (Test-Path $tar) {
+  $entries = & $tar -tf $Zip
+  foreach ($entry in $entries) {
+    if ($entry.EndsWith("/")) { continue }
+    $name = $entry.TrimStart("./")
+    if (-not $name) { continue }
+    $target = Join-Path $Destination ($name -replace "/", "\")
+    if ((Test-Path -LiteralPath $target) -and (Get-Item -LiteralPath $target).PSIsContainer) {
+      Remove-Item -LiteralPath $target -Recurse -Force
+    }
+  }
+  # bsdtar 对 tar 风格流式 zip 支持完整，优先使用
+  & $tar -xf $Zip -C $Destination
+  if ($LASTEXITCODE -eq 0) { exit 0 }
+  # bsdtar 失败则回退到 Expand-Archive（预清理已消除最常见冲突）
+  Expand-Archive -LiteralPath $Zip -DestinationPath $Destination -Force
+} else {
+  Expand-Archive -LiteralPath $Zip -DestinationPath $Destination -Force
+}
 "#;
 
     if let Err(error) = fs::write(&payload_zip, PAYLOAD) {
