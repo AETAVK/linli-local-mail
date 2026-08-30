@@ -1,5 +1,5 @@
 // One-off: mark v0.6.0/v0.7.1/v0.8.0 Gitee releases as prerelease and prepend a baseline warning.
-// Runs in GitHub Actions where GITEE_TOKEN exists.
+// Runs in GitHub Actions where GITEE_TOKEN exists. Delete this workflow after a successful run.
 const token = process.env.GITEE_TOKEN;
 if (!token) throw new Error("GITEE_TOKEN not set");
 const owner = "sforlife", repo = "linli-local-mail";
@@ -14,17 +14,21 @@ const WARNING = [
   ""
 ].join("\n");
 
-const headers = { "Content-Type": "application/json" };
 for (const tag of ["v0.6.0", "v0.7.1", "v0.8.0"]) {
-  const listRes = await fetch(`https://gitee.com/api/v5/repos/${owner}/${repo}/releases/tags/${tag}`, { headers });
+  const listRes = await fetch(`https://gitee.com/api/v5/repos/${owner}/${repo}/releases/tags/${tag}`);
   if (!listRes.ok) { console.error(`${tag}: fetch failed ${listRes.status}`); continue; }
   const rel = await listRes.json();
   if (rel.prerelease) { console.log(`${tag}: already prerelease, skipping`); continue; }
-  const body = WARNING + (rel.body || "");
-  const patch = await fetch(`https://gitee.com/api/v5/repos/${owner}/${repo}/releases/${rel.id}`, {
+  const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/${rel.id}?access_token=${encodeURIComponent(token)}`;
+  const patch = await fetch(url, {
     method: "PATCH",
-    headers,
-    body: JSON.stringify({ access_token: token, prerelease: true, body })
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      tag_name: tag,
+      name: rel.name || tag,
+      prerelease: "true",
+      body: WARNING + (rel.body || "")
+    })
   });
   console.log(`${tag}: PATCH ${patch.status} ${patch.ok ? "OK" : await patch.text()}`);
 }
