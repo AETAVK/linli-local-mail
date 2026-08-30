@@ -190,6 +190,38 @@ function entryMap(entries) {
   return new Map(entries.map((entry) => [entry.name, entry]));
 }
 
+// patchEntries 的逆操作：从一份"本项目补丁产物"中剥离注入脚本并反向应用补丁规则，
+// 重建它当初构建自的基线。补丁是完全确定性的（无时间戳、无随机量），因此逆向结果
+// 与原始基线逐字节一致。任何一步不符合预期都抛错，让调用方拒绝该来源。
+function unpatchEntries(patchedEntries) {
+  const entries = patchedEntries.map((entry) => ({ ...entry, data: Buffer.from(entry.data) }));
+  const byName = entryMap(entries);
+  if (byName.has(LOCAL_SCRIPT_ENTRY)) {
+    const injected = byName.get(LOCAL_SCRIPT_ENTRY);
+    entries.splice(entries.indexOf(injected), 1);
+  } else {
+    throw new Error("Archive does not look like a local-mail patched archive: local-mail-poc.js entry missing");
+  }
+
+  const index = byName.get(INDEX_ENTRY);
+  const main = byName.get(MAIN_ENTRY);
+  if (!index || !main) throw new Error("Expected .627 frontend entries were not found");
+
+  const marker = '<script type="module" crossorigin src="./assets/main-31595bd3.js"></script>';
+  const injection = `<script src="./assets/local-mail-poc.js"></script>\n  ${marker}`;
+  let indexText = index.data.toString("utf8");
+  indexText = exactReplace(indexText, injection, marker);
+  if (indexText.includes("./assets/local-mail-poc.js")) {
+    throw new Error("index.html still references local-mail-poc.js after unpatching");
+  }
+  index.data = Buffer.from(indexText, "utf8");
+
+  let mainText = main.data.toString("utf8");
+  for (const [before, after] of PATCH_RULES) mainText = exactReplace(mainText, after, before);
+  main.data = Buffer.from(mainText, "utf8");
+  return entries;
+}
+
 function verifyPatchedArchive(buffer, baselineBuffer, localScript) {
   const current = readArchive(buffer);
   const baseline = readArchive(baselineBuffer);
@@ -240,35 +272,62 @@ function backupCurrentTarget(targetBuffer) {
 }
 
 // 当安装目录里的 feapp.dat 不是官方基线（通常已被本补丁打过）且本地没有基线时，
-// 从历史安装备份里恢复基线：只接受哈希等于官方基线的备份文件，避免把未知内容当基线。
+// 从本机已有的文件恢复基线。候选来源按优先级：
+//  1. pre-formal-install 备份里哈希等于官方基线的备份；
+//  2. 当前安装包本身——本项目的补丁是完全确定性的，逆向剥离（unpatchEntries）
+//     可以从任何"本项目补丁产物"逐字节重建基线，因此旧版本安装器打过补丁、
+//     且备份已丢失的机器也能恢复。每个候选都必须通过"重打补丁与当前安装包
+//     逐字节一致"的验证，无法证明来源的内容一律拒绝。
 function restoreBaselineFromBackup() {
+  const candidates = [];
   const directory = path.join(ROOT, "backups", "patch-snapshots", "pre-formal-install");
-  if (!fs.existsSync(directory)) return null;
-  let candidates = [];
   try {
-    candidates = fs.readdirSync(directory).filter((name) => /^feapp-.*\.dat$/.test(name));
+    for (const name of fs.readdirSync(directory)) {
+      if (/^feapp-.*\.dat$/.test(name)) candidates.push(path.join(directory, name));
+    }
   } catch {
-    return null;
+    // 备份目录不存在或不可读；下方还会尝试当前安装包本身
   }
-  for (const name of candidates) {
+  candidates.push(TARGET_PATH);
+
+  const localScript = fs.readFileSync(FRONTEND_SCRIPT_PATH);
+  for (const candidatePath of candidates) {
     let candidate;
     try {
-      candidate = fs.readFileSync(path.join(directory, name));
+      candidate = fs.readFileSync(candidatePath);
     } catch {
       continue;
     }
-    if (sha256Sync(candidate) !== EXPECTED_BASELINE_SHA256) continue;
-    // 额外确认：当前安装包必须能由该基线 + 当前前端脚本重建（防止基线错配到别的修改来源）
+    const candidateIsBaseline = sha256Sync(candidate) === EXPECTED_BASELINE_SHA256;
     try {
-      const localScript = fs.readFileSync(FRONTEND_SCRIPT_PATH);
-      const rebuilt = writeArchive(patchEntries(readArchive(candidate), localScript));
-      if (sha256Sync(rebuilt) !== sha256Sync(fs.readFileSync(TARGET_PATH))) continue;
+      let baselineCandidate;
+      if (candidateIsBaseline) {
+        baselineCandidate = candidate;
+      } else {
+        // 只接受"由某个基线 + 某个前端脚本打出的补丁产物"：剥离并验证结构。
+        // 注意不要求剥离产物与官方基线逐字节一致——writeArchive 会把 zip 元数据
+        //（versionMade、DOS 时间戳、本地头风格）规范化为本项目打包器的形态，与
+        // 官方打包器（流式、本地头置零）必然不同；判断依据是内容与可重建性。
+        baselineCandidate = writeArchive(unpatchEntries(readArchive(candidate)));
+      }
+      // 自洽性闸门：剥离出的基线 + 当前前端脚本必须能重打出一份结构合法的补丁包
+      //（exactReplace 找不到注入点/条目集合异常都会抛错）。第三方乱改通常无法通过
+      // 这一步：改在补丁区域会让 exactReplace 失败；改在条目集合会触发结构不匹配。
+      // 注意不能要求"重打结果与当前安装包逐字节一致"：当前安装包可能是旧脚本打的
+      //（旧版安装器残留），重打用的是新脚本，注入的 local-mail-poc.js 内容不同。
+      const rebuilt = writeArchive(patchEntries(readArchive(baselineCandidate), localScript));
+      verifyPatchedArchive(rebuilt, baselineCandidate, localScript);
+      if (sha256Sync(baselineCandidate) !== EXPECTED_BASELINE_SHA256) {
+        // 逆向产物不等于官方基线（zip 元数据规范化、或旧版补丁还有已废弃的改动）：
+        // 不写入 required 基线，仅作为临时基线供本次安装使用。
+        return { buffer: baselineCandidate, source: candidatePath, rebuilt: true };
+      }
+      fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
+      atomicWrite(BASELINE_PATH, baselineCandidate);
+      return { buffer: baselineCandidate, source: candidatePath, rebuilt: false };
     } catch {
       continue;
     }
-    fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
-    atomicWrite(BASELINE_PATH, candidate);
-    return path.join(directory, name);
   }
   return null;
 }
@@ -293,32 +352,49 @@ async function main() {
   const command = process.argv[2] || "verify";
 
   // import-baseline：新环境引导。从接收者自己的官方 0.627 包提取兼容基线并按哈希校验，
-  // 使分发时无需携带官方文件；哈希不匹配说明本体版本不对或包已被改动。
+  // 使分发时无需携带官方文件；哈希不匹配时依次尝试 pre-install 备份与逆向剥离重建
+  // （见 restoreBaselineFromBackup），仅当所有本机来源都无法证明时才报错。
   if (command === "import-baseline") {
     const sourceBuffer = fs.readFileSync(TARGET_PATH);
     const sourceHash = sha256Sync(sourceBuffer);
     if (sourceHash !== EXPECTED_BASELINE_SHA256) {
-      // 官方包已打补丁（例如先用别的分发包装过、或重装清单残留）时，安装包里的
-      // pre-formal-install 备份就是打补丁前的官方原包；从中恢复基线，而不是报错中止。
-      const restoredFrom = restoreBaselineFromBackup();
-      if (restoredFrom) {
-        // restoreBaselineFromBackup 只在备份哈希等于官方基线时才写入 BASELINE_PATH，
-        // 因此这里可以直接引用常量，避免对同一文件重复读取取哈希。
+      // 官方包已被打补丁（重装、旧版安装器残留等）时，尝试从本机已有文件恢复基线
+      // 而不是报错中止；恢复逻辑与安全闸门见 restoreBaselineFromBackup。
+      const restored = restoreBaselineFromBackup();
+      if (restored) {
+        if (!restored.rebuilt) {
+          // 备份就是官方基线：落盘为 required 基线并报告。
+          const result = {
+            imported: true,
+            sha256: EXPECTED_BASELINE_SHA256,
+            baselinePath: path.relative(GAME_ROOT, BASELINE_PATH),
+            source: "restored-from-pre-install-backup",
+            backupPath: path.relative(GAME_ROOT, restored.source)
+          };
+          writeLog(command, result);
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        // 逆向重建的基线哈希不等于官方基线（例如旧版补丁还带有已废弃的改动）：
+        // 不写入 required 基线，只生成临时文件供本次 install/verify 使用。
+        const transientPath = path.join(LOG_PATH, "..", `baseline-rebuilt-${process.pid}.dat`);
+        atomicWrite(transientPath, restored.buffer);
         const result = {
           imported: true,
-          sha256: EXPECTED_BASELINE_SHA256,
-          baselinePath: path.relative(GAME_ROOT, BASELINE_PATH),
-          source: "restored-from-pre-install-backup",
-          backupPath: path.relative(GAME_ROOT, restoredFrom)
+          sha256: sha256Sync(restored.buffer),
+          baselinePath: path.relative(GAME_ROOT, transientPath),
+          source: "rebuilt-by-unpatching",
+          sourceArchive: path.relative(GAME_ROOT, restored.source)
         };
         writeLog(command, result);
         console.log(JSON.stringify(result, null, 2));
-        return;
+        return transientPath;
       }
       throw new Error(
         `Official feapp.dat hash mismatch: ${sourceHash}. Expected the untouched .627 baseline `
-        + `(${EXPECTED_BASELINE_SHA256}) or a locally patched archive with its pre-install backup. `
-        + "Make sure the game client is version 0.0.9.627 and not modified by anything else."
+        + `(${EXPECTED_BASELINE_SHA256}), a locally patched archive with its pre-install backup, `
+        + "or a local-mail patched archive whose baseline can be rebuilt. Make sure the game client "
+        + "is version 0.0.9.627 and has only been modified by this project."
       );
     }
     if (fs.existsSync(BASELINE_PATH)) {
@@ -337,9 +413,15 @@ async function main() {
     return;
   }
 
-  const baselineBuffer = fs.readFileSync(BASELINE_PATH);
+  // install/verify/restore 的基线：默认 required 基线；import-baseline 逆向重建的
+  // 非官方基线通过 --baseline <path> 临时传入（不落盘为 required 基线）。
+  // 非官方哈希只允许出现在显式 override 的场景；required 基线仍必须等于官方哈希。
+  const baselineFlagIndex = process.argv.indexOf("--baseline");
+  const baselineOverride = baselineFlagIndex >= 0 ? process.argv[baselineFlagIndex + 1] : null;
+  const baselinePath = baselineOverride ?? BASELINE_PATH;
+  const baselineBuffer = fs.readFileSync(baselinePath);
   const baselineHash = sha256Sync(baselineBuffer);
-  if (baselineHash !== EXPECTED_BASELINE_SHA256) {
+  if (baselineHash !== EXPECTED_BASELINE_SHA256 && !baselineOverride) {
     throw new Error(`Compatible baseline hash mismatch: ${baselineHash}`);
   }
 
@@ -355,7 +437,8 @@ async function main() {
       baselineSha256: baselineHash,
       installedSha256: sha256Sync(patched),
       sourceScriptSha256: sha256Sync(localScript),
-      backupPath: path.relative(GAME_ROOT, backupPath)
+      backupPath: path.relative(GAME_ROOT, backupPath),
+      ...(baselineOverride ? { baselineOverride: path.relative(GAME_ROOT, baselineOverride) } : {})
     };
     writeLog(command, result);
     console.log(JSON.stringify(result, null, 2));

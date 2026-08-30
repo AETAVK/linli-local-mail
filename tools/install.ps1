@@ -148,19 +148,34 @@ try {
 
     # 基线缺失时先从官方包导入（幂等；官方包已被打补丁且基线仍在时会跳过导入直接安装）
     $baselinePath = Join-Path $serviceRoot "backups\required\official-compatible-0.0.9.627\feapp.dat"
+    $baselineOverride = $null
     if (-not (Test-Path $baselinePath)) {
       Write-Host "    从官方包导入兼容基线（按 SHA-256 校验）……"
       $importResult = Invoke-NodeCommand @("tools\feapp.mjs", "import-baseline")
       $importResult.Output | Out-Host
       if ($importResult.ExitCode -ne 0 -and -not (Test-Path $baselinePath)) {
-        Die "导入兼容基线失败。安装目录里的 feapp.dat 既不是未修改的官方包，也没有可用的安装备份；请用 Steam 验证文件完整性恢复原始 0.0.9.627 官方文件后重试。"
+        Die "导入兼容基线失败。安装目录里的 feapp.dat 既不是未修改的官方包，也无法证明出自本项目的补丁；请用 Steam 验证文件完整性恢复原始 0.0.9.627 官方文件后重试。"
+      }
+      # import-baseline 逆向重建的非官方基线（source=rebuilt-by-unpatching）只生成
+      # 临时文件，需要用 --baseline 传给 install；返回文本是 JSON，逐行找 baselinePath。
+      foreach ($line in $importResult.Output) {
+        if ($line -match '"baselinePath":\s*"(.*)"') { $reportedPath = $Matches[1] -replace '\\\\', '\' }
+      }
+      if ($reportedPath -and -not (Test-Path $baselinePath)) {
+        $candidate = Join-Path $serviceRoot $reportedPath
+        if (Test-Path $candidate) { $baselineOverride = $candidate }
       }
     }
 
-    $installResult = Invoke-NodeCommand @("tools\feapp.mjs", "install")
+    $installArguments = @("tools\feapp.mjs", "install")
+    if ($baselineOverride) {
+      Write-Warn2 "使用逆向重建的临时基线安装（原始基线已不可考，补丁功能不受影响）"
+      $installArguments += @("--baseline", $baselineOverride)
+    }
+    $installResult = Invoke-NodeCommand $installArguments
     $installResult.Output | Out-Host
     if ($installResult.ExitCode -ne 0) { Die "前端补丁安装失败，请把上方错误信息反馈给维护者。" }
-    Write-Ok "前端补丁安装完成（安装前的官方包已自动备份）"
+    Write-Ok "前端补丁安装完成（安装前的包已自动备份）"
   }
 } finally {
   Pop-Location
