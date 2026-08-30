@@ -236,6 +236,7 @@ async function main() {
       method: "PATCH",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
+        tag_name: releaseTag,
         name: `Linli Local Mail ${version}`,
         body: releaseBody,
       }),
