@@ -11,6 +11,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - name: Fetch published assets from GitHub Release into dist/
         shell: pwsh
         run: |
@@ -29,3 +31,4 @@ jobs:
           GITEE_REPOSITORY: sforlife/linli-local-mail
           GITEE_RELEASE_TAG: ${{ github.event.inputs.tag }}
           GITEE_TARGET_COMMIT: ${{ github.event.inputs.tag }}
+          GITEE_ALLOW_VERSION_MISMATCH: "1"

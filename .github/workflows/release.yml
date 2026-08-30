@@ -113,6 +113,14 @@ jobs:
           $ErrorActionPreference = "Stop"
           $tag = $env:RELEASE_TAG
           $version = $env:RELEASE_VERSION
+          $notesFile = ".github/release-notes/v$version.md"
+          if (-not (Test-Path -LiteralPath $notesFile -PathType Leaf)) {
+            throw "缺少版本专属 Release 说明：$notesFile"
+          }
+          $notes = (Get-Content -Raw -LiteralPath $notesFile).Trim()
+          if ([string]::IsNullOrWhiteSpace($notes)) {
+            throw "版本专属 Release 说明不能为空：$notesFile"
+          }
           $installer = "dist/LinliLocalMail-$version-Setup.exe"
           $assets = @(
             $installer,
@@ -123,16 +131,10 @@ jobs:
           & gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
           $exists = ($LASTEXITCODE -eq 0)
           if ($exists) {
+            & gh release edit $tag --repo $env:GITHUB_REPOSITORY --title "Linli Local Mail $version" --notes-file $notesFile
+            if ($LASTEXITCODE -ne 0) { throw "GitHub Release notes update failed" }
             & gh release upload $tag @assets --repo $env:GITHUB_REPOSITORY --clobber
           } else {
-            $notes = @"
-          本版本由 GitHub Actions 在 Windows Runner 上自动构建。
-
-          - 安装包内置 Node.js 24.11.1。
-          - 发布前执行 JavaScript 语法检查、运行时白名单检查和安装包 SHA-256 校验。
-          - 自签名证书用于完整性验证，不会消除 Windows 的未知发布者提示。
-          - 使用前请先备份游戏目录；本项目不包含游戏本体或官方资源。
-          "@
-            & gh release create $tag @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Linli Local Mail $version" --notes $notes
+            & gh release create $tag @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Linli Local Mail $version" --notes-file $notesFile
           }
           if ($LASTEXITCODE -ne 0) { throw "GitHub Release publish failed" }

@@ -95,6 +95,14 @@ function readRelease(version, root) {
   });
 }
 
+function readReleaseNotes(version, root) {
+  const filePath = path.join(root, ".github", "release-notes", `v${version}.md`);
+  if (!fs.existsSync(filePath)) fail(`缺少版本专属 Release 说明: ${path.relative(root, filePath)}`);
+  const notes = fs.readFileSync(filePath, "utf8").trim();
+  if (!notes) fail(`版本专属 Release 说明不能为空: ${path.relative(root, filePath)}`);
+  return notes;
+}
+
 async function getRelease(apiRoot) {
   const payload = await request(
     apiRoot,
@@ -192,23 +200,21 @@ async function main() {
   const packageJson = JSON.parse(
     fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
   );
-  const version = String(packageJson.version || "").trim();
-  if (releaseTag !== `v${version}`) {
-    fail(`Gitee Release 标签 ${releaseTag} 与 package.json 版本 ${version} 不一致`);
+  const packageVersion = String(packageJson.version || "").trim();
+  const versionMatch = releaseTag.match(/^v(\d+\.\d+\.\d+)$/);
+  if (!versionMatch) {
+    fail(`Gitee Release 标签格式无效：${releaseTag}`);
+  }
+  const version = versionMatch[1];
+  if (releaseTag !== `v${packageVersion}` && process.env.GITEE_ALLOW_VERSION_MISMATCH !== "1") {
+    fail(`Gitee Release 标签 ${releaseTag} 与 package.json 版本 ${packageVersion} 不一致`);
   }
 
   const [owner, repo] = repositoryParts;
   const apiRoot = `https://gitee.com/api/v5/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
   const root = process.cwd();
   const assets = readRelease(version, root);
-  const releaseBody = [
-    "本版本由 GitHub Actions 在 Windows Runner 上自动构建，并使用同一批文件同步到 Gitee。",
-    "",
-    "- GitHub 与 Gitee 使用同一次构建产生的发布文件。",
-    "- 发布前执行 JavaScript 语法检查、运行时白名单检查和安装包 SHA-256 校验。",
-    "- 自签名证书用于完整性验证，不会消除 Windows 的未知发布者提示。",
-    "- 使用前请先备份游戏目录；本项目不包含游戏本体或官方资源。",
-  ].join("\n");
+  const releaseBody = readReleaseNotes(version, root);
 
   let release = await getRelease(apiRoot);
   if (!release) {
@@ -225,6 +231,15 @@ async function main() {
       body: form,
     });
     release = await waitForRelease(apiRoot);
+  } else {
+    await request(apiRoot, `/releases/${encodeURIComponent(String(release.id))}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        name: `Linli Local Mail ${version}`,
+        body: releaseBody,
+      }),
+    });
   }
 
   if (!release?.id) {
