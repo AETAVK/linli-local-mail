@@ -148,15 +148,14 @@ SmartScreen 的未知发布者提示，也不能替代受信任的商业代码�
 
 ### 自动发布（维护者）
 
-正式版本由 GitHub Actions 在 Windows Runner 上构建一次，然后把同一批发布文件同步到 GitHub
-Release 和 Gitee Release。这样两个下载入口使用相同的安装包字节，不需要在 Gitee Go 上重复编译、签名
-或生成另一份校验值。工作流文件位于 `.github/workflows/release.yml`，Gitee API 同步脚本位于
-`.github/scripts/publish-gitee-release.mjs`，这两个文件只服务于发布流程，不会进入游戏运行载荷。
+正式版本由 GitHub Actions 在 Windows Runner 上只构建一次，并自动发布到 GitHub Release。工作流文件位于
+`.github/workflows/release.yml`，只服务于发布流程，不会进入游戏运行载荷。
 
-首次发布前，在 GitHub 仓库的 `Settings → Secrets and variables → Actions` 创建名为
-`GITEE_TOKEN` 的 Actions secret。其值应是对 `sforlife/linli-local-mail` 具备 Release/附件写入权限的
-Gitee 令牌；令牌只保存在 GitHub Secrets，不要写入 YAML、日志、Issue 或本地提交。工作流会在缺少该
-secret 时明确失败，避免产生“GitHub 已发布但 Gitee 未同步”的不完整结果。
+Gitee 使用同一批已构建文件，不在 Gitee 上重复编译、签名或生成另一份校验值。由于 GitHub-hosted
+Runner 到 Gitee 附件上传接口的网络连接不稳定，Gitee 同步脚本
+`.github/scripts/publish-gitee-release.mjs` 不再作为 GitHub 工作流的必经步骤；它应在维护者本机或
+Gitee Go 流水线中运行。脚本会创建或复用同名 Gitee Release，替换四个发布附件，并检查远端附件清单。
+令牌只通过运行环境注入，不要写入 YAML、日志、Issue 或提交。
 
 发布新版本时，先让 `package.json` 的版本与标签一致，再提交代码并推送标签：
 
@@ -168,11 +167,15 @@ git push origin main v<版本>
 
 例如版本为 `0.8.1` 时使用 `v0.8.1`。先把同一提交和标签推到 Gitee，可以让 Gitee Release 的源码标签
 与 GitHub 保持一致；随后推到 GitHub 才会触发工作流。工作流会检查标签格式和版本一致性，执行语法检查、
-运行时白名单检查、安装器构建、SHA-256 校验，然后先更新 GitHub Release，再同步 Gitee 同名 Release
-的四个发布文件。重复运行同一标签会只替换这四个同名附件，不会删除 Release 中的其他附件；若某一步
-失败，可在 GitHub Actions 中重新运行该次工作流。也可以通过 `workflow_dispatch` 手动选择一个已经存在
-且版本匹配的标签重新发布；如果失败原因是标签对应的 CI 脚本本身需要修复，可把可选的 `source_ref`
-设为已修复的 `main`，仅用于修复该标签，不能借此把版本不匹配的源码发布为该标签。
+运行时白名单检查、安装器构建、SHA-256 校验并发布 GitHub Release。重复运行同一标签会只替换 GitHub
+Release 中的同名附件，不会删除其他附件；也可以通过 `workflow_dispatch` 手动选择一个已经存在且版本
+匹配的标签重新发布。如果失败原因是标签对应的 CI 脚本本身需要修复，可把可选的 `source_ref` 设为已
+修复的 `main`，仅用于修复该标签，不能借此把版本不匹配的源码发布为该标签。
+
+GitHub Release 成功后，再在已经下载该版本四个附件的本机或 Gitee Go 环境执行 Gitee 同步脚本。脚本
+要求工作目录中的 `dist/` 包含以下文件：安装器 EXE、同名 `.sha256`、同名 `.json` 和
+`LinliLocalMail-SelfSigned.cer`；将 `GITEE_TOKEN` 作为临时环境变量注入，完成后立即清除。当前
+`v0.8.1` 已按此方式验证 GitHub 与 Gitee 的四个附件一致。
 
 ## 数据与隐私
 

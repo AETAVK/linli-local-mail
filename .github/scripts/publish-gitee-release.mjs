@@ -177,7 +177,7 @@ async function uploadAttachment(apiRoot, releaseId, asset) {
 async function main() {
   if (!token) {
     fail(
-      "未配置 GITEE_TOKEN。请在 GitHub 仓库 Settings → Secrets and variables → Actions 中创建同名 secret。",
+      "未配置 GITEE_TOKEN。请通过本机进程环境变量或 Gitee Go 安全变量注入 Gitee 访问令牌。",
     );
   }
 
@@ -202,7 +202,7 @@ async function main() {
   const root = process.cwd();
   const assets = readRelease(version, root);
   const releaseBody = [
-    "本版本由 GitHub Actions 在 Windows Runner 上自动构建，并同步到 Gitee。",
+    "本版本由 GitHub Actions 在 Windows Runner 上自动构建，并使用同一批文件同步到 Gitee。",
     "",
     "- GitHub 与 Gitee 使用同一次构建产生的发布文件。",
     "- 发布前执行 JavaScript 语法检查、运行时白名单检查和安装包 SHA-256 校验。",

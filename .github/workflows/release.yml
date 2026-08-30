@@ -136,18 +136,3 @@ jobs:
             & gh release create $tag @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Linli Local Mail $version" --notes $notes
           }
           if ($LASTEXITCODE -ne 0) { throw "GitHub Release publish failed" }
-
-      - name: Sync identical assets to Gitee Release
-        shell: pwsh
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITEE_REPOSITORY: sforlife/linli-local-mail
-          GITEE_RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-          GITEE_TARGET_COMMIT: ${{ inputs.tag || github.ref_name }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          if ([string]::IsNullOrWhiteSpace($env:GITEE_TOKEN)) {
-            throw "未配置 GitHub Actions secret GITEE_TOKEN；请在仓库 Settings → Secrets and variables → Actions 中创建它。"
-          }
-          node .github/scripts/publish-gitee-release.mjs
-          if ($LASTEXITCODE -ne 0) { throw "Gitee Release sync failed" }
