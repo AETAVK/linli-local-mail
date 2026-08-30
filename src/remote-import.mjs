@@ -841,7 +841,7 @@ export function createRemoteImportJob({
       if (state.failed > 0 || result.skipped > 0 || result.conflicts > 0) {
         const parts = [];
         if (result.imported > 0) parts.push(`新增 ${result.inserted}，更新 ${result.updated}`);
-        if (result.conflicts > 0) parts.push(`冲突 ${result.conflicts}（本地内容已保留）`);
+        if (result.conflicts > 0) parts.push(`重复 ${result.conflicts}（本地已有，内容已保留）`);
         if (result.skipped > 0) parts.push(`跳过 ${result.skipped}`);
         if (state.failed > 0) parts.push(`失败 ${state.failed}`);
         if (state.videoSaved > 0) parts.push(`已保存视频 ${state.videoSaved}`);

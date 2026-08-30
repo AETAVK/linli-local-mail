@@ -270,6 +270,7 @@
       ".lm-import-close:hover{background:rgba(255,255,255,.08);color:var(--tp-text-title,#e8e9eb)}",
       ".lm-import-description{margin-bottom:16px;color:var(--tp-text-secondary,#a1a5ad);font-size:13px;line-height:1.55}",
       ".lm-import-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}",
+      ".lm-import-methods-three{grid-template-columns:repeat(3,minmax(0,1fr))}",
       ".lm-import-methods-two{grid-template-columns:repeat(2,minmax(0,1fr))}",
       ".lm-import-method{display:flex;align-items:flex-start;gap:12px;min-height:92px;padding:14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(0,0,0,.12);text-align:left;cursor:pointer}",
       ".lm-import-method:hover{border-color:rgba(255,255,255,.24);background:rgba(255,255,255,.04)}",
@@ -615,7 +616,10 @@
       '<div class="lm-import-title-row"><div class="lm-modal-title" id="lm-import-title">导入信件</div>' +
       '<button class="lm-import-close" type="button" aria-label="关闭" data-import-action="close">×</button></div>' +
       '<div class="lm-import-description">选择导入方式。导入后的信件会保存在本机，并显示在原信箱列表中。</div>' +
-      '<div class="lm-import-methods lm-import-methods-two">' +
+      '<div class="lm-import-methods lm-import-methods-three">' +
+      '<button class="lm-import-method" type="button" data-import-mode="official"><span class="lm-import-method-icon">官方</span>' +
+      '<span class="lm-import-method-copy"><span class="lm-import-method-title">一键导入官方历史</span>' +
+      '<span class="lm-import-method-desc">直接读取官方服务器的全部信箱记录并导入</span><span class="lm-import-method-note">官方关服前可用；需本机官方客户端登录过</span></span></button>' +
       '<button class="lm-import-method" type="button" data-import-mode="file"><span class="lm-import-method-icon">文件</span>' +
       '<span class="lm-import-method-copy"><span class="lm-import-method-title">文件导入</span>' +
       '<span class="lm-import-method-desc">一次选择多个 JSON 或图片文件</span><span class="lm-import-method-note">JSON 可导入；图片 OCR 尚未实现</span></span></button>' +
@@ -623,6 +627,8 @@
        '<span class="lm-import-method-copy"><span class="lm-import-method-title">分享链接导入</span>' +
        '<span class="lm-import-method-desc">读取官方分享页对应的去信与回信</span><span class="lm-import-method-note">官方清理数据前可用</span></span></button>' +
        '</div>' +
+       '<div class="lm-import-panel" data-import-panel="official">' +
+       '<div class="lm-note" data-role="official-import-state">未检测到可用的官方登录状态时此方式不可用；检测与导入都只使用本机官方客户端日志中的会话，不占用每日写信额度，也不会触发模型回复。重复导入同一封信会更新现有记录。</div></div>' +
        '<div class="lm-import-panel" data-import-panel="share">' +
        '<label class="lm-field"><span>信件分享链接（一个链接一行）</span><textarea class="lm-textarea lm-share-import-input" data-role="share-import-url" rows="4" autocomplete="off" spellcheck="false" placeholder="https://web-…/single-pages/letterShare.html?uid=…&shareId=…\nhttps://web-…/single-pages/letterShare.html?uid=…&shareId=…"></textarea></label>' +
        '<div class="lm-note">支持一次粘贴多个链接，也支持从 Markdown 文本中逐行识别链接。重复导入同一封信会更新现有记录。</div></div>' +
@@ -672,7 +678,7 @@
   }
 
   function setMailboxImportMode(mode) {
-    state.importMode = mode === "file" ? "file" : "share";
+    state.importMode = mode === "file" ? "file" : mode === "official" ? "official" : "share";
     var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
     if (!modal) return;
     Array.prototype.forEach.call(modal.querySelectorAll("[data-import-mode]"), function (button) {
@@ -682,6 +688,18 @@
       panel.hidden = panel.dataset.importPanel !== state.importMode;
     });
     var submit = modal.querySelector('[data-import-action="submit"]');
+    var status = modal.querySelector('[data-role="official-import-state"]');
+    if (state.importMode === "official") {
+      // 一键导入没有额外输入：按钮文案与状态提示都在此设置，检测不阻塞选择
+      submit.textContent = "一键导入";
+      submit.disabled = state.importBusy;
+      setMailboxImportStatus(state.importBusy ? "导入进行中…" : "点击“一键导入”后才会访问官方接口", "");
+      if (status) {
+        refreshOfficialImportState(status);
+      }
+      return;
+    }
+    submit.textContent = "导入";
     submit.hidden = false;
     submit.disabled = state.importMode === "file" && state.importFiles.length === 0;
     if (state.importMode === "share") {
@@ -692,6 +710,89 @@
         ? "已选择 " + state.importFiles.length + " 个文件（JSON 会导入，图片暂不支持）"
         : "请选择一个或多个 JSON / 图片文件", "");
     }
+  }
+
+  // 本地只读检测（无网络请求）：更新官方面板的可用性提示
+  async function refreshOfficialImportState(statusBox) {
+    try {
+      var data = await callApi("/api/remote-import/detect");
+      var prompt = data.prompt || {};
+      var disabled = prompt.promptDisabled || Number(prompt.snoozedUntil) > Date.now() / 1000;
+      if (!data.found) {
+        statusBox.textContent = "当前未检测到可用的官方登录状态（" + (data.message || data.code || "未找到凭证") + "）。请先启动官方游戏并登录，再回到此页面。";
+        return;
+      }
+      var localCount = Number(data.importedOfficialCount);
+      var line = "已检测到官方登录状态（账户 " + (data.account || "未知") + "），可以一键导入。";
+      if (Number.isFinite(localCount) && localCount > 0) {
+        line += "本地已有 " + localCount + " 封官方信件，重复导入会更新原记录。";
+      }
+      if (disabled) line += "（提示已按你的选择关闭，不影响手动导入。）";
+      statusBox.textContent = line;
+    } catch (error) {
+      statusBox.textContent = "本地服务检测失败：" + (error && error.message ? error.message : "未知错误") + "。请确认本地服务已启动。";
+    }
+  }
+
+  async function startOfficialOneClickImport() {
+    var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
+    if (!modal || state.importBusy) return;
+    var submit = modal.querySelector('[data-import-action="submit"]');
+    state.importBusy = true;
+    submit.disabled = true;
+    submit.textContent = "导入中…";
+    setMailboxImportStatus("正在开始官方导入…", "");
+    try {
+      await callApi("/api/remote-import/start", { method: "POST", body: "{}" });
+      // 复用小窗的轮询；完成后结果会写回弹窗状态行
+      await pollOfficialImportInModal();
+    } catch (error) {
+      setMailboxImportStatus("导入失败：" + (error && error.message ? error.message : "未知错误") + "\n可以稍后重试。", "error");
+      state.importBusy = false;
+      submit.disabled = false;
+      submit.textContent = "一键导入";
+    }
+  }
+
+  function pollOfficialImportInModal() {
+    return new Promise(function (resolve) {
+      var timer = window.setInterval(async function () {
+        var status;
+        try {
+          status = await callApi("/api/remote-import/status");
+        } catch (error) {
+          return; // 瞬时失败继续轮询
+        }
+        if (REMOTE_ACTIVE_STATES.indexOf(status.state) !== -1) {
+          var text = status.message || "正在导入…";
+          if (Number.isFinite(status.percent) && status.percent > 0) text += "（" + status.percent + "%）";
+          setMailboxImportStatus(text, "");
+          return;
+        }
+        window.clearInterval(timer);
+        var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
+        var submit = modal && modal.querySelector('[data-import-action="submit"]');
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = "一键导入";
+        }
+        state.importBusy = false;
+        if (status.state === "completed" || status.state === "partial") {
+          var summary = "导入完成：新增 " + status.inserted + " 封，更新 " + status.updated + " 封";
+          if (status.conflicts) summary += "，重复 " + status.conflicts + " 封（本地已有，内容已保留）";
+          if (status.failed) summary += "，失败 " + status.failed + " 封";
+          if (status.videoSaved) summary += "，已保存视频 " + status.videoSaved + " 个";
+          setMailboxImportStatus(summary + "。信箱即将自动刷新…", Number(status.failed) && !Number(status.imported) ? "error" : "success");
+          window.setTimeout(function () {
+            if (!mailboxHeader()) return;
+            try { window.location.reload(); } catch (error) { /* 刷新失败不阻塞 */ }
+          }, 3500);
+        } else {
+          setMailboxImportStatus((status.message || "导入失败。") + "\n可以稍后重试。", "error");
+        }
+        resolve(status);
+      }, 800);
+    });
   }
 
   function closeMailboxImportModal() {
@@ -839,6 +940,7 @@
       if (actionButton.dataset.importAction === "close") closeMailboxImportModal();
        else if (actionButton.dataset.importAction === "submit") {
          if (state.importMode === "file") submitFileImport();
+         else if (state.importMode === "official") startOfficialOneClickImport();
          else submitShareLinkImport();
        }
      });
@@ -1011,7 +1113,7 @@
       if (status.state === "completed" || status.state === "partial") {
         var summary = "已导入 " + status.imported + " 封，新增 " + status.inserted + " 封，更新 " + status.updated +
           " 封，跳过 " + status.skipped + " 封，失败 " + status.failed + " 封";
-        if (status.conflicts) summary += "，冲突 " + status.conflicts + " 封（本地内容已保留）";
+        if (status.conflicts) summary += "，重复 " + status.conflicts + " 封（本地已有，内容已保留）";
         if (status.videoSaved) summary += "，已保存视频 " + status.videoSaved + " 个";
         if (status.videoFailed) summary += "，视频保存失败 " + status.videoFailed + " 个";
         setRemoteStatus(summary + "\n邮箱即将自动刷新…", "success");
