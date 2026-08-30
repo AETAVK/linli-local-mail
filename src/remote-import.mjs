@@ -902,6 +902,9 @@ export class RemoteImportManager {
   detect() {
     const detection = readOfficialLogContext(this.logPaths);
     const prompt = this.database.getRemoteImportSettings();
+    // 本地已有的官方信件数（含远端/分享链接导入）：官方仍在运营时，
+    // 每个登录过的用户都会命中日志凭证；用它区分"从未导入"与"已全部/部分导入"。
+    const importedOfficialCount = this.database.importedOfficialCount();
     if (!detection.ok || !detection.context) {
       return {
         found: false,
@@ -910,6 +913,7 @@ export class RemoteImportManager {
         source: null,
         account: null,
         idsHash: null,
+        importedOfficialCount,
         prompt
       };
     }
@@ -920,6 +924,7 @@ export class RemoteImportManager {
       source: { kind: "official-log" },
       account: detection.context.uid,
       idsHash: contentHash(detection.context.uid, detection.context.baseUrl),
+      importedOfficialCount,
       prompt
     };
   }

@@ -900,6 +900,7 @@
     return '<div class="local-mail-remote-import-title">检测到本机可能存在官方信箱历史记录</div>' +
       '<button class="local-mail-remote-import-close" type="button" aria-label="关闭" data-remote-action="close">×</button>' +
       '<div class="local-mail-remote-import-body">可以读取官方客户端的最近信箱记录并写入本地邮箱；已有视频回信会同时保存到本机供原邮箱播放。导入不占用每日写信额度，也不会自动触发模型回复；只有点击“导入历史”后才会访问官方接口。</div>' +
+      '<div class="local-mail-remote-import-body" data-role="remote-local-state" hidden></div>' +
       '<div class="local-mail-remote-import-actions" data-role="remote-actions">' +
       '<button class="local-mail-remote-import-button local-mail-remote-import-button-primary" type="button" data-remote-action="start">导入历史</button>' +
       '<button class="local-mail-remote-import-button" type="button" data-remote-action="snooze">稍后</button>' +
@@ -1057,6 +1058,31 @@
     });
   }
 
+  // 把"本地已有多少封官方信件"写进小窗：官方仍未关服时，用户可能已导入过
+  // 一部分；导入完成数（importedOfficialCount）与远端 found 数在任务开始/结束
+  // 时都会刷新，帮助判断是否还需要再导入。foundCount 可为 null（检测阶段还没
+  // 有远端数字，不额外发网络请求）。
+  function setRemoteLocalState(foundCount, localCount) {
+    var toast = document.getElementById(REMOTE_TOAST_ID);
+    var box = toast && toast.querySelector('[data-role="remote-local-state"]');
+    if (!box) return;
+    var foundNumber = foundCount == null ? null : Number(foundCount);
+    var localNumber = Number(localCount);
+    if (!Number.isFinite(localNumber) || localNumber < 0) {
+      box.hidden = true;
+      box.textContent = "";
+      return;
+    }
+    box.hidden = false;
+    if (localNumber === 0) {
+      box.textContent = "本地邮箱中还没有来自官方服务器的信件；下面的导入会把官方历史写入本地。";
+    } else if (foundNumber != null && Number.isFinite(foundNumber) && foundNumber > 0) {
+      box.textContent = "本地邮箱已有 " + localCount + " 封来自官方服务器的信件；本次检测到官方仍有 " + foundNumber + " 封可读取。重复导入同一封信会更新原记录，不会产生重复。";
+    } else {
+      box.textContent = "本地邮箱已有 " + localCount + " 封来自官方服务器的信件；重复导入同一封信会更新原记录，不会产生重复。";
+    }
+  }
+
   // 只在信箱页检测；网络或本地服务的瞬时失败不会锁死本次 CEF 会话，之后重新
   // 进入信箱仍可再试。候选状态与 DOM 节点分离，离开信箱时节点会立即隐藏。
   async function detectRemoteHistoryOnce() {
@@ -1079,6 +1105,12 @@
       ensureRemoteImportToast();
       renderRemoteActions("idle");
       setRemoteStatus("", "");
+      // 远端 found 数要等"导入历史"真正访问官方接口才知道；检测阶段只用
+      // 本地已导入数区分"从未导入"与"已导入过"，不额外发网络请求。
+      var localCount = Number(data.importedOfficialCount);
+      if (Number.isFinite(localCount)) {
+        setRemoteLocalState(null, localCount);
+      }
       state.remoteImport.candidate = true;
       syncRemoteToastVisibility();
     } catch (error) {

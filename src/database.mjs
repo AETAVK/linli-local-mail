@@ -302,6 +302,7 @@ export class MailDatabase {
       unreadCount: this.db.prepare("SELECT COUNT(*) AS count FROM letters WHERE is_read = 0"),
       letterCount: this.db.prepare("SELECT COUNT(*) AS count FROM letters"),
       lettersSentToday: this.db.prepare("SELECT COUNT(*) AS count FROM letters WHERE source = 'local' AND created_at >= ?"),
+      importedOfficialCount: this.db.prepare("SELECT COUNT(*) AS count FROM letters WHERE source != 'local' AND raw_json IS NOT NULL AND json_extract(raw_json, '$.letterId') IS NOT NULL"),
       queuedJob: this.db.prepare(`
         SELECT * FROM generation_jobs
         WHERE status = ? AND scheduled_at_ms <= ?
@@ -363,6 +364,12 @@ export class MailDatabase {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     return this.statements.lettersSentToday.get(Math.floor(startOfToday.getTime() / 1000)).count;
+  }
+
+  // 已导入到本地的"官方信件"数量：导入路径会把官方 letterId 保存在 raw_json，
+  // 本地写信（source='local'）没有这个字段。用于官方历史提示判断"这批信是否已在本地"。
+  importedOfficialCount() {
+    return this.statements.importedOfficialCount.get().count;
   }
 
   remainingSendQuota() {
