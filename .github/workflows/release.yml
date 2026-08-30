@@ -10,6 +10,11 @@ on:
         description: "要构建的版本标签，例如 v0.8.1"
         required: true
         type: string
+      source_ref:
+        description: "可选：用于修复既有标签的源码分支或提交；日常重跑留空"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -25,7 +30,7 @@ jobs:
       - name: Checkout tagged source
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.source_ref || inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Set up Node.js for build scripts

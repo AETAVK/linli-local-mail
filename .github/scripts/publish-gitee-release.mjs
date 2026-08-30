@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
+import https from "node:https";
 import path from "node:path";
 
 const token = String(process.env.GITEE_TOKEN || "").trim();
@@ -28,6 +29,7 @@ async function request(apiRoot, endpoint, options = {}) {
   const response = await fetch(`${apiRoot}${endpoint}`, {
     redirect: "error",
     ...fetchOptions,
+    signal: fetchOptions.signal || AbortSignal.timeout(60_000),
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${token}`,
@@ -83,7 +85,6 @@ function readRelease(version, root) {
     return {
       name,
       filePath,
-      content,
       size: content.length,
       sha256: createHash("sha256").update(content).digest("hex"),
     };
@@ -108,6 +109,88 @@ async function waitForRelease(apiRoot) {
     }
   }
   return null;
+}
+
+function uploadAttachment(apiRoot, releaseId, asset) {
+  const endpoint = `${apiRoot}/releases/${releaseId}/attach_files`;
+  const boundary = `----linli-local-mail-${randomUUID()}`;
+  const safeFileName = asset.name.replace(/"/g, "");
+  const prefix = Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${safeFileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+    "utf8",
+  );
+  const suffix = Buffer.from(`\r\n--${boundary}--\r\n`, "utf8");
+  const contentLength = prefix.length + asset.size + suffix.length;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      callback(value);
+    };
+
+    const url = new URL(endpoint);
+    const requestOptions = {
+      method: "POST",
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: `${url.pathname}${url.search}`,
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Content-Length": contentLength,
+        "User-Agent": "linli-local-mail-github-release",
+      },
+    };
+
+    const request = https.request(requestOptions, (response) => {
+      let rawBody = "";
+      let rawLength = 0;
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        rawLength += chunk.length;
+        if (rawBody.length < 1_000_000) rawBody += chunk;
+      });
+      response.on("end", () => {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          const suffixText = rawLength > rawBody.length ? "…" : "";
+          const error = new Error(
+            `Gitee 附件上传 ${response.statusCode}: ${redact(rawBody + suffixText).slice(0, 800)}`,
+          );
+          error.status = response.statusCode;
+          finish(reject, error);
+          return;
+        }
+        let body = null;
+        if (rawBody) {
+          try {
+            body = JSON.parse(rawBody);
+          } catch {
+            body = rawBody;
+          }
+        }
+        finish(resolve, body);
+      });
+    });
+
+    request.setTimeout(15 * 60 * 1000, () => {
+      request.destroy(new Error(`Gitee 附件上传超时：${asset.name}`));
+    });
+    request.on("error", (error) => {
+      finish(
+        reject,
+        new Error(`Gitee 附件上传失败 ${asset.name}: ${redact(error.message)}`),
+      );
+    });
+
+    request.write(prefix);
+    const fileStream = fs.createReadStream(asset.filePath);
+    fileStream.on("error", (error) => request.destroy(error));
+    fileStream.on("end", () => request.end(suffix));
+    fileStream.pipe(request, { end: false });
+  });
 }
 
 async function main() {
@@ -187,16 +270,7 @@ async function main() {
       );
     }
 
-    const uploadForm = new FormData();
-    uploadForm.append(
-      "file",
-      new Blob([asset.content], { type: "application/octet-stream" }),
-      asset.name,
-    );
-    await request(apiRoot, `/releases/${releaseId}/attach_files`, {
-      method: "POST",
-      body: uploadForm,
-    });
+    await uploadAttachment(apiRoot, releaseId, asset);
     console.log(
       `已同步 ${asset.name} (${asset.size} bytes, sha256 ${asset.sha256})`,
     );
