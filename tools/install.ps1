@@ -153,7 +153,7 @@ try {
       $importResult = Invoke-NodeCommand @("tools\feapp.mjs", "import-baseline")
       $importResult.Output | Out-Host
       if ($importResult.ExitCode -ne 0 -and -not (Test-Path $baselinePath)) {
-        Die "导入兼容基线失败。通常是因为官方 feapp.dat 已被修改且本机没有可用基线；请恢复原始 0.0.9.627 官方文件后重试。"
+        Die "导入兼容基线失败。安装目录里的 feapp.dat 既不是未修改的官方包，也没有可用的安装备份；请用 Steam 验证文件完整性恢复原始 0.0.9.627 官方文件后重试。"
       }
     }
 

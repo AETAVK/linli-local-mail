@@ -239,6 +239,40 @@ function backupCurrentTarget(targetBuffer) {
   return backupPath;
 }
 
+// 当安装目录里的 feapp.dat 不是官方基线（通常已被本补丁打过）且本地没有基线时，
+// 从历史安装备份里恢复基线：只接受哈希等于官方基线的备份文件，避免把未知内容当基线。
+function restoreBaselineFromBackup() {
+  const directory = path.join(ROOT, "backups", "patch-snapshots", "pre-formal-install");
+  if (!fs.existsSync(directory)) return null;
+  let candidates = [];
+  try {
+    candidates = fs.readdirSync(directory).filter((name) => /^feapp-.*\.dat$/.test(name));
+  } catch {
+    return null;
+  }
+  for (const name of candidates) {
+    let candidate;
+    try {
+      candidate = fs.readFileSync(path.join(directory, name));
+    } catch {
+      continue;
+    }
+    if (sha256Sync(candidate) !== EXPECTED_BASELINE_SHA256) continue;
+    // 额外确认：当前安装包必须能由该基线 + 当前前端脚本重建（防止基线错配到别的修改来源）
+    try {
+      const localScript = fs.readFileSync(FRONTEND_SCRIPT_PATH);
+      const rebuilt = writeArchive(patchEntries(readArchive(candidate), localScript));
+      if (sha256Sync(rebuilt) !== sha256Sync(fs.readFileSync(TARGET_PATH))) continue;
+    } catch {
+      continue;
+    }
+    fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
+    atomicWrite(BASELINE_PATH, candidate);
+    return path.join(directory, name);
+  }
+  return null;
+}
+
 function atomicWrite(targetPath, data) {
   const temporary = `${targetPath}.tmp-${process.pid}`;
   fs.writeFileSync(temporary, data);
@@ -264,9 +298,27 @@ async function main() {
     const sourceBuffer = fs.readFileSync(TARGET_PATH);
     const sourceHash = sha256Sync(sourceBuffer);
     if (sourceHash !== EXPECTED_BASELINE_SHA256) {
+      // 官方包已打补丁（例如先用别的分发包装过、或重装清单残留）时，安装包里的
+      // pre-formal-install 备份就是打补丁前的官方原包；从中恢复基线，而不是报错中止。
+      const restoredFrom = restoreBaselineFromBackup();
+      if (restoredFrom) {
+        // restoreBaselineFromBackup 只在备份哈希等于官方基线时才写入 BASELINE_PATH，
+        // 因此这里可以直接引用常量，避免对同一文件重复读取取哈希。
+        const result = {
+          imported: true,
+          sha256: EXPECTED_BASELINE_SHA256,
+          baselinePath: path.relative(GAME_ROOT, BASELINE_PATH),
+          source: "restored-from-pre-install-backup",
+          backupPath: path.relative(GAME_ROOT, restoredFrom)
+        };
+        writeLog(command, result);
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
       throw new Error(
         `Official feapp.dat hash mismatch: ${sourceHash}. Expected the untouched .627 baseline `
-        + `(${EXPECTED_BASELINE_SHA256}). Make sure the game client is version 0.0.9.627 and not already patched.`
+        + `(${EXPECTED_BASELINE_SHA256}) or a locally patched archive with its pre-install backup. `
+        + "Make sure the game client is version 0.0.9.627 and not modified by anything else."
       );
     }
     if (fs.existsSync(BASELINE_PATH)) {
