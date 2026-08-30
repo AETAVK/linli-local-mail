@@ -1,0 +1,31 @@
+name: Sync release assets to Gitee
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要同步到 Gitee 的 GitHub Release 标签，例如 v0.9.3"
+        required: true
+        type: string
+jobs:
+  sync:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch published assets from GitHub Release into dist/
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          gh release download "$env:TAG" --repo AETAVK/linli-local-mail --dir dist --clobber
+          Write-Host "已从 GitHub Release $env:TAG 取回以下产物："
+          Get-ChildItem dist | Select-Object Name, Length
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+      - name: Run Gitee publish script
+        shell: pwsh
+        run: node .github/scripts/publish-gitee-release.mjs
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPOSITORY: sforlife/linli-local-mail
+          GITEE_RELEASE_TAG: ${{ github.event.inputs.tag }}
+          GITEE_TARGET_COMMIT: ${{ github.event.inputs.tag }}
