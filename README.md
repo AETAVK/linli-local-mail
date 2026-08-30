@@ -1,13 +1,14 @@
 # 林离本地回信桥
 
 这是一个由社区维护的 Windows 本地桥接项目，用于在用户已经合法持有的
-`BSide Olivia Lin Test 0.0.9.627` 客户端中恢复本地写信、文本回信、历史导入和模型配置能力。
+`BSide Olivia Lin Test 0.0.9.627` 客户端中恢复本地写信、文本回信、历史导入、模型配置，
+以及已有视频回信的本地归档与原生播放能力。
 
 本项目不是官方项目，不隶属于、未经原游戏开发商或发行商认可。仓库和安装包均不包含游戏本体、
 官方启动器、图片、音乐、视频、字体、DLL、历史信件或其他官方资源。使用者必须自行准备原版客户端。
 
-当前公开源码版本为 `0.7.1`。该版本新增本地文件批量导入，以及从本机官方客户端日志中自动检测并
-恢复本人官方历史信件的实验性流程；图片导入仍是占位功能，不包含 OCR。
+当前公开源码版本为 `0.8.0`。该版本在 `0.7.1` 的基础上增加了已有视频回信的本地归档、校验、
+删除清理与 Range 播放；图片导入仍是占位功能，不包含 OCR，也不会生成视频或转写音频。
 
 ## 快速安装与启动（零基础）
 
@@ -23,12 +24,12 @@
 
 ### 第一步：下载安装程序
 
-- [Gitee 国内镜像：直接下载一键安装程序（v0.7.1）](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.7.1/LinliLocalMail-0.7.1-Setup.exe)
-- [Gitee：查看 v0.7.1 更新说明和 SHA-256 校验值](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.7.1)
-- [GitHub：直接下载一键安装程序（v0.7.1）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.7.1/LinliLocalMail-0.7.1-Setup.exe)
-- [GitHub：查看 v0.7.1 更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.7.1)
+- [Gitee 国内镜像：直接下载一键安装程序（v0.8.0）](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.8.0/LinliLocalMail-0.8.0-Setup.exe)
+- [Gitee：查看 v0.8.0 更新说明和 SHA-256 校验值](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.8.0)
+- [GitHub：直接下载一键安装程序（v0.8.0）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.8.0/LinliLocalMail-0.8.0-Setup.exe)
+- [GitHub：查看 v0.8.0 更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.8.0)
 
-普通玩家只需要下载 `LinliLocalMail-0.7.1-Setup.exe`，不需要下载页面下方的 `Source code`、
+普通玩家只需要下载 `LinliLocalMail-0.8.0-Setup.exe`，不需要下载页面下方的 `Source code`、
 `.json`、`.sha256` 或 `.cer` 文件。
 
 ### 第二步：找到游戏目录
@@ -40,12 +41,12 @@
 launcher.exe
 ```
 
-把刚下载的 `LinliLocalMail-0.7.1-Setup.exe` 移动到这个目录。这样安装器可以自动识别游戏，
+把刚下载的 `LinliLocalMail-0.8.0-Setup.exe` 移动到这个目录。这样安装器可以自动识别游戏，
 不需要手动选择路径。
 
 ### 第三步：安装
 
-双击运行 `LinliLocalMail-0.7.1-Setup.exe`，等待“安装完成”提示。
+双击运行 `LinliLocalMail-0.8.0-Setup.exe`，等待“安装完成”提示。
 
 安装器使用自签名证书，因此 Windows 可能显示“Windows 已保护你的电脑”或“未知发布者”。
 请先确认文件来自本仓库的 Release 页面；确认无误后，可以点击“更多信息”→“仍要运行”。
@@ -83,15 +84,17 @@ launcher.exe
 - 在信箱页批量导入 JSON 文件；图片文件可以选择，但在接入 OCR 前会明确报告未支持。
 - 通过仍然有效的官方分享链接导入用户自己的历史信件。
 - 从本机官方客户端日志中只读检测当前登录会话，并在用户确认后恢复本人官方历史信件。
+- 对导入历史中官方已经提供的视频回信进行本地保存、完整性校验和原生 Range 播放；不生成视频、不转写音频。
 - 将前端补丁安装到已有的 `0.0.9.627` 客户端，并保留可恢复备份。
 - 安装启动包装器，使游戏启动时同时确认本地服务已经运行。
 
 当前只支持 Windows。API Key 通过当前 Windows 账户的 DPAPI 加密保存在本机，
 不会写入 SQLite、备份 JSON 或源码仓库。
 
-官方历史恢复依赖仍可访问的官方接口；`0.7.1` 已通过自动测试和脱敏日志检测，但尚未完成一次真实远端
-历史导入的人工实机验收。该功能只接受官方 Olivia 域名、固定请求头白名单和本机日志中的会话信息，
-不会把 Token 写入数据库、日志、导出文件或模型上下文。
+官方历史恢复依赖仍可访问的官方接口；`0.8.0` 已通过自动测试、脱敏日志检测，以及视频归档和本地
+Range 播放的源码级验证，但真实远端历史导入仍需使用者在自己的客户端上人工确认。该功能只接受官方
+Olivia 域名、固定请求头白名单和本机日志中的会话信息，不会把 Token 写入数据库、日志、导出文件或
+模型上下文。视频归档只保存官方已经返回的既有视频，不生成视频、不转写音频。
 
 ## 从源码运行
 
