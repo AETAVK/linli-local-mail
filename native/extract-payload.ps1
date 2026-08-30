@@ -133,4 +133,39 @@ foreach ($file in $files) {
   if ((Get-ExistingKind $target) -eq "directory") { Move-ConflictingPath $target }
 }
 
-Expand-Archive -LiteralPath $zipPath -DestinationPath $destinationPath -Force
+# Do the actual extraction through the .NET ZIP API instead of Expand-Archive.
+# Windows PowerShell 5.1 ships different Microsoft.PowerShell.Archive versions
+# across Windows editions; using the already loaded API keeps the installer path
+# independent of that module while retaining the validation above.
+$archive = [IO.Compression.ZipFile]::OpenRead($zipPath)
+try {
+  foreach ($entry in $archive.Entries) {
+    $relative = Get-SafeRelativePath $entry.FullName
+    if ($null -eq $relative) { continue }
+
+    $target = Resolve-ArchiveTarget $relative
+    $isDirectory = $entry.FullName.EndsWith("/") -or [string]::IsNullOrEmpty($entry.Name)
+    if ($isDirectory) {
+      if (-not [IO.Directory]::Exists($target)) {
+        [IO.Directory]::CreateDirectory($target) | Out-Null
+      }
+      continue
+    }
+
+    $parent = [IO.Path]::GetDirectoryName($target)
+    if (-not [IO.Directory]::Exists($parent)) {
+      [IO.Directory]::CreateDirectory($parent) | Out-Null
+    }
+
+    $inputStream = $entry.Open()
+    $outputStream = [IO.File]::Open($target, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try {
+      $inputStream.CopyTo($outputStream)
+    } finally {
+      $outputStream.Dispose()
+      $inputStream.Dispose()
+    }
+  }
+} finally {
+  $archive.Dispose()
+}
