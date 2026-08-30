@@ -747,7 +747,8 @@ export function createRemoteImportJob({
           fetchImpl,
           buildOfficialUrl(context.baseUrl, endpoints.letterList, {
             cursor: cursor || undefined,
-            pageSize: LIST_PAGE_SIZE
+            // 官方只认下划线参数；驼峰 pageSize 会被忽略、每页返回全部条目
+            page_size: LIST_PAGE_SIZE
           }),
           { context, signal: abortController.signal, timeoutMs, attempts, backoffMs }
         );
@@ -771,7 +772,9 @@ export function createRemoteImportJob({
           const data = await officialRequest(
             fetchImpl,
             buildOfficialUrl(context.baseUrl, endpoints.letterDetail, {
-              ...(itemId ? { letterId: itemId } : { share_id: pickValue(item, ["share_id", "shareId"]) })
+              // 官方 axios 拦截器把驼峰 query 转下划线后才发送（humps 类转换），
+              // 服务端只认 letter_id；实测 letterId 会被静默忽略并报"连线断开"。
+              ...(itemId ? { letter_id: itemId } : { share_id: pickValue(item, ["share_id", "shareId"]) })
             }),
             { context, signal: abortController.signal, timeoutMs, attempts, backoffMs }
           );
