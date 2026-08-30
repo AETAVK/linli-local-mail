@@ -115,7 +115,7 @@ async function main() {
   );
 
   const baselinePath = path.join(ROOT, "backups", "required", "official-compatible-0.0.9.627", "feapp.dat");
-  record("compatible baseline", hash(baselinePath) === "507d59e31e98596c20ebff43f62de4f9c1d28d48e155fdd500a4dd8cbe09e81b", hash(baselinePath));
+  record("compatible baseline", hash(baselinePath) === "c88f1dd4cb7c95e4902d74dd0c247962ffd65559e3907497b416078d3a6698b5", hash(baselinePath));
 
   const patchCheck = spawnSync(process.execPath, [path.join(ROOT, "tools", "feapp.mjs"), "verify"], {
     cwd: ROOT,

@@ -28,7 +28,7 @@ const LEGACY_JSON_PATH = path.join(ROOT, "imports", "legacy", "data.json");
 const CONFIG_ROOT = path.join(ROOT, "config");
 const SECRETS_PATH = path.join(ROOT, "data", "secrets.dpapi.json");
 const MEDIA_ROOT = process.env.LINLI_MAIL_MEDIA_PATH || path.join(path.dirname(DB_PATH), "media");
-const SERVICE_VERSION = "0.8.0";
+const SERVICE_VERSION = "0.8.1";
 const SESSION_TOKEN = crypto.randomBytes(32).toString("base64url");
 
 const database = new MailDatabase(DB_PATH, LEGACY_JSON_PATH);

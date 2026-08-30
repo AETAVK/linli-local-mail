@@ -7,8 +7,9 @@
 本项目不是官方项目，不隶属于、未经原游戏开发商或发行商认可。仓库和安装包均不包含游戏本体、
 官方启动器、图片、音乐、视频、字体、DLL、历史信件或其他官方资源。使用者必须自行准备原版客户端。
 
-当前公开源码版本为 `0.8.0`。该版本在 `0.7.1` 的基础上增加了已有视频回信的本地归档、校验、
-删除清理与 Range 播放；图片导入仍是占位功能，不包含 OCR，也不会生成视频或转写音频。
+当前公开源码版本为 `0.8.1`。该版本在 `0.8.0` 的基础上把兼容基线修正为 Steam 分发的官方 `.627` `feapp.dat`：
+旧版本锁定的基线是维护者本机的重打包产物，会让所有 Steam 全新安装的接收者在 `baseline:import`
+时失败。补丁功能与 `0.8.0` 相同；图片导入仍是占位功能，不包含 OCR，也不会生成视频或转写音频。
 
 ## 快速安装与启动（零基础）
 
@@ -28,12 +29,12 @@
 
 ### 第一步：下载安装程序
 
-- [Gitee 国内镜像：直接下载一键安装程序（v0.8.0）](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.8.0/LinliLocalMail-0.8.0-Setup.exe)
-- [Gitee：查看 v0.8.0 更新说明和 SHA-256 校验值](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.8.0)
-- [GitHub：直接下载一键安装程序（v0.8.0）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.8.0/LinliLocalMail-0.8.0-Setup.exe)
-- [GitHub：查看 v0.8.0 更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.8.0)
+- [Gitee 国内镜像：直接下载一键安装程序（v0.8.1）](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.8.1/LinliLocalMail-0.8.1-Setup.exe)
+- [Gitee：查看 v0.8.1 更新说明和 SHA-256 校验值](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.8.1)
+- [GitHub：直接下载一键安装程序（v0.8.1）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.8.1/LinliLocalMail-0.8.1-Setup.exe)
+- [GitHub：查看 v0.8.1 更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.8.1)
 
-普通玩家只需要下载 `LinliLocalMail-0.8.0-Setup.exe`，不需要下载页面下方的 `Source code`、
+普通玩家只需要下载 `LinliLocalMail-0.8.1-Setup.exe`，不需要下载页面下方的 `Source code`、
 `.json`、`.sha256` 或 `.cer` 文件。
 
 ### 第二步：找到游戏目录
@@ -45,12 +46,12 @@
 launcher.exe
 ```
 
-把刚下载的 `LinliLocalMail-0.8.0-Setup.exe` 移动到这个目录。这样安装器可以自动识别游戏，
+把刚下载的 `LinliLocalMail-0.8.1-Setup.exe` 移动到这个目录。这样安装器可以自动识别游戏，
 不需要手动选择路径。
 
 ### 第三步：安装
 
-双击运行 `LinliLocalMail-0.8.0-Setup.exe`，等待“安装完成”提示。
+双击运行 `LinliLocalMail-0.8.1-Setup.exe`，等待“安装完成”提示。
 
 安装器使用自签名证书，因此 Windows 可能显示“Windows 已保护你的电脑”或“未知发布者”。
 请先确认文件来自本仓库的 Release 页面；确认无误后，可以点击“更多信息”→“仍要运行”。
@@ -95,7 +96,7 @@ launcher.exe
 当前只支持 Windows。API Key 通过当前 Windows 账户的 DPAPI 加密保存在本机，
 不会写入 SQLite、备份 JSON 或源码仓库。
 
-官方历史恢复依赖仍可访问的官方接口；`0.8.0` 已通过自动测试、脱敏日志检测，以及视频归档和本地
+官方历史恢复依赖仍可访问的官方接口；`0.8.1` 已通过自动测试、脱敏日志检测，以及视频归档和本地
 Range 播放的源码级验证，但真实远端历史导入仍需使用者在自己的客户端上人工确认。该功能只接受官方
 Olivia 域名、固定请求头白名单和本机日志中的会话信息，不会把 Token 写入数据库、日志、导出文件或
 模型上下文。视频归档只保存官方已经返回的既有视频，不生成视频、不转写音频。
@@ -144,6 +145,33 @@ npm run installer:build
 
 当前构建使用临时自签名证书。自签名只能证明同一个安装包在签名后没有被修改，不能消除 Windows
 SmartScreen 的未知发布者提示，也不能替代受信任的商业代码签名证书。
+
+### 自动发布（维护者）
+
+正式版本由 GitHub Actions 在 Windows Runner 上构建一次，然后把同一批发布文件同步到 GitHub
+Release 和 Gitee Release。这样两个下载入口使用相同的安装包字节，不需要在 Gitee Go 上重复编译、签名
+或生成另一份校验值。工作流文件位于 `.github/workflows/release.yml`，Gitee API 同步脚本位于
+`.github/scripts/publish-gitee-release.mjs`，这两个文件只服务于发布流程，不会进入游戏运行载荷。
+
+首次发布前，在 GitHub 仓库的 `Settings → Secrets and variables → Actions` 创建名为
+`GITEE_TOKEN` 的 Actions secret。其值应是对 `sforlife/linli-local-mail` 具备 Release/附件写入权限的
+Gitee 令牌；令牌只保存在 GitHub Secrets，不要写入 YAML、日志、Issue 或本地提交。工作流会在缺少该
+secret 时明确失败，避免产生“GitHub 已发布但 Gitee 未同步”的不完整结果。
+
+发布新版本时，先让 `package.json` 的版本与标签一致，再提交代码并推送标签：
+
+```powershell
+git tag v<版本>
+git push gitee main v<版本>
+git push origin main v<版本>
+```
+
+例如版本为 `0.8.1` 时使用 `v0.8.1`。先把同一提交和标签推到 Gitee，可以让 Gitee Release 的源码标签
+与 GitHub 保持一致；随后推到 GitHub 才会触发工作流。工作流会检查标签格式和版本一致性，执行语法检查、
+运行时白名单检查、安装器构建、SHA-256 校验，然后先更新 GitHub Release，再同步 Gitee 同名 Release
+的四个发布文件。重复运行同一标签会只替换这四个同名附件，不会删除 Release 中的其他附件；若某一步
+失败，可在 GitHub Actions 中重新运行该次工作流。也可以通过 `workflow_dispatch` 手动选择一个已经存在
+且版本匹配的标签重新发布。
 
 ## 数据与隐私
 
