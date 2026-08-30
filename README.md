@@ -22,6 +22,10 @@
 
 本项目不提供游戏本体、模型账号、API Key 或模型调用额度。
 
+> **使用前请先备份游戏文件。** 建议先将完整游戏目录复制到其他位置，至少备份
+> `0.0.9.627/` 和 `launcher.exe`。安装器会建立可恢复的客户端备份，但它不能替代玩家自己的完整备份；
+> Steam 更新、文件验证或误操作都可能覆盖或改变游戏文件。
+
 ### 第一步：下载安装程序
 
 - [Gitee 国内镜像：直接下载一键安装程序（v0.8.0）](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.8.0/LinliLocalMail-0.8.0-Setup.exe)
