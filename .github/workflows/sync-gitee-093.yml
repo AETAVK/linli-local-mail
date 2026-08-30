@@ -3,20 +3,19 @@ on:
   workflow_dispatch:
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - name: Fetch published assets from GitHub Release
+        shell: pwsh
         run: |
-          mkdir -p dist
-          gh release download v0.9.3 --repo AETAVK/linli-local-mail --dir dist --clobber 2>/dev/null || true
-          gh release download v0.9.3 --repo AETAVK/linli-local-mail --pattern 'LinliLocalMail-0.9.3-Setup.exe' --dir dist --clobber
-          gh release download v0.9.3 --repo AETAVK/linli-local-mail --pattern '*Setup.exe*' --dir dist --clobber
-          gh release download v0.9.3 --repo AETAVK/linli-local-mail --pattern '*SelfSigned.cer' --dir dist --clobber
-          ls -la dist/
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          gh release download v0.9.3 --repo AETAVK/linli-local-mail --dir dist --clobber
+          Get-ChildItem dist
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Run Gitee publish script
+        shell: pwsh
         run: node .github/scripts/publish-gitee-release.mjs
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
