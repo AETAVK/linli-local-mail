@@ -18,6 +18,7 @@ import { RemoteImportManager } from "./src/remote-import.mjs";
 import { SecretStore } from "./src/secrets.mjs";
 import { extractSharedLetters } from "./src/share-import.mjs";
 import { normalizeHttpUrl, readJsonBody, safeErrorMessage } from "./src/utils.mjs";
+import { VideoAssetStore, parseByteRange } from "./src/video-assets.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 // LINLI_MAIL_PORT / LINLI_MAIL_DB_PATH 仅用于并行冒烟测试；日常启动保持默认 27149 与项目数据库。
@@ -26,13 +27,15 @@ const DB_PATH = process.env.LINLI_MAIL_DB_PATH || path.join(ROOT, "data", "mail-
 const LEGACY_JSON_PATH = path.join(ROOT, "imports", "legacy", "data.json");
 const CONFIG_ROOT = path.join(ROOT, "config");
 const SECRETS_PATH = path.join(ROOT, "data", "secrets.dpapi.json");
-const SERVICE_VERSION = "0.7.1";
+const MEDIA_ROOT = process.env.LINLI_MAIL_MEDIA_PATH || path.join(path.dirname(DB_PATH), "media");
+const SERVICE_VERSION = "0.8.0";
 const SESSION_TOKEN = crypto.randomBytes(32).toString("base64url");
 
 const database = new MailDatabase(DB_PATH, LEGACY_JSON_PATH);
 const secretStore = new SecretStore(SECRETS_PATH);
 const worker = new GenerationWorker({ database, configRoot: CONFIG_ROOT, secretStore });
-const remoteImporter = new RemoteImportManager({ database });
+const videoStore = new VideoAssetStore(MEDIA_ROOT);
+const remoteImporter = new RemoteImportManager({ database, mediaStore: videoStore });
 
 function isAllowedOrigin(req) {
   const origin = req.headers.origin;
@@ -99,6 +102,72 @@ function getLetterId(url, body = {}) {
       || body.letterId
       || ""
   );
+}
+
+function videoAssetIdFromPath(pathname) {
+  const match = String(pathname || "").match(/^\/(?:toy\/)?letter\/video\/([^/]+)$/);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function localVideoUrl(mediaId) {
+  return `http://${HOST}:${PORT}/letter/video/${encodeURIComponent(mediaId)}`;
+}
+
+function decorateLetterForClient(letter) {
+  const asset = database.getVideoAsset(letter.letterId);
+  if (asset && videoStore.hasAsset(asset)) {
+    return { ...letter, replyVideoUrl: localVideoUrl(asset.mediaId) };
+  }
+  return letter;
+}
+
+function serveVideoAsset(req, res, asset) {
+  if (!videoStore.hasAsset(asset)) {
+    fail(req, res, 404, "本地视频文件不存在或已损坏");
+    return;
+  }
+  const stat = videoStore.stat(asset.mediaId);
+  if (!stat) {
+    fail(req, res, 404, "本地视频文件不存在或已损坏");
+    return;
+  }
+  const range = parseByteRange(req.headers.range, stat.size);
+  if (range?.invalid) {
+    setCommonHeaders(req, res);
+    res.writeHead(416, {
+      "Content-Range": `bytes */${stat.size}`,
+      "Accept-Ranges": "bytes",
+      "Content-Length": "0"
+    });
+    res.end();
+    return;
+  }
+  const start = range?.start ?? 0;
+  const end = range?.end ?? stat.size - 1;
+  const length = end - start + 1;
+  setCommonHeaders(req, res);
+  res.writeHead(range ? 206 : 200, {
+    "Content-Type": asset.mimeType || "video/mp4",
+    "Content-Length": String(length),
+    "Accept-Ranges": "bytes",
+    ...(range ? { "Content-Range": `bytes ${start}-${end}/${stat.size}` } : {}),
+    "Cross-Origin-Resource-Policy": "cross-origin"
+  });
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
+  const stream = videoStore.createReadStream(asset.mediaId, { start, end });
+  stream.on("error", () => {
+    if (!res.headersSent) res.writeHead(500);
+    res.destroy();
+  });
+  stream.pipe(res);
 }
 
 async function resolveModelListProvider(body) {
@@ -302,6 +371,18 @@ const server = http.createServer(async (req, res) => {
       ok(req, res, { token: SESSION_TOKEN, serviceVersion: SERVICE_VERSION });
       return;
     }
+    // HTMLVideoElement 的请求不能稳定携带自定义 X-Local-Mail-Session；该路由只
+    // 绑定回环地址、受 Origin 白名单保护，并使用不可预测的 assetId 定位文件。
+    const mediaId = videoAssetIdFromPath(url.pathname);
+    if (mediaId && (req.method === "GET" || req.method === "HEAD")) {
+      const asset = database.getVideoAssetById(mediaId);
+      if (!asset) {
+        fail(req, res, 404, "Unknown video asset");
+        return;
+      }
+      serveVideoAsset(req, res, asset);
+      return;
+    }
     if (isPrivatePath(url.pathname) && !hasValidSession(req)) {
       fail(req, res, 401, "Missing or invalid local session");
       return;
@@ -348,7 +429,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/letters/delete") {
       const body = await readJsonBody(req);
-      ok(req, res, database.deleteLetters(body.letterIds ?? body.letter_ids));
+      const result = database.deleteLetters(body.letterIds ?? body.letter_ids, { includeMediaIds: true });
+      for (const mediaId of result.mediaIds || []) await videoStore.remove(mediaId);
+      const { mediaIds: _mediaIds, ...publicResult } = result;
+      ok(req, res, publicResult);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/memories") {
@@ -411,26 +495,44 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const extracted = await extractSharedLetters(urls);
-      const results = extracted.map((item) => {
+      const results = [];
+      for (const item of extracted) {
         if (!item.ok) {
-          return {
+          results.push({
             index: item.index,
             lineNumber: item.index + 1,
             ok: false,
             code: item.code,
             message: item.message
-          };
+          });
+          continue;
         }
+        let mediaAsset = null;
+        let videoWarning = null;
         try {
-          const imported = database.importLetters({ letters: [item.record] });
+          const videoUrl = item.record.replyVideoUrl || item.record.reply?.videoUrl || "";
+          if (videoUrl) {
+            try {
+              mediaAsset = await videoStore.ensureRemoteVideo(videoUrl);
+            } catch (error) {
+              videoWarning = safeErrorMessage(error);
+            }
+          }
+          const imported = database.importLetters(
+            { letters: [item.record] },
+            { mediaAssets: new Map([[item.record.letterId, mediaAsset]]) }
+          );
           if (imported.imported !== 1 || imported.skipped) {
             throw new Error(imported.errors?.[0]?.message || "分享信件没有成功写入本地邮箱");
           }
-          return {
+          for (const mediaId of imported.removedMediaIds || []) await videoStore.remove(mediaId);
+          results.push({
             index: item.index,
             lineNumber: item.index + 1,
             ok: true,
             action: imported.inserted ? "inserted" : "updated",
+            videoSaved: Boolean(mediaAsset),
+            videoWarning,
             letter: {
               letterId: item.record.letterId,
               shareId: item.record.shareId,
@@ -438,17 +540,18 @@ const server = http.createServer(async (req, res) => {
               hasSent: item.record.sent.available,
               hasReply: item.record.reply.available
             }
-          };
+          });
         } catch (error) {
-          return {
+          if (mediaAsset && !mediaAsset.reused) await videoStore.remove(mediaAsset);
+          results.push({
             index: item.index,
             lineNumber: item.index + 1,
             ok: false,
             code: "local_import_error",
             message: safeErrorMessage(error)
-          };
+          });
         }
-      });
+      }
       const successful = results.filter((item) => item.ok);
       const failed = results.filter((item) => !item.ok);
       const data = {
@@ -502,7 +605,7 @@ const server = http.createServer(async (req, res) => {
         fail(req, res, 404, `Unknown letter: ${letterId}`);
         return;
       }
-      ok(req, res, letter);
+      ok(req, res, decorateLetterForClient(letter));
       return;
     }
     if (req.method === "GET" && url.pathname === "/letter/unread_count") {

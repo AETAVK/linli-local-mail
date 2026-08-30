@@ -615,7 +615,7 @@
   function remoteToastHtml() {
     return '<div class="local-mail-remote-import-title">检测到本机可能存在官方信箱历史记录</div>' +
       '<button class="local-mail-remote-import-close" type="button" aria-label="关闭" data-remote-action="close">×</button>' +
-      '<div class="local-mail-remote-import-body">可以读取官方客户端的最近信箱记录并写入本地邮箱。导入不占用每日写信额度，也不会自动触发模型回复；只有点击“导入历史”后才会访问官方接口。</div>' +
+      '<div class="local-mail-remote-import-body">可以读取官方客户端的最近信箱记录并写入本地邮箱；已有视频回信会同时保存到本机供原邮箱播放。导入不占用每日写信额度，也不会自动触发模型回复；只有点击“导入历史”后才会访问官方接口。</div>' +
       '<div class="local-mail-remote-import-actions" data-role="remote-actions">' +
       '<button class="local-mail-remote-import-button local-mail-remote-import-button-primary" type="button" data-remote-action="start">导入历史</button>' +
       '<button class="local-mail-remote-import-button" type="button" data-remote-action="snooze">稍后</button>' +
@@ -727,6 +727,8 @@
         var summary = "已导入 " + status.imported + " 封，新增 " + status.inserted + " 封，更新 " + status.updated +
           " 封，跳过 " + status.skipped + " 封，失败 " + status.failed + " 封";
         if (status.conflicts) summary += "，冲突 " + status.conflicts + " 封（本地内容已保留）";
+        if (status.videoSaved) summary += "，已保存视频 " + status.videoSaved + " 个";
+        if (status.videoFailed) summary += "，视频保存失败 " + status.videoFailed + " 个";
         setRemoteStatus(summary + "\n邮箱即将自动刷新…", "success");
         renderRemoteActions("done");
         window.setTimeout(function () {

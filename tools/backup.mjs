@@ -8,6 +8,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BACKUP_ROOT = path.join(ROOT, "backups", "user-data");
 const DATABASE_PATH = path.join(ROOT, "data", "mail-poc.sqlite3");
 const SECRET_PATH = path.join(ROOT, "data", "secrets.dpapi.json");
+const MEDIA_PATH = path.join(ROOT, "data", "media");
 const IMPORT_HISTORY_PATH = path.join(ROOT, "imports", "history");
 const RECOVERY_ROOT = path.join(ROOT, "backups", "recovery", "pre-restore");
 
@@ -29,6 +30,11 @@ function copyTree(source, target) {
   }
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.copyFileSync(source, target);
+}
+
+function replaceTree(source, target) {
+  if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
+  copyTree(source, target);
 }
 
 function relativeFiles(root) {
@@ -56,6 +62,7 @@ async function createBackup() {
     sourceDatabase.close();
   }
   copyTree(SECRET_PATH, path.join(destination, "data", "secrets.dpapi.json"));
+  copyTree(MEDIA_PATH, path.join(destination, "data", "media"));
   copyTree(path.join(ROOT, "config"), path.join(destination, "config"));
   copyTree(IMPORT_HISTORY_PATH, path.join(destination, "imports", "history"));
 
@@ -105,6 +112,7 @@ async function restoreBackup(directory, confirmed) {
   fs.mkdirSync(recoveryRoot, { recursive: true });
   if (fs.existsSync(DATABASE_PATH)) fs.copyFileSync(DATABASE_PATH, path.join(recoveryRoot, "mail.sqlite3"));
   if (fs.existsSync(SECRET_PATH)) copyTree(SECRET_PATH, path.join(recoveryRoot, "data", "secrets.dpapi.json"));
+  copyTree(MEDIA_PATH, path.join(recoveryRoot, "data", "media"));
   copyTree(path.join(ROOT, "config"), path.join(recoveryRoot, "config"));
   copyTree(IMPORT_HISTORY_PATH, path.join(recoveryRoot, "imports", "history"));
 
@@ -120,6 +128,7 @@ async function restoreBackup(directory, confirmed) {
   if (fs.existsSync(path.join(resolved, "data", "secrets.dpapi.json"))) {
     copyTree(path.join(resolved, "data", "secrets.dpapi.json"), SECRET_PATH);
   }
+  replaceTree(path.join(resolved, "data", "media"), MEDIA_PATH);
   if (fs.existsSync(path.join(resolved, "config"))) copyTree(path.join(resolved, "config"), path.join(ROOT, "config"));
   const historySource = fs.existsSync(path.join(resolved, "imports", "history"))
     ? path.join(resolved, "imports", "history")

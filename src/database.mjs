@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   AUDIT_STATUS,
@@ -19,6 +20,7 @@ import {
   parseJson,
   randomId
 } from "./utils.mjs";
+import { VIDEO_ASSET_ID_PATTERN } from "./video-assets.mjs";
 
 const LETTER_COLUMNS = `
   letter_id, content, material_json, letter_status, audit_status,
@@ -54,6 +56,44 @@ function normalizeLetterIdList(input) {
   if (!ids.length) throw new Error("letterIds must contain at least one letter id");
   if (ids.length > 500) throw new Error("letterIds supports at most 500 letters per request");
   return ids;
+}
+
+function mediaAssetEntry(mediaAssets, letterId) {
+  if (mediaAssets instanceof Map) {
+    return { has: mediaAssets.has(letterId), value: mediaAssets.get(letterId) };
+  }
+  if (mediaAssets && typeof mediaAssets === "object"
+    && Object.prototype.hasOwnProperty.call(mediaAssets, letterId)) {
+    return { has: true, value: mediaAssets[letterId] };
+  }
+  return { has: false, value: undefined };
+}
+
+function normalizeVideoAsset(asset, letterId) {
+  if (!asset || typeof asset !== "object") return null;
+  const mediaId = String(asset.mediaId ?? asset.media_id ?? "").trim();
+  if (!VIDEO_ASSET_ID_PATTERN.test(mediaId)) throw new Error("视频资产编号无效");
+  const fileName = String(asset.fileName ?? asset.file_name ?? `${mediaId}.mp4`).trim();
+  if (!fileName || fileName !== path.basename(fileName) || fileName.length > 180) {
+    throw new Error("视频资产文件名无效");
+  }
+  const mimeType = String(asset.mimeType ?? asset.mime_type ?? "video/mp4").trim().toLowerCase();
+  if (!mimeType.startsWith("video/")) throw new Error("视频资产 MIME 类型无效");
+  const byteSize = Number(asset.byteSize ?? asset.byte_size);
+  if (!Number.isSafeInteger(byteSize) || byteSize <= 0) throw new Error("视频资产大小无效");
+  const sha256 = String(asset.sha256 || "").trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error("视频资产校验和无效");
+  const sourceUrl = String(asset.sourceUrl ?? asset.source_url ?? "").trim();
+  return {
+    mediaId,
+    letterId,
+    kind: "reply_video",
+    fileName,
+    mimeType,
+    byteSize,
+    sha256,
+    sourceUrl
+  };
 }
 
 function normalizeRuntimeSettings(input, current) {
@@ -115,6 +155,23 @@ export class MailDatabase {
 
       CREATE INDEX IF NOT EXISTS idx_letters_created_at
         ON letters(created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS letter_media (
+        media_id TEXT PRIMARY KEY,
+        letter_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        byte_size INTEGER NOT NULL,
+        sha256 TEXT NOT NULL,
+        source_url TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        UNIQUE(letter_id, kind),
+        FOREIGN KEY(letter_id) REFERENCES letters(letter_id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_letter_media_letter
+        ON letter_media(letter_id, kind);
 
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
@@ -181,7 +238,7 @@ export class MailDatabase {
     insertSetting.run("remoteImport.lastSuccessAt", "");
     insertSetting.run("remoteImport.lastImportedAccount", "");
     insertSetting.run("remoteImport.lastImportedIdsHash", "");
-    this.db.exec("PRAGMA user_version = 2");
+    this.db.exec("PRAGMA user_version = 3");
   }
 
   prepare() {
@@ -219,6 +276,29 @@ export class MailDatabase {
       letterExists: this.db.prepare("SELECT 1 AS found FROM letters WHERE letter_id = ?"),
       letterGet: this.db.prepare("SELECT * FROM letters WHERE letter_id = ?"),
       letterRead: this.db.prepare("UPDATE letters SET is_read = 1, updated_at = ? WHERE letter_id = ?"),
+      mediaByLetter: this.db.prepare(`
+        SELECT media_id, letter_id, kind, file_name, mime_type, byte_size, sha256, source_url, created_at
+        FROM letter_media WHERE letter_id = ? AND kind = 'reply_video'
+      `),
+      mediaById: this.db.prepare(`
+        SELECT media_id, letter_id, kind, file_name, mime_type, byte_size, sha256, source_url, created_at
+        FROM letter_media WHERE media_id = ?
+      `),
+      mediaUpsert: this.db.prepare(`
+        INSERT INTO letter_media(
+          media_id, letter_id, kind, file_name, mime_type, byte_size, sha256, source_url, created_at
+        ) VALUES(?, ?, 'reply_video', ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(letter_id, kind) DO UPDATE SET
+          media_id = excluded.media_id,
+          file_name = excluded.file_name,
+          mime_type = excluded.mime_type,
+          byte_size = excluded.byte_size,
+          sha256 = excluded.sha256,
+          source_url = excluded.source_url,
+          created_at = excluded.created_at
+      `),
+      mediaDeleteByLetter: this.db.prepare("DELETE FROM letter_media WHERE letter_id = ? AND kind = 'reply_video'"),
+      mediaCount: this.db.prepare("SELECT COUNT(*) AS count FROM letter_media"),
       unreadCount: this.db.prepare("SELECT COUNT(*) AS count FROM letters WHERE is_read = 0"),
       letterCount: this.db.prepare("SELECT COUNT(*) AS count FROM letters"),
       lettersSentToday: this.db.prepare("SELECT COUNT(*) AS count FROM letters WHERE source = 'local' AND created_at >= ?"),
@@ -354,6 +434,50 @@ export class MailDatabase {
     return jobs.length;
   }
 
+  toVideoAsset(row) {
+    if (!row) return null;
+    return {
+      mediaId: row.media_id,
+      letterId: row.letter_id,
+      kind: row.kind,
+      fileName: row.file_name,
+      mimeType: row.mime_type,
+      byteSize: row.byte_size,
+      sha256: row.sha256,
+      sourceUrl: row.source_url || "",
+      createdAt: row.created_at
+    };
+  }
+
+  getVideoAsset(letterId) {
+    return this.toVideoAsset(this.statements.mediaByLetter.get(String(letterId || "")));
+  }
+
+  getVideoAssetById(mediaId) {
+    return this.toVideoAsset(this.statements.mediaById.get(String(mediaId || "")));
+  }
+
+  replaceVideoAsset(letterId, asset) {
+    const id = String(letterId || "");
+    const previous = this.getVideoAsset(id);
+    if (!asset) {
+      this.statements.mediaDeleteByLetter.run(id);
+      return previous?.mediaId && previous.mediaId !== asset?.mediaId ? previous.mediaId : null;
+    }
+    const normalized = normalizeVideoAsset(asset, id);
+    this.statements.mediaUpsert.run(
+      normalized.mediaId,
+      id,
+      normalized.fileName,
+      normalized.mimeType,
+      normalized.byteSize,
+      normalized.sha256,
+      normalized.sourceUrl,
+      nowSeconds()
+    );
+    return previous?.mediaId && previous.mediaId !== normalized.mediaId ? previous.mediaId : null;
+  }
+
   rowToLetter(row, { includeInternal = false } = {}) {
     const letter = {
       letterId: row.letter_id,
@@ -378,7 +502,8 @@ export class MailDatabase {
         modelId: row.model_id,
         lastError: row.last_error,
         raw: parseJson(row.raw_json, null),
-        updatedAt: row.updated_at
+        updatedAt: row.updated_at,
+        replyVideoAsset: this.getVideoAsset(row.letter_id)
       });
     }
     return letter;
@@ -398,11 +523,12 @@ export class MailDatabase {
     };
   }
 
-  importLetters(body) {
+  importLetters(body, { mediaAssets = null } = {}) {
     const items = importPayloadItems(body);
     let inserted = 0;
     let updated = 0;
     let skipped = 0;
+    const removedMediaIds = [];
     const errors = [];
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -410,8 +536,14 @@ export class MailDatabase {
         try {
           if (item?.ok === false) throw new Error(String(item.error || "JSON item is marked ok=false"));
           const letter = normalizeImportedLetter(item, index);
+          const mediaEntry = mediaAssetEntry(mediaAssets, letter.letterId);
+          const mediaAsset = mediaEntry.has ? normalizeVideoAsset(mediaEntry.value, letter.letterId) : undefined;
           const exists = Boolean(this.statements.letterExists.get(letter.letterId));
           this.writeLetter(this.statements.letterUpsert, letter);
+          if (mediaEntry.has) {
+            const removedMediaId = this.replaceVideoAsset(letter.letterId, mediaAsset);
+            if (removedMediaId) removedMediaIds.push(removedMediaId);
+          }
           if (exists) updated += 1;
           else inserted += 1;
         } catch (error) {
@@ -428,18 +560,19 @@ export class MailDatabase {
       this.db.exec("ROLLBACK");
       throw error;
     }
-    return { imported: inserted + updated, inserted, updated, skipped, errors };
+    return { imported: inserted + updated, inserted, updated, skipped, removedMediaIds, errors };
   }
 
   // 远端历史导入：只新增不存在的记录；已存在且来源为远端导入的记录允许更新
   // （重复导入幂等、新回信补全）；已存在但来源不是远端导入的记录视为本地内容，
   // 保留不动并报告 conflict，绝不由远端同步静默覆盖。
-  importRemoteLetters(records) {
+  importRemoteLetters(records, { mediaAssets = null } = {}) {
     let inserted = 0;
     let updated = 0;
     let skipped = 0;
     let conflicts = 0;
     const importedIds = [];
+    const removedMediaIds = [];
     const errors = [];
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -447,13 +580,23 @@ export class MailDatabase {
         try {
           if (record?.ok === false) throw new Error(String(record.error || "Remote letter is marked ok=false"));
           const letter = normalizeImportedLetter(record, index, { keepUnknownTime: true });
+          const mediaEntry = mediaAssetEntry(mediaAssets, letter.letterId);
+          const mediaAsset = mediaEntry.has ? normalizeVideoAsset(mediaEntry.value, letter.letterId) : undefined;
           const existing = this.statements.letterGet.get(letter.letterId);
           if (!existing) {
             this.writeLetter(this.statements.letterInsert, letter);
+            if (mediaEntry.has) {
+              const removedMediaId = this.replaceVideoAsset(letter.letterId, mediaAsset);
+              if (removedMediaId) removedMediaIds.push(removedMediaId);
+            }
             inserted += 1;
             importedIds.push(letter.letterId);
           } else if (existing.source === "remote-history") {
             this.writeLetter(this.statements.letterUpsert, letter);
+            if (mediaEntry.has) {
+              const removedMediaId = this.replaceVideoAsset(letter.letterId, mediaAsset);
+              if (removedMediaId) removedMediaIds.push(removedMediaId);
+            }
             updated += 1;
             importedIds.push(letter.letterId);
           } else {
@@ -473,7 +616,16 @@ export class MailDatabase {
       this.db.exec("ROLLBACK");
       throw error;
     }
-    return { imported: inserted + updated, inserted, updated, skipped, conflicts, importedIds, errors };
+    return {
+      imported: inserted + updated,
+      inserted,
+      updated,
+      skipped,
+      conflicts,
+      importedIds,
+      removedMediaIds,
+      errors
+    };
   }
 
   getRemoteImportSettings() {
@@ -671,6 +823,7 @@ export class MailDatabase {
         timestamp,
         job.job_id
       );
+      this.statements.mediaDeleteByLetter.run(job.letter_id);
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -703,6 +856,7 @@ export class MailDatabase {
         SET status = ?, error = ?, finished_at = ?, updated_at = ?
         WHERE job_id = ?
       `).run(JOB_STATUS.FAILED, message, timestamp, timestamp, job.job_id);
+      this.statements.mediaDeleteByLetter.run(job.letter_id);
       this.db.exec("COMMIT");
     } catch (failure) {
       this.db.exec("ROLLBACK");
@@ -744,6 +898,7 @@ export class MailDatabase {
         timestamp,
         timestamp
       );
+      this.statements.mediaDeleteByLetter.run(letterId);
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -811,6 +966,7 @@ export class MailDatabase {
     return {
       database: this.dbPath,
       letters: this.statements.letterCount.get().count,
+      videoAssets: this.statements.mediaCount.get().count,
       jobs,
       settings: this.getRuntimeSettings(),
       migratedLegacyLetters: this.migratedLegacyLetters,
@@ -838,23 +994,29 @@ export class MailDatabase {
     };
   }
 
-  deleteLetters(input) {
+  deleteLetters(input, { includeMediaIds = false } = {}) {
     const ids = normalizeLetterIdList(input);
     const statement = this.db.prepare("DELETE FROM letters WHERE letter_id = ?");
     let deleted = 0;
     const missing = [];
+    const mediaIds = [];
     this.db.exec("BEGIN IMMEDIATE");
     try {
       for (const id of ids) {
-        if (statement.run(id).changes) deleted += 1;
-        else missing.push(id);
+        const media = this.getVideoAsset(id);
+        if (statement.run(id).changes) {
+          deleted += 1;
+          if (media?.mediaId) mediaIds.push(media.mediaId);
+        } else missing.push(id);
       }
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
       throw error;
     }
-    return { requested: ids.length, deleted, missing };
+    return includeMediaIds
+      ? { requested: ids.length, deleted, missing, mediaIds }
+      : { requested: ids.length, deleted, missing };
   }
 
   exportData() {

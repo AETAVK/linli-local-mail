@@ -59,7 +59,7 @@ const LIST_PAGE_SIZE = 50;
 
 const TERMINAL_STATES = new Set(["completed", "partial", "failed", "cancelled"]);
 
-const OFFICIAL_USER_AGENT = "LinliLocalMail/0.7.1 (official-history-restore)";
+const OFFICIAL_USER_AGENT = "LinliLocalMail/0.8.0 (official-history-restore)";
 
 export class RemoteImportError extends Error {
   constructor(message, { code = "remote_import_error", status = 400 } = {}) {
@@ -495,6 +495,7 @@ export function normalizeRemoteLetter(data, { uid, sourceUrl } = {}) {
     createdAt,
     createdPrecision: createdAt ? "second" : null,
     repliedPrecision: repliedAt ? "second" : null,
+    replyVideoUrl,
     letterStatus: Number.isFinite(Number(letterStatusRaw))
       ? Number(letterStatusRaw)
       : hasReply ? 4 : 1,
@@ -632,6 +633,7 @@ function extractListItems(data) {
 export function createRemoteImportJob({
   context,
   database,
+  mediaStore = null,
   fetchImpl = fetch,
   logger = console,
   endpoints = REMOTE_ENDPOINTS,
@@ -652,6 +654,9 @@ export function createRemoteImportJob({
     updated: 0,
     skipped: 0,
     failed: 0,
+    videoFound: 0,
+    videoSaved: 0,
+    videoFailed: 0,
     conflicts: 0,
     message: "正在检测官方日志。",
     errorCode: null,
@@ -668,6 +673,18 @@ export function createRemoteImportJob({
     errors: state.errors.slice(0, 5),
     importedIds: (state.importedIds || []).slice()
   });
+  const mediaAssets = mediaStore ? new Map() : null;
+  const importedMediaLetterIds = new Set();
+  const cleanedMediaIds = new Set();
+  async function cleanupUncommittedMedia() {
+    if (!mediaStore || !mediaAssets) return;
+    for (const [letterId, asset] of mediaAssets) {
+      if (!asset || asset.reused || importedMediaLetterIds.has(letterId) || cleanedMediaIds.has(asset.mediaId)) continue;
+      await mediaStore.remove(asset);
+      cleanedMediaIds.add(asset.mediaId);
+      state.videoSaved = Math.max(0, state.videoSaved - 1);
+    }
+  }
 
   function finish(stateName, errorCode, message) {
     set({
@@ -730,8 +747,33 @@ export function createRemoteImportJob({
             }),
             { context, signal: abortController.signal, timeoutMs, attempts, backoffMs }
           );
-          records.push(normalizeRemoteLetter(data, { uid: context.uid, sourceUrl: REMOTE_IMPORT_SOURCE_LABEL }));
+          const record = normalizeRemoteLetter(data, { uid: context.uid, sourceUrl: REMOTE_IMPORT_SOURCE_LABEL });
+          if (mediaStore) {
+            mediaAssets.set(record.letterId, null);
+            if (record.replyVideoUrl) {
+              state.videoFound += 1;
+              try {
+                const existingAsset = database.getVideoAsset(record.letterId);
+                state.message = `正在保存第 ${index + 1} 封视频…`;
+                const asset = await mediaStore.ensureRemoteVideo(record.replyVideoUrl, {
+                  fetchImpl,
+                  signal: abortController.signal,
+                  timeoutMs,
+                  existing: existingAsset
+                });
+                mediaAssets.set(record.letterId, asset);
+                if (!asset.reused) state.videoSaved += 1;
+              } catch (error) {
+                throwIfCancelled(abortController.signal);
+                state.videoFailed += 1;
+                state.failed += 1;
+                state.errors.push(`第 ${index + 1} 封视频未保存：${sanitizeRemoteError(error)}`);
+              }
+            }
+          }
+          records.push(record);
         } catch (error) {
+          throwIfCancelled(abortController.signal);
           state.failed += 1;
           state.errors.push(`第 ${index + 1} 封：${sanitizeRemoteError(error)}`);
         }
@@ -740,13 +782,24 @@ export function createRemoteImportJob({
       }
 
       set({ state: "importing", stage: "import", percent: 88, message: "正在写入本地邮箱…" });
-      const result = database.importRemoteLetters(records);
+      const result = database.importRemoteLetters(records, { mediaAssets });
+      const importedIdSet = new Set(result.importedIds || []);
+      for (const letterId of importedIdSet) importedMediaLetterIds.add(letterId);
+      if (mediaStore) {
+        await cleanupUncommittedMedia();
+        for (const mediaId of result.removedMediaIds || []) {
+          await mediaStore.remove(mediaId);
+        }
+      }
       set({
         imported: result.imported,
         inserted: result.inserted,
         updated: result.updated,
         skipped: result.skipped,
         conflicts: result.conflicts,
+        videoFound: state.videoFound,
+        videoSaved: state.videoSaved,
+        videoFailed: state.videoFailed,
         importedIds: result.importedIds || [],
         percent: 100
       });
@@ -760,6 +813,8 @@ export function createRemoteImportJob({
         if (result.conflicts > 0) parts.push(`冲突 ${result.conflicts}（本地内容已保留）`);
         if (result.skipped > 0) parts.push(`跳过 ${result.skipped}`);
         if (state.failed > 0) parts.push(`失败 ${state.failed}`);
+        if (state.videoSaved > 0) parts.push(`已保存视频 ${state.videoSaved}`);
+        if (state.videoFailed > 0) parts.push(`视频保存失败 ${state.videoFailed}`);
         if (result.imported > 0 || result.conflicts > 0) {
           finish("partial", null, `导入完成（部分）：${parts.join("，")}。`);
         } else {
@@ -777,6 +832,7 @@ export function createRemoteImportJob({
         finish("failed", error?.code || "remote_import_failed", sanitizeRemoteError(error));
       }
     } finally {
+      await cleanupUncommittedMedia();
       if (!TERMINAL_STATES.has(state.state)) {
         finish("failed", "remote_import_failed", "导入任务异常结束。");
       }
@@ -801,8 +857,9 @@ export function createRemoteImportJob({
 }
 
 export class RemoteImportManager {
-  constructor({ database, fetchImpl = fetch, logger = console, logPaths = null, jobOptions = {} } = {}) {
+  constructor({ database, mediaStore = null, fetchImpl = fetch, logger = console, logPaths = null, jobOptions = {} } = {}) {
     this.database = database;
+    this.mediaStore = mediaStore;
     this.fetchImpl = fetchImpl;
     this.logger = logger;
     this.logPaths = logPaths;
@@ -851,6 +908,7 @@ export class RemoteImportManager {
     const job = createRemoteImportJob({
       context: detection.context,
       database: this.database,
+      mediaStore: this.mediaStore,
       fetchImpl: this.fetchImpl,
       logger: this.logger,
       ...this.jobOptions,
@@ -887,6 +945,9 @@ export class RemoteImportManager {
       updated: 0,
       skipped: 0,
       failed: 0,
+      videoFound: 0,
+      videoSaved: 0,
+      videoFailed: 0,
       conflicts: 0,
       message: "没有正在运行的官方历史导入任务。",
       errorCode: null,
