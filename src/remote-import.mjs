@@ -59,7 +59,7 @@ const LIST_PAGE_SIZE = 50;
 
 const TERMINAL_STATES = new Set(["completed", "partial", "failed", "cancelled"]);
 
-const OFFICIAL_USER_AGENT = "LinliLocalMail/0.8.0 (official-history-restore)";
+const OFFICIAL_USER_AGENT = "LinliLocalMail/0.8.1 (official-history-restore)";
 
 export class RemoteImportError extends Error {
   constructor(message, { code = "remote_import_error", status = 400 } = {}) {
@@ -250,27 +250,49 @@ function hasLetterListRequest(object) {
   return values.some((value) => String(value).includes("/letter/list"));
 }
 
+// 打补丁后的客户端信箱轮询不再产生 OTEL network_request 日志；当所有日志中
+// 都没有 /letter/list 记录时，回退到任意官方 network_request（/signIn、
+// /midi/* 等）提取最新凭证。官方 token 是账户级的，已实测可调信箱接口。
+// 凭证仍然只从同一条完整请求对象内提取，不跨对象拼接。
+function hasNetworkRequest(object) {
+  const values = [];
+  collectValuesByKey(object, /^(url|path|fullurl|api|request[._-]?url|http[._-]?(?:url|target))$/i, values);
+  return values.some((value) => String(value).includes("/"));
+}
+
+function credentialContextFrom(object) {
+  const token = extractString(object, /^x-token$/i);
+  const uid = extractString(object, /^x-uid$/i);
+  if (!token || !uid) return null;
+  return {
+    token,
+    uid: String(uid),
+    deviceHeaders: collectDeviceHeaders(object)
+  };
+}
+
+// 按日志条目 mtime 从新到旧扫描；同一份日志内信箱请求优先于其他官方请求，
+// 但更旧日志里的信箱请求不会抢走更新日志里的其他请求凭证——凭证新鲜度
+// 比请求类型更重要（旧会话的 token 已被官方轮换作废）。
 function findNewestMailboxContext(entries) {
   let foundRequest = false;
   for (const entry of entries) {
+    let mailboxCandidate = null;
     for (let index = entry.objects.length - 1; index >= 0; index -= 1) {
       const object = entry.objects[index];
-      if (!hasLetterListRequest(object)) continue;
-      foundRequest = true;
-      const token = extractString(object, /^x-token$/i);
-      const uid = extractString(object, /^x-uid$/i);
-      if (!token || !uid) continue;
-      return {
-        foundRequest: true,
-        context: {
-          token,
-          uid: String(uid),
-          deviceHeaders: collectDeviceHeaders(object)
-        }
-      };
+      if (!hasNetworkRequest(object)) continue;
+      const context = credentialContextFrom(object);
+      if (!context) continue;
+      const isMailbox = hasLetterListRequest(object);
+      if (isMailbox) foundRequest = true;
+      if (isMailbox) return { foundRequest, context, source: "mailbox_request" };
+      if (!mailboxCandidate) mailboxCandidate = { context };
+    }
+    if (mailboxCandidate) {
+      return { foundRequest, context: mailboxCandidate.context, source: "any_network_request" };
     }
   }
-  return { foundRequest, context: null };
+  return { foundRequest, context: null, source: null };
 }
 
 function readLogTail(filePath, size, maximumBytes = MAX_LOG_BYTES) {
@@ -343,11 +365,12 @@ export function readOfficialLogContext(logsPaths) {
   });
   const mailbox = findNewestMailboxContext(entries);
 
-  if (!mailbox.foundRequest) {
+  if (!mailbox.context && !mailbox.foundRequest) {
+    // 连回退凭证都找不到：日志里没有任何带 x-token+x-uid 的官方网络请求
     return {
       ok: false,
       code: "no_recent_mailbox_request",
-      message: "请先在官方游戏中打开一次信箱，再重试。",
+      message: "未能在本机官方日志中找到可用的登录凭证，请先启动并登录官方游戏，再重试。",
       context: null
     };
   }
@@ -372,14 +395,17 @@ export function readOfficialLogContext(logsPaths) {
   return {
     ok: true,
     code: "ok",
-    message: "检测到本机可能存在官方信箱历史记录。",
+    message: mailbox.source === "mailbox_request"
+      ? "检测到本机可能存在官方信箱历史记录。"
+      : "检测到本机官方登录凭证（来自最近的官方请求），可以尝试读取官方信箱历史。",
     context: {
       baseUrl: validated.baseUrl,
       apiBaseUrl: validated.apiBaseUrl,
       token: mailbox.context.token,
       uid: mailbox.context.uid,
       deviceHeaders: mailbox.context.deviceHeaders,
-      lastMailboxRequest: true
+      lastMailboxRequest: mailbox.source === "mailbox_request",
+      credentialSource: mailbox.source
     }
   };
 }
@@ -591,7 +617,7 @@ async function officialRequest(fetchImpl, url, { context, signal, timeoutMs, att
     if (!response.ok) {
       if (authContext && (response.status === 401 || response.status === 403)) {
         throw new RemoteImportError(
-          "官方登录状态已过期，请在官方游戏中重新登录后重试。",
+          "官方服务器拒绝了本地保存的登录凭证（可能来自过旧的日志会话）。请启动官方游戏并重新登录，稍等片刻后重试。",
           { code: "official_session_expired", status: 401 }
         );
       }
@@ -613,7 +639,7 @@ async function officialRequest(fetchImpl, url, { context, signal, timeoutMs, att
       const detail = redactSecrets(String(envelope.message || envelope.code || "未知错误")).slice(0, 200);
       if (authContext) {
         throw new RemoteImportError(
-          `官方登录状态已过期：${detail}`,
+          `官方服务器拒绝了本地保存的登录凭证（${detail}）。请启动官方游戏并重新登录，稍等片刻后重试。`,
           { code: "official_session_expired", status: 401 }
         );
       }
