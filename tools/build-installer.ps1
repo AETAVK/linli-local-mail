@@ -126,6 +126,22 @@ $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("linli-installer-build-" 
 New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
 $buildSucceeded = $false
 
+$staleArtifacts = @(
+  $installerPath,
+  "$installerPath.sha256",
+  "$installerPath.json",
+  [IO.Path]::ChangeExtension($installerPath, ".pdb")
+)
+foreach ($artifact in $staleArtifacts) {
+  if (Test-Path -LiteralPath $artifact) {
+    try {
+      Remove-Item -LiteralPath $artifact -Force
+    } catch {
+      throw "无法覆盖旧安装器产物：$artifact。请先关闭正在运行的安装器或安全软件扫描窗口后重试。"
+    }
+  }
+}
+
 try {
   $releaseArguments = @("tools/release.mjs")
   if ($AllowDirty) { $releaseArguments += "--allow-dirty" }

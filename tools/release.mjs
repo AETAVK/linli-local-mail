@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = path.join(ROOT, "dist");
+const ALLOW_DIRTY = process.argv.includes("--allow-dirty");
 // 运行时包只从这份白名单取文件；源码仓库中的 docs/tests/历史/开发工具不会进入玩家包。
 // 目录项表示递归包含该目录，文件项表示只包含该文件。
 const RUNTIME_SOURCE_ALLOWLIST = [
@@ -57,10 +58,40 @@ function git(args, options = {}) {
 }
 
 function assertCleanTree() {
-  if (process.argv.includes("--allow-dirty")) return;
+  if (ALLOW_DIRTY) return;
   const status = git(["status", "--porcelain"]);
   if (status) {
     throw new Error("Working tree is not clean; commit or stash before building a release. Use --allow-dirty to override for local testing.\n" + status);
+  }
+}
+
+function trackedFilesUnder(sourcePath) {
+  const output = git(["ls-files", "-z", "--", sourcePath], { encoding: "utf8" });
+  return output.split("\0").filter(Boolean);
+}
+
+function overlayDirtyRuntimeSources(staging) {
+  if (!ALLOW_DIRTY) return;
+
+  // git archive 保证发布包不会带入未跟踪的私有文件；本地 --allow-dirty
+  // 仍需把已跟踪文件的工作树修改覆盖到暂存区，否则候选包会落后于当前源码。
+  for (const source of RUNTIME_SOURCE_ALLOWLIST) {
+    const sourcePath = path.join(ROOT, source);
+    const sourceStat = fs.existsSync(sourcePath) ? fs.statSync(sourcePath) : null;
+    const files = sourceStat?.isDirectory()
+      ? trackedFilesUnder(source)
+      : [source];
+
+    for (const relative of files) {
+      const currentPath = path.join(ROOT, relative);
+      const targetPath = path.join(staging, relative);
+      if (fs.existsSync(currentPath) && fs.statSync(currentPath).isFile()) {
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        fs.copyFileSync(currentPath, targetPath);
+      } else {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+      }
+    }
   }
 }
 
@@ -148,6 +179,7 @@ try {
   );
   execFileSync("tar", ["-xf", tarPath, "-C", staging], { windowsHide: true });
   fs.rmSync(tarPath, { force: true });
+  overlayDirtyRuntimeSources(staging);
 
   const wrapperBinary = path.join(staging, "native", "linli-launcher-wrapper.exe");
   fs.mkdirSync(path.dirname(wrapperBinary), { recursive: true });

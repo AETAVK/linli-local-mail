@@ -1,6 +1,6 @@
 export const HOST = "127.0.0.1";
 export const PORT = 27149;
-export const SERVICE_VERSION = "0.9.4";
+export const SERVICE_VERSION = "0.9.5";
 
 export const LETTER_STATUS = Object.freeze({
   PENDING: 1,

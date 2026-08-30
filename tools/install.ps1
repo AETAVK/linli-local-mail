@@ -4,7 +4,8 @@
 
 param(
   [switch]$NoLaunch,
-  [switch]$NonInteractive
+  [switch]$NonInteractive,
+  [switch]$RequireWrapper
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,18 +24,50 @@ function Die($message) {
   exit 1
 }
 
+function Test-PathLiteral([string]$path, [ValidateSet("Any", "Leaf", "Container")][string]$pathType = "Any") {
+  if ([string]::IsNullOrWhiteSpace($path)) { return $false }
+  if ($pathType -eq "Any") { return Test-Path -LiteralPath $path }
+  return Test-Path -LiteralPath $path -PathType $pathType
+}
+
+function Assert-NoLauncherProcess {
+  $running = @(Get-Process -Name "launcher", "launcher.original" -ErrorAction SilentlyContinue)
+  if ($running.Count -gt 0) {
+    $names = ($running | Select-Object -ExpandProperty ProcessName -Unique) -join ", "
+    Die "检测到启动器进程仍在运行（$names）。请完全退出游戏和启动器后重新运行安装包。"
+  }
+}
+
+function Move-ConflictingContainer([string]$path) {
+  if (-not (Test-PathLiteral $path -pathType Container)) { return }
+  $parent = Split-Path -Parent $path
+  $leaf = Split-Path -Leaf $path
+  $candidate = Join-Path -Path $parent -ChildPath ($leaf + ".linli-conflict-" + $PID)
+  $suffix = 2
+  while (Test-PathLiteral $candidate) {
+    $candidate = Join-Path -Path $parent -ChildPath ($leaf + ".linli-conflict-" + $PID + "-" + $suffix)
+    $suffix += 1
+  }
+  Move-Item -LiteralPath $path -Destination $candidate
+  Write-Warn2 "检测到启动脚本目标是目录，已保留为：$candidate"
+}
+
 Write-Host "林离本地回信桥 - 一键安装" -ForegroundColor White
 Write-Host "项目目录：$serviceRoot"
 Write-Host "游戏目录：$gameRoot"
 
+if (-not [Environment]::Is64BitOperatingSystem) {
+  Die "当前系统是 32 位 Windows。本项目安装包和内置 Node.js 仅支持 64 位 Windows 10/11。"
+}
+
 # ---- 步骤 1：游戏目录检查 ----
 Write-Step "检查游戏目录"
-$officialPack = Join-Path $gameRoot "0.0.9.627\resources\feapp.dat"
-$launcher = Join-Path $gameRoot "launcher.exe"
-if (-not (Test-Path $officialPack)) {
+$officialPack = Join-Path -Path $gameRoot -ChildPath "0.0.9.627\resources\feapp.dat"
+$launcher = Join-Path -Path $gameRoot -ChildPath "launcher.exe"
+if (-not (Test-PathLiteral $officialPack -pathType Leaf)) {
   Die "未找到 $officialPack。请确认 linli-local-mail 文件夹放在 0.0.9.627 版本的游戏根目录内（与 0.0.9.627、launcher.exe 平级）。"
 }
-if (-not (Test-Path $launcher)) {
+if (-not (Test-PathLiteral $launcher -pathType Leaf)) {
   Die "未找到 $launcher。请确认这是 BSide Olivia Lin 的游戏根目录。"
 }
 Write-Ok "游戏目录结构正确（0.0.9.627 本体 + launcher.exe）"
@@ -50,17 +83,28 @@ function Get-NodeVersion([string]$nodePath) {
 }
 
 function Add-KnownNodePaths {
-  $candidates = @(
-    (Join-Path $env:ProgramFiles "nodejs"),
-    (Join-Path ${env:ProgramFiles(x86)} "nodejs"),
-    (Join-Path $env:LOCALAPPDATA "Programs\nodejs")
-  ) | Where-Object { $_ -and (Test-Path (Join-Path $_ "node.exe")) }
+  $candidates = @()
+  $locations = @(
+    @{ Base = $env:ProgramFiles; Relative = "nodejs" }
+    @{ Base = ${env:ProgramFiles(x86)}; Relative = "nodejs" }
+    @{ Base = $env:LOCALAPPDATA; Relative = "Programs\nodejs" }
+  )
+  foreach ($location in $locations) {
+    if ([string]::IsNullOrWhiteSpace([string]$location.Base)) { continue }
+    $directory = Join-Path -Path ([string]$location.Base) -ChildPath $location.Relative
+    if (Test-PathLiteral (Join-Path -Path $directory -ChildPath "node.exe") -pathType Leaf) {
+      $candidates += $directory
+    }
+  }
   foreach ($directory in $candidates) {
-    if (($env:Path -split ';') -notcontains $directory) { $env:Path = "$env:Path;$directory" }
+    if ((@($env:Path -split ';') -notcontains $directory)) {
+      if ([string]::IsNullOrWhiteSpace($env:Path)) { $env:Path = $directory }
+      else { $env:Path = "$env:Path;$directory" }
+    }
   }
 }
 
-$bundledNodePath = Join-Path $serviceRoot "runtime\node.exe"
+$bundledNodePath = Join-Path -Path $serviceRoot -ChildPath "runtime\node.exe"
 $nodePath = $null
 $nodeVersion = $null
 $usingBundledNode = Test-Path -LiteralPath $bundledNodePath -PathType Leaf
@@ -136,9 +180,11 @@ function Invoke-NodeCommand([string[]]$arguments) {
   }
 }
 
+Assert-NoLauncherProcess
+
 # ---- 步骤 3：确认游戏本体是未打补丁的官方包或已完成安装 ----
 Write-Step "检查前端补丁状态"
-Push-Location $serviceRoot
+Push-Location -LiteralPath $serviceRoot
 try {
   $verifyResult = Invoke-NodeCommand @("tools\feapp.mjs", "verify")
   if ($verifyResult.ExitCode -eq 0) {
@@ -147,13 +193,14 @@ try {
     Write-Warn2 "补丁尚未安装或与当前版本不一致，开始安装……"
 
     # 基线缺失时先从官方包导入（幂等；官方包已被打补丁且基线仍在时会跳过导入直接安装）
-    $baselinePath = Join-Path $serviceRoot "backups\required\official-compatible-0.0.9.627\feapp.dat"
+    $baselinePath = Join-Path -Path $serviceRoot -ChildPath "backups\required\official-compatible-0.0.9.627\feapp.dat"
     $baselineOverride = $null
-    if (-not (Test-Path $baselinePath)) {
+    $reportedPath = $null
+    if (-not (Test-PathLiteral $baselinePath -pathType Leaf)) {
       Write-Host "    从官方包导入兼容基线（按 SHA-256 校验）……"
       $importResult = Invoke-NodeCommand @("tools\feapp.mjs", "import-baseline")
       $importResult.Output | Out-Host
-      if ($importResult.ExitCode -ne 0 -and -not (Test-Path $baselinePath)) {
+      if ($importResult.ExitCode -ne 0 -and -not (Test-PathLiteral $baselinePath -pathType Leaf)) {
         Die "导入兼容基线失败。安装目录里的 feapp.dat 既不是未修改的官方包，也无法证明出自本项目的补丁；请用 Steam 验证文件完整性恢复原始 0.0.9.627 官方文件后重试。"
       }
       # import-baseline 逆向重建的非官方基线（source=rebuilt-by-unpatching）只生成
@@ -161,9 +208,9 @@ try {
       foreach ($line in $importResult.Output) {
         if ($line -match '"baselinePath":\s*"(.*)"') { $reportedPath = $Matches[1] -replace '\\\\', '\' }
       }
-      if ($reportedPath -and -not (Test-Path $baselinePath)) {
-        $candidate = Join-Path $serviceRoot $reportedPath
-        if (Test-Path $candidate) { $baselineOverride = $candidate }
+      if ($reportedPath -and -not (Test-PathLiteral $baselinePath -pathType Leaf)) {
+        $candidate = Join-Path -Path $serviceRoot -ChildPath $reportedPath
+        if (Test-PathLiteral $candidate -pathType Leaf) { $baselineOverride = $candidate }
       }
     }
 
@@ -180,15 +227,18 @@ try {
 } finally {
   Pop-Location
 }
+
 # ---- 步骤 4：把启动入口写入游戏根目录 ----
 # 模板内容与 tools/release.mjs 的 ROOT_CMD_FILES 同源；脚本内置生成，
 # 因此源码归档（Git/Gitee 的 main zip，不含 game-root-shortcuts 目录）也能获得完整入口。
 Write-Step "配置游戏根目录启动入口"
-$shortcuts = Join-Path $serviceRoot "game-root-shortcuts"
+$shortcuts = Join-Path -Path $serviceRoot -ChildPath "game-root-shortcuts"
 $installed = 0
-if (Test-Path $shortcuts) {
-  foreach ($file in Get-ChildItem $shortcuts -Filter "*.cmd") {
-    Copy-Item $file.FullName (Join-Path $gameRoot $file.Name) -Force
+if (Test-PathLiteral $shortcuts -pathType Container) {
+  foreach ($file in Get-ChildItem -LiteralPath $shortcuts -Filter "*.cmd" -File) {
+    $destination = Join-Path -Path $gameRoot -ChildPath $file.Name
+    Move-ConflictingContainer $destination
+    Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
     $installed += 1
   }
 } else {
@@ -199,7 +249,9 @@ if (Test-Path $shortcuts) {
     "Stop-LinliLocalMail.cmd"              = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"%~dp0linli-local-mail\Stop-LinliLocalMail.ps1`"`r`n"
   }
   foreach ($entry in $shortcutTemplates.GetEnumerator()) {
-    [System.IO.File]::WriteAllText((Join-Path $gameRoot $entry.Key), $entry.Value, [System.Text.Encoding]::ASCII)
+    $destination = Join-Path -Path $gameRoot -ChildPath $entry.Key
+    Move-ConflictingContainer $destination
+    [System.IO.File]::WriteAllText($destination, $entry.Value, [System.Text.Encoding]::ASCII)
     $installed += 1
   }
 }
@@ -211,8 +263,11 @@ if ($installed -gt 0) {
 
 # ---- 步骤 5：安装直接运行 launcher.exe 的本地服务包装器 ----
 Write-Step "安装直接运行 launcher.exe 的本地服务包装器"
-$wrapperBinary = Join-Path $serviceRoot "native\linli-launcher-wrapper.exe"
-if (-not (Test-Path $wrapperBinary)) {
+$wrapperBinary = Join-Path -Path $serviceRoot -ChildPath "native\linli-launcher-wrapper.exe"
+if (-not (Test-PathLiteral $wrapperBinary -pathType Leaf)) {
+  if ($RequireWrapper) {
+    Die "安装载荷缺少本地服务包装器：$wrapperBinary。请重新下载 Release 页的 LinliLocalMail-Setup.exe，不要使用 Source code 压缩包。"
+  }
   # 源码归档（Git/Gitee main zip）不含编译产物；补丁已完成，wrapper 缺失只影响
   # “双击 launcher.exe 自动拉起服务”，不该让整个安装失败。
   Write-Warn2 "未找到 native\linli-launcher-wrapper.exe —— 你下载的应该是源码归档（Source code zip），"
@@ -227,7 +282,7 @@ if (-not (Test-Path $wrapperBinary)) {
   }
   Write-Warn2 "已跳过包装器安装（写信链路不受影响）。"
 } else {
-  $launcherWrapperInstaller = Join-Path $PSScriptRoot "install-launcher-wrapper.ps1"
+  $launcherWrapperInstaller = Join-Path -Path $PSScriptRoot -ChildPath "install-launcher-wrapper.ps1"
   & $launcherWrapperInstaller
   if ($LASTEXITCODE -ne 0) { Die "本地服务包装器安装失败，请把上方错误信息反馈给维护者。" }
   Write-Ok "包装器已安装；官方 launcher.exe 已保留为 launcher.original.exe"

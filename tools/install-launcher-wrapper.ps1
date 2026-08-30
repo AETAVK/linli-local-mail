@@ -27,6 +27,12 @@ function Stop-IfRunning {
   }
 }
 
+function Assert-FilePath([string]$path, [string]$description) {
+  if ((Test-Path -LiteralPath $path) -and -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    throw "$description is not a regular file: $path"
+  }
+}
+
 function Get-OriginalSignatureStatus([string]$path) {
   $signatureCommand = Get-Command Get-AuthenticodeSignature -ErrorAction SilentlyContinue
   if (-not $signatureCommand) { return "Unavailable" }
@@ -36,6 +42,10 @@ function Get-OriginalSignatureStatus([string]$path) {
     return "Unavailable"
   }
 }
+
+Assert-FilePath $launcherPath "Game launcher"
+Assert-FilePath $originalPath "Official launcher backup"
+Assert-FilePath $manifestPath "Launcher wrapper manifest"
 
 if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) {
   throw "Game launcher was not found: $launcherPath"

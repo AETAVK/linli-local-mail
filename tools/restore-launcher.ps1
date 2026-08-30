@@ -18,6 +18,16 @@ function Get-Sha256([string]$path) {
   }
 }
 
+function Assert-FilePath([string]$path, [string]$description) {
+  if ((Test-Path -LiteralPath $path) -and -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    throw "$description is not a regular file: $path"
+  }
+}
+
+Assert-FilePath $launcherPath "Game launcher"
+Assert-FilePath $originalPath "Official launcher backup"
+Assert-FilePath $manifestPath "Launcher wrapper manifest"
+
 if (-not (Test-Path -LiteralPath $originalPath -PathType Leaf)) {
   throw "Official launcher backup was not found: $originalPath"
 }

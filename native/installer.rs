@@ -1,12 +1,13 @@
 #![windows_subsystem = "windows"]
 
 use std::env;
-use std::ffi::c_void;
-use std::fs;
+use std::ffi::{c_void, OsString};
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MB_OK: u32 = 0x0000_0000;
@@ -23,6 +24,7 @@ const WAIT_OBJECT_0: u32 = 0x0000_0000;
 const WAIT_TIMEOUT: u32 = 0x0000_0102;
 
 static PAYLOAD: &[u8] = include_bytes!(env!("LINLI_INSTALLER_PAYLOAD"));
+const EXTRACT_SCRIPT_CONTENT: &str = include_str!("extract-payload.ps1");
 
 #[repr(C)]
 struct BrowseInfoW {
@@ -147,6 +149,40 @@ fn wait_for_process_exit(process_id: u32) -> Result<(), String> {
     }
 }
 
+fn assert_no_launcher_process() -> Result<(), String> {
+    let mut running = Vec::new();
+    for name in ["launcher.exe", "launcher.original.exe"] {
+        let filter = format!("IMAGENAME eq {name}");
+        let Ok(output) = Command::new("tasklist.exe")
+            .arg("/FI")
+            .arg(&filter)
+            .args(["/FO", "CSV", "/NH"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+        else {
+            continue;
+        };
+        if !output.status.success() {
+            continue;
+        }
+        let needle = format!("\"{name}\"").to_ascii_lowercase();
+        if String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .any(|line| line.to_ascii_lowercase().contains(&needle))
+        {
+            running.push(name);
+        }
+    }
+    if running.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "检测到启动器进程仍在运行（{}）。请完全退出游戏和启动器后重新运行安装包。",
+            running.join("、")
+        ))
+    }
+}
+
 fn is_game_root(path: &Path) -> bool {
     path.join("0.0.9.627")
         .join("resources")
@@ -199,44 +235,123 @@ fn resolve_game_root() -> Result<Option<PathBuf>, String> {
 fn output_text(output: &Output) -> String {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    format!("{stdout}{stderr}").trim().to_string()
+    let text = format!("{stdout}{stderr}").trim().to_string();
+    if text.is_empty() {
+        return format!("PowerShell 退出状态：{}", output.status);
+    }
+    text
 }
 
-fn write_log(path: &Path, content: &str) {
+fn write_log(path: &Path, content: &str) -> bool {
     if let Ok(mut file) = fs::File::create(path) {
-        let _ = file.write_all(content.as_bytes());
+        return file.write_all(content.as_bytes()).is_ok();
     }
+    false
 }
 
-fn run_powershell_script(script: &Path, arguments: &[&Path], current_dir: &Path) -> Result<Output, String> {
-    let mut command = Command::new("powershell.exe");
-    command
-        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-        .arg(script);
-    for argument in arguments {
-        command.arg(argument);
+fn powershell_candidates() -> Vec<OsString> {
+    let mut candidates = Vec::new();
+    for variable in ["SystemRoot", "windir"] {
+        if let Some(root) = env::var_os(variable) {
+            let candidate = PathBuf::from(root)
+                .join("System32")
+                .join("WindowsPowerShell")
+                .join("v1.0")
+                .join("powershell.exe");
+            if candidate.is_file() {
+                candidates.push(candidate.into_os_string());
+                break;
+            }
+        }
     }
-    command
-        .current_dir(current_dir)
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|error| format!("无法启动 PowerShell：{error}"))
+    candidates.push(OsString::from("powershell.exe"));
+    candidates.push(OsString::from("pwsh.exe"));
+    candidates
+}
+
+fn run_powershell_file(
+    script: &Path,
+    script_arguments: &[OsString],
+    current_dir: &Path,
+) -> Result<Output, String> {
+    let mut last_error = String::from("未找到 PowerShell");
+    for shell in powershell_candidates() {
+        let attempt = Command::new(&shell)
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(script)
+            .args(script_arguments)
+            .current_dir(current_dir)
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+        match attempt {
+            Ok(output) => return Ok(output),
+            Err(error) => last_error = format!("{}: {error}", shell.to_string_lossy()),
+        }
+    }
+    Err(format!("无法启动 PowerShell：{last_error}"))
 }
 
 fn run_install_script(script: &Path, service_root: &Path) -> Result<Output, String> {
-    Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-        ])
-        .arg(script)
-        .args(["-NoLaunch", "-NonInteractive"])
-        .current_dir(service_root)
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|error| format!("无法启动安装脚本：{error}"))
+    run_powershell_file(
+        script,
+        &[
+            OsString::from("-NoLaunch"),
+            OsString::from("-NonInteractive"),
+            OsString::from("-RequireWrapper"),
+        ],
+        service_root,
+    )
+}
+
+fn unique_suffix() -> String {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_nanos())
+        .unwrap_or_default();
+    format!("{}-{timestamp}", std::process::id())
+}
+
+fn check_directory_writable(directory: &Path) -> Result<(), String> {
+    let probe = directory.join(format!(
+        ".linli-local-mail-write-test-{}.tmp",
+        unique_suffix()
+    ));
+    match OpenOptions::new().write(true).create_new(true).open(&probe) {
+        Ok(file) => {
+            drop(file);
+            let _ = fs::remove_file(&probe);
+            Ok(())
+        }
+        Err(error) => Err(format!("{} ({error})", directory.display())),
+    }
+}
+
+fn create_temporary_root(game_root: &Path) -> Result<PathBuf, String> {
+    let mut bases = vec![env::temp_dir()];
+    if !bases.iter().any(|base| base == game_root) {
+        bases.push(game_root.to_path_buf());
+    }
+    let mut errors = Vec::new();
+    for base in bases {
+        let candidate = base.join(format!(
+            "linli-local-mail-installer-{}",
+            unique_suffix()
+        ));
+        match fs::create_dir_all(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) => errors.push(format!("{} ({error})", candidate.display())),
+        }
+    }
+    Err(format!("无法创建临时安装目录：{}", errors.join("；")))
+}
+
+fn write_failure_log(game_root: &Path, content: &str) -> Option<PathBuf> {
+    let path = game_root.join("linli-local-mail-installer-failure.log");
+    if write_log(&path, content) {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 fn install(game_root: &Path, silent: bool, confirmed_update: bool) -> Result<(), String> {
@@ -252,60 +367,47 @@ fn install(game_root: &Path, silent: bool, confirmed_update: bool) -> Result<(),
         }
     }
 
-    let temporary_root = env::temp_dir().join(format!("linli-local-mail-installer-{}", std::process::id()));
-    fs::create_dir_all(&temporary_root).map_err(|error| format!("无法创建临时目录：{error}"))?;
+    assert_no_launcher_process()?;
+    check_directory_writable(game_root).map_err(|error| {
+        format!(
+            "游戏目录不可写：{error}\n请先关闭游戏；如果游戏安装在受保护目录，请以管理员身份运行安装包。"
+        )
+    })?;
+    let temporary_root = create_temporary_root(game_root)?;
     let payload_zip = temporary_root.join("payload.zip");
     let extract_script = temporary_root.join("extract-payload.ps1");
     let extract_log = temporary_root.join("extract-payload.log");
     let install_log = temporary_root.join("install.log");
-    let extract_script_content = r#"
-param(
-  [Parameter(Mandatory=$true)][string]$Zip,
-  [Parameter(Mandatory=$true)][string]$Destination
-)
-$ErrorActionPreference = "Stop"
-# 预清理：zip 中是文件、目标中却存在同名【目录】的冲突。
-# 常见于此前用其他工具（资源管理器/部分解压器）解压过旧 zip 的机器——目录条目
-# 处理出错会把 backup.mjs 等文件名建成目录，Expand-Archive 写入被拒后在回滚时
-# 又报 PathNotFound，掩盖真实原因。
-$tar = Join-Path $env:SystemRoot "system32\tar.exe"
-if (Test-Path $tar) {
-  $entries = & $tar -tf $Zip
-  foreach ($entry in $entries) {
-    if ($entry.EndsWith("/")) { continue }
-    $name = $entry.TrimStart("./")
-    if (-not $name) { continue }
-    $target = Join-Path $Destination ($name -replace "/", "\")
-    if ((Test-Path -LiteralPath $target) -and (Get-Item -LiteralPath $target).PSIsContainer) {
-      Remove-Item -LiteralPath $target -Recurse -Force
-    }
-  }
-  # bsdtar 对 tar 风格流式 zip 支持完整，优先使用
-  & $tar -xf $Zip -C $Destination
-  if ($LASTEXITCODE -eq 0) { exit 0 }
-  # bsdtar 失败则回退到 Expand-Archive（预清理已消除最常见冲突）
-  Expand-Archive -LiteralPath $Zip -DestinationPath $Destination -Force
-} else {
-  Expand-Archive -LiteralPath $Zip -DestinationPath $Destination -Force
-}
-"#;
-
     if let Err(error) = fs::write(&payload_zip, PAYLOAD) {
         let _ = fs::remove_dir_all(&temporary_root);
         return Err(format!("无法写入安装载荷：{error}"));
     }
-    if let Err(error) = fs::write(&extract_script, extract_script_content) {
+    if let Err(error) = fs::write(&extract_script, EXTRACT_SCRIPT_CONTENT.as_bytes()) {
         let _ = fs::remove_dir_all(&temporary_root);
         return Err(format!("无法准备解压步骤：{error}"));
     }
 
-    let extraction = run_powershell_script(&extract_script, &[&payload_zip, game_root], game_root)?;
-    write_log(&extract_log, &output_text(&extraction));
+    let extraction = run_powershell_file(
+        &extract_script,
+        &[
+            OsString::from("-Zip"),
+            payload_zip.as_os_str().to_os_string(),
+            OsString::from("-Destination"),
+            game_root.as_os_str().to_os_string(),
+        ],
+        game_root,
+    )?;
+    let extraction_output = output_text(&extraction);
+    write_log(&extract_log, &extraction_output);
     if !extraction.status.success() {
+        let stable_log = write_failure_log(game_root, &extraction_output);
         return Err(format!(
-            "解压安装文件失败。详细日志：{}\n{}",
+            "解压安装文件失败。详细日志：{}{}\n{}",
             extract_log.display(),
-            output_text(&extraction)
+            stable_log
+                .map(|path| format!("；{}", path.display()))
+                .unwrap_or_default(),
+            extraction_output
         ));
     }
 
@@ -314,12 +416,17 @@ if (Test-Path $tar) {
         return Err(format!("解压后找不到安装脚本：{}", install_script.display()));
     }
     let installation = run_install_script(&install_script, &service_root)?;
-    write_log(&install_log, &output_text(&installation));
+    let installation_output = output_text(&installation);
+    write_log(&install_log, &installation_output);
     if !installation.status.success() {
+        let stable_log = write_failure_log(game_root, &installation_output);
         return Err(format!(
-            "游戏文件安装失败。详细日志：{}\n{}",
+            "游戏文件安装失败。详细日志：{}{}\n{}",
             install_log.display(),
-            output_text(&installation)
+            stable_log
+                .map(|path| format!("；{}", path.display()))
+                .unwrap_or_default(),
+            installation_output
         ));
     }
 

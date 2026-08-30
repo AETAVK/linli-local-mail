@@ -572,22 +572,55 @@
     }
   }
 
+  function isVisibleElement(element) {
+    if (!element || !element.isConnected) return false;
+    var style = window.getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+    var rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function hasExactMenuLabel(container, label) {
+    return Array.prototype.slice.call(container.querySelectorAll("div,button,a,[role='menuitem']"))
+      .some(function (item) {
+        return isVisibleElement(item) && item.textContent.trim() === label;
+      });
+  }
+
+  function findUserMenuByLabels() {
+    var candidates = Array.prototype.slice.call(document.querySelectorAll("div,button,a,[role='menuitem']"));
+    var settingsItems = candidates.filter(function (item) {
+      return isVisibleElement(item) && item.textContent.trim() === "设置";
+    });
+    for (var index = 0; index < settingsItems.length; index += 1) {
+      var settingsItem = settingsItems[index];
+      var menu = settingsItem.parentElement;
+      for (var depth = 0; menu && depth < 5; depth += 1, menu = menu.parentElement) {
+        if (!isVisibleElement(menu)) continue;
+        if (!hasExactMenuLabel(menu, "账号中心") || !hasExactMenuLabel(menu, "个人资料")) continue;
+        return { trigger: null, menu: menu, settingsItem: settingsItem };
+      }
+    }
+    return null;
+  }
+
   function findUserMenu() {
     var trigger = document.querySelector('button[aria-label="User menu"]');
-    if (!trigger || !trigger.parentElement) return null;
-    var menu = Array.prototype.slice.call(trigger.parentElement.children).find(function (child) {
-      return child !== trigger && child.matches && child.matches("div.absolute");
-    });
-    if (!menu) return null;
-    return { trigger: trigger, menu: menu };
+    if (trigger && trigger.parentElement) {
+      var menu = Array.prototype.slice.call(trigger.parentElement.children).find(function (child) {
+        return child !== trigger && child.matches && child.matches("div.absolute");
+      });
+      if (menu) return { trigger: trigger, menu: menu, settingsItem: null };
+    }
+    return findUserMenuByLabels();
   }
 
   function mountUpdateMenuItem() {
     if (document.getElementById(UPDATE_MENU_ITEM_ID)) return;
     var context = findUserMenu();
     if (!context) return;
-    var settingsItem = Array.prototype.slice.call(context.menu.querySelectorAll("div")).find(function (item) {
-      return item.textContent.trim() === "设置" && item.classList.contains("cursor-pointer");
+    var settingsItem = context.settingsItem || Array.prototype.slice.call(context.menu.querySelectorAll("div,button,a,[role='menuitem']")).find(function (item) {
+      return isVisibleElement(item) && item.textContent.trim() === "设置";
     });
     if (!settingsItem || !settingsItem.parentElement) return;
     installStyles();
@@ -599,7 +632,7 @@
     item.addEventListener("click", function (event) {
       event.preventDefault();
       event.stopPropagation();
-      context.trigger.click();
+      if (context.trigger && typeof context.trigger.click === "function") context.trigger.click();
       checkForUpdate(true);
     });
     settingsItem.insertAdjacentElement("afterend", item);

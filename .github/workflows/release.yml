@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "要构建的版本标签，例如 v0.8.1"
+        description: "要构建的版本标签，例如 v0.9.5"
         required: true
         type: string
       source_ref:
@@ -77,6 +77,20 @@ jobs:
             & node --check $file
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $file" }
           }
+
+      - name: Smoke test installer extractor (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File ".github\scripts\installer-smoke.ps1"
+          if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell 5.1 installer smoke test failed" }
+
+      - name: Smoke test installer extractor (PowerShell 7)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ".github\scripts\installer-smoke.ps1"
+          if ($LASTEXITCODE -ne 0) { throw "PowerShell 7 installer smoke test failed" }
 
       - name: Build installer and verify runtime allowlist
         shell: pwsh
