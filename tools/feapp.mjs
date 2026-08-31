@@ -22,6 +22,10 @@ const PATCH_RULES = [
   ["Te.get(\"/letter/unread_count\"", "window.__LOCAL_MAIL_HTTP__.get(\"/letter/unread_count\""],
   ["Te.post(\"/letter/share\"", "window.__LOCAL_MAIL_HTTP__.post(\"/letter/share\""],
   ["Te.post(\"/letter/resend\"", "window.__LOCAL_MAIL_HTTP__.post(\"/letter/resend\""],
+  [
+    "async function Us(e,t){return Te.get(\"/searchPlaylist\",{params:e,...t}).then(s=>({...s.data,list:s.data.list.map(i=>({...i,itemId:i.itemId,performanceId:i.performanceId??\"\",songId:i.songId??\"\",id:i.itemId}))}))}async function Xp",
+    "async function Us(e,t){return Te.get(\"/searchPlaylist\",{params:e,...t}).then(s=>({...s.data,list:s.data.list.map(i=>({...i,itemId:i.itemId,performanceId:i.performanceId??\"\",songId:i.songId??\"\",id:i.itemId}))}))}window.__LOCAL_MUSIC_API__=Object.freeze({addToPlaylist:An,removeFromPlaylist:Nn,searchPlaylist:Us});async function Xp"
+  ],
   ["!o(w)&&o(Ss)?(r(),F(Be,", "!0?(r(),F(Be,"],
   ["J=async()=>{Q(),await C(),await H(),L=setInterval(H,U)}", "J=async()=>{if(Ie().isOfflineMode)return;Q(),await C(),await H(),L=setInterval(H,U)}"],
   ["w=()=>{l.value=!0}", "w=()=>{Ie().isOfflineMode?ze.warning(\"离线版尚未接入 MIDI 定制演奏服务\"):l.value=!0}"]

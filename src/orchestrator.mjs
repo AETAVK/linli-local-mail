@@ -202,7 +202,12 @@ export class GenerationWorker {
   async testActiveModel() {
     const config = await getInternalModelConfig(this.database, this.secretStore);
     const { provider, model } = activeSelection(config);
-    const letter = { content: "这是一封本地连接测试信。请用两到三句话自然回应，并明确写到‘连接成功’。" };
+    // 模型测试使用临时来信，不写入数据库；仍需提供稳定的排除键，
+    // 避免 historyRows 将 undefined 绑定到 SQLite 的第一个参数。
+    const letter = {
+      letterId: "__local_model_test__",
+      content: "这是一封本地连接测试信。请用两到三句话自然回应，并明确写到‘连接成功’。"
+    };
     const generation = {
       ...config.generation,
       maxOutputTokens: Math.min(800, config.generation.maxOutputTokens)

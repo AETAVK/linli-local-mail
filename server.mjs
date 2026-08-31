@@ -402,6 +402,35 @@ const server = http.createServer(async (req, res) => {
       ok(req, res, database.updateRuntimeSettings(await readJsonBody(req)));
       return;
     }
+    if (req.method === "GET" && url.pathname === "/api/music-library") {
+      ok(req, res, database.getMusicLibrary());
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/music-library/preferences") {
+      ok(req, res, database.updateMusicLibraryPreferences(await readJsonBody(req)));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/music-library/playlists") {
+      ok(req, res, database.createMusicPlaylist(await readJsonBody(req)));
+      return;
+    }
+    const musicPlaylistMatch = url.pathname.match(/^\/api\/music-library\/playlists\/([^/]+)(?:\/(items|remove))?$/);
+    if (musicPlaylistMatch) {
+      const playlistId = decodeURIComponent(musicPlaylistMatch[1]);
+      const action = musicPlaylistMatch[2] || "";
+      if (req.method === "GET" && !action) {
+        ok(req, res, database.listMusicPlaylistItems(playlistId));
+        return;
+      }
+      if (req.method === "POST" && action === "items") {
+        ok(req, res, database.addMusicPlaylistItems(playlistId, await readJsonBody(req)));
+        return;
+      }
+      if (req.method === "POST" && action === "remove") {
+        ok(req, res, database.removeMusicPlaylistItems(playlistId, await readJsonBody(req)));
+        return;
+      }
+    }
     if (req.method === "GET" && url.pathname === "/api/update/check") {
       ok(req, res, await updateManager.check({ force: url.searchParams.get("force") === "1" }));
       return;

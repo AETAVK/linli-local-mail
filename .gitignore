@@ -5,11 +5,19 @@
 /logs/
 /node_modules/
 /runtime/
+/game-root-shortcuts/
+/payload-*.zip
 /.verification/
 /.mimosa/
 
 /native/*.exe
 /native/*.pdb
+
+# 玩家导入、扫描输出和临时构建证据可能包含私人信件、路径或官方资源。
+# 已跟踪的历史样本仍只属于私有仓库；不要新增同类文件到提交中。
+/imports/history/*.json
+/imports/legacy/*.json
+/installer-artifacts/
 
 *.cer
 *.key

@@ -15,6 +15,7 @@ import {
   writeLetterArguments
 } from "./history.mjs";
 import {
+  compactWhitespace,
   jsonOrNull,
   nowSeconds,
   parseJson,
@@ -119,6 +120,91 @@ function normalizeRuntimeSettings(input, current) {
   };
 }
 
+const MUSIC_SOURCE_TYPES = new Set([2, 3]);
+const MUSIC_PLAYLIST_ID_PATTERN = /^music-playlist-[a-z0-9-]+$/i;
+
+function musicInputError(message, status = 400) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+function normalizeMusicPlaylistId(value) {
+  const id = String(value ?? "").trim();
+  if (!MUSIC_PLAYLIST_ID_PATTERN.test(id) || id.length > 120) {
+    throw musicInputError("自定义歌单编号无效");
+  }
+  return id;
+}
+
+function normalizeMusicPlaylistName(value) {
+  const name = compactWhitespace(value);
+  if (!name) throw musicInputError("请输入歌单名称");
+  if (name.length > 40) throw musicInputError("歌单名称不能超过 40 个字符");
+  return name;
+}
+
+function normalizeMusicText(value, maximum = 240) {
+  return String(value ?? "").replace(/\u0000/g, "").trim().slice(0, maximum);
+}
+
+function normalizeMusicUrl(value) {
+  const text = normalizeMusicText(value, 2048);
+  if (!text) return "";
+  try {
+    const parsed = new URL(text);
+    return new Set(["http:", "https:"]).has(parsed.protocol) ? text : "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeMusicSong(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw musicInputError("歌单曲目格式无效");
+  }
+  const sourceType = Number(input.sourceType ?? input.itemType);
+  if (!MUSIC_SOURCE_TYPES.has(sourceType)) {
+    throw musicInputError("歌单曲目来源无效");
+  }
+  const id = normalizeMusicText(input.id ?? input.itemId, 160);
+  if (!id) throw musicInputError("歌单曲目缺少编号");
+
+  const song = {
+    id,
+    name: normalizeMusicText(input.name, 240) || "未命名曲目",
+    nameKey: normalizeMusicText(input.nameKey, 240),
+    iconUrl: normalizeMusicUrl(input.iconUrl ?? input.coverUrl),
+    performanceType: normalizeMusicText(input.performanceType, 80),
+    performanceTypeDisplayShortName: normalizeMusicText(input.performanceTypeDisplayShortName, 80),
+    styleType: normalizeMusicText(input.styleType, 80),
+    styleTypeDisplayName: normalizeMusicText(input.styleTypeDisplayName, 120),
+    duration: Number.isFinite(Number(input.duration)) ? Math.max(0, Math.min(86_400, Number(input.duration))) : 0,
+    videoUrl: normalizeMusicUrl(input.videoUrl),
+    videoByTodView: normalizeMusicText(input.videoByTodView, 240)
+  };
+  return {
+    itemKey: `${sourceType}:${id}`,
+    sourceType,
+    song
+  };
+}
+
+function normalizeMusicItemKeys(input) {
+  const values = Array.isArray(input) ? input : [input];
+  const keys = [];
+  const seen = new Set();
+  for (const value of values) {
+    const key = String(value ?? "").trim();
+    if (!/^[23]:[^\s]{1,160}$/.test(key) || seen.has(key)) continue;
+    seen.add(key);
+    keys.push(key);
+  }
+  if (!keys.length) throw musicInputError("请至少选择一首曲目");
+  if (keys.length > 200) throw musicInputError("一次最多操作 200 首曲目");
+  return keys;
+}
+
 export class MailDatabase {
   constructor(dbPath, legacyJsonPath) {
     this.dbPath = dbPath;
@@ -177,6 +263,26 @@ export class MailDatabase {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS music_playlists (
+        playlist_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS music_playlist_items (
+        playlist_id TEXT NOT NULL,
+        item_key TEXT NOT NULL,
+        source_type INTEGER NOT NULL,
+        song_json TEXT NOT NULL,
+        added_at INTEGER NOT NULL,
+        PRIMARY KEY(playlist_id, item_key),
+        FOREIGN KEY(playlist_id) REFERENCES music_playlists(playlist_id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_music_playlist_items_added
+        ON music_playlist_items(playlist_id, added_at);
 
       CREATE TABLE IF NOT EXISTS generation_jobs (
         job_id TEXT PRIMARY KEY,
@@ -238,7 +344,8 @@ export class MailDatabase {
     insertSetting.run("remoteImport.lastSuccessAt", "");
     insertSetting.run("remoteImport.lastImportedAccount", "");
     insertSetting.run("remoteImport.lastImportedIdsHash", "");
-    this.db.exec("PRAGMA user_version = 3");
+    insertSetting.run("musicLibrary.confirmSelectionClear", "1");
+    this.db.exec("PRAGMA user_version = 4");
   }
 
   prepare() {
@@ -248,6 +355,44 @@ export class MailDatabase {
         INSERT INTO settings(key, value) VALUES(?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `),
+      musicPlaylistList: this.db.prepare(`
+        SELECT p.playlist_id, p.name, p.created_at, p.updated_at,
+               COUNT(i.item_key) AS item_count
+        FROM music_playlists p
+        LEFT JOIN music_playlist_items i ON i.playlist_id = p.playlist_id
+        GROUP BY p.playlist_id
+        ORDER BY p.created_at ASC, p.playlist_id ASC
+      `),
+      musicPlaylistGet: this.db.prepare(`
+        SELECT p.playlist_id, p.name, p.created_at, p.updated_at,
+               COUNT(i.item_key) AS item_count
+        FROM music_playlists p
+        LEFT JOIN music_playlist_items i ON i.playlist_id = p.playlist_id
+        WHERE p.playlist_id = ?
+        GROUP BY p.playlist_id
+      `),
+      musicPlaylistByName: this.db.prepare("SELECT playlist_id FROM music_playlists WHERE name = ? COLLATE NOCASE"),
+      musicPlaylistInsert: this.db.prepare(`
+        INSERT INTO music_playlists(playlist_id, name, created_at, updated_at)
+        VALUES(?, ?, ?, ?)
+      `),
+      musicPlaylistItems: this.db.prepare(`
+        SELECT item_key, source_type, song_json, added_at
+        FROM music_playlist_items
+        WHERE playlist_id = ?
+        ORDER BY added_at ASC, rowid ASC
+      `),
+      musicPlaylistItemUpsert: this.db.prepare(`
+        INSERT INTO music_playlist_items(playlist_id, item_key, source_type, song_json, added_at)
+        VALUES(?, ?, ?, ?, ?)
+        ON CONFLICT(playlist_id, item_key) DO UPDATE SET
+          source_type = excluded.source_type,
+          song_json = excluded.song_json
+      `),
+      musicPlaylistItemDelete: this.db.prepare(`
+        DELETE FROM music_playlist_items WHERE playlist_id = ? AND item_key = ?
+      `),
+      musicPlaylistTouch: this.db.prepare("UPDATE music_playlists SET updated_at = ? WHERE playlist_id = ?"),
       letterInsert: this.db.prepare(`INSERT OR IGNORE INTO letters(${LETTER_COLUMNS}) VALUES(${LETTER_VALUES})`),
       letterUpsert: this.db.prepare(`
         INSERT INTO letters(${LETTER_COLUMNS}) VALUES(${LETTER_VALUES})
@@ -358,6 +503,137 @@ export class MailDatabase {
     this.setSetting("daily_letter_limit", next.dailyLetterLimit);
     this.setSetting("debug_mode", next.debugMode ? "1" : "0");
     return this.getRuntimeSettings();
+  }
+
+  musicPlaylistRow(row) {
+    if (!row) return null;
+    return {
+      playlistId: row.playlist_id,
+      name: row.name,
+      itemCount: Number(row.item_count || 0),
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at)
+    };
+  }
+
+  listMusicPlaylists() {
+    return this.statements.musicPlaylistList.all().map((row) => this.musicPlaylistRow(row));
+  }
+
+  getMusicPlaylist(playlistId) {
+    return this.musicPlaylistRow(this.statements.musicPlaylistGet.get(normalizeMusicPlaylistId(playlistId)));
+  }
+
+  requireMusicPlaylist(playlistId) {
+    const playlist = this.getMusicPlaylist(playlistId);
+    if (!playlist) throw musicInputError("找不到该自定义歌单", 404);
+    return playlist;
+  }
+
+  createMusicPlaylist(input) {
+    const name = normalizeMusicPlaylistName(input?.name ?? input);
+    if (this.statements.musicPlaylistByName.get(name)) {
+      throw musicInputError("已有同名自定义歌单", 409);
+    }
+    const playlistId = randomId("music-playlist");
+    const now = nowSeconds();
+    this.statements.musicPlaylistInsert.run(playlistId, name, now, now);
+    return this.requireMusicPlaylist(playlistId);
+  }
+
+  listMusicPlaylistItems(playlistId) {
+    const playlist = this.requireMusicPlaylist(playlistId);
+    const items = this.statements.musicPlaylistItems.all(playlist.playlistId).map((row) => ({
+      itemKey: row.item_key,
+      sourceType: Number(row.source_type),
+      song: parseJson(row.song_json, {}),
+      addedAt: Number(row.added_at)
+    }));
+    return { playlist, items };
+  }
+
+  addMusicPlaylistItems(playlistId, input) {
+    const playlist = this.requireMusicPlaylist(playlistId);
+    const rawSongs = Array.isArray(input?.songs) ? input.songs : input?.song ? [input.song] : [];
+    if (!rawSongs.length) throw musicInputError("请至少选择一首曲目");
+    if (rawSongs.length > 200) throw musicInputError("一次最多操作 200 首曲目");
+    const songs = rawSongs.map(normalizeMusicSong);
+    const now = nowSeconds();
+    let added = 0;
+    let updated = 0;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const entry of songs) {
+        const exists = this.db.prepare(
+          "SELECT 1 AS found FROM music_playlist_items WHERE playlist_id = ? AND item_key = ?"
+        ).get(playlist.playlistId, entry.itemKey);
+        this.statements.musicPlaylistItemUpsert.run(
+          playlist.playlistId,
+          entry.itemKey,
+          entry.sourceType,
+          JSON.stringify(entry.song),
+          now
+        );
+        if (exists) updated += 1;
+        else added += 1;
+      }
+      this.statements.musicPlaylistTouch.run(now, playlist.playlistId);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      playlist: this.requireMusicPlaylist(playlist.playlistId),
+      requested: songs.length,
+      added,
+      updated
+    };
+  }
+
+  removeMusicPlaylistItems(playlistId, input) {
+    const playlist = this.requireMusicPlaylist(playlistId);
+    const itemKeys = normalizeMusicItemKeys(input?.itemKeys ?? input?.item_keys ?? input);
+    let removed = 0;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const itemKey of itemKeys) {
+        removed += this.statements.musicPlaylistItemDelete.run(playlist.playlistId, itemKey).changes;
+      }
+      if (removed) this.statements.musicPlaylistTouch.run(nowSeconds(), playlist.playlistId);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      playlist: this.requireMusicPlaylist(playlist.playlistId),
+      requested: itemKeys.length,
+      removed
+    };
+  }
+
+  getMusicLibraryPreferences() {
+    return {
+      confirmSelectionClear: this.getSetting("musicLibrary.confirmSelectionClear") !== "0"
+    };
+  }
+
+  updateMusicLibraryPreferences(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw musicInputError("曲库偏好格式无效");
+    }
+    if (input.confirmSelectionClear != null) {
+      this.setSetting("musicLibrary.confirmSelectionClear", input.confirmSelectionClear ? "1" : "0");
+    }
+    return this.getMusicLibraryPreferences();
+  }
+
+  getMusicLibrary() {
+    return {
+      playlists: this.listMusicPlaylists(),
+      preferences: this.getMusicLibraryPreferences()
+    };
   }
 
   lettersSentToday() {

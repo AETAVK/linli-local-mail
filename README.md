@@ -7,10 +7,10 @@
 本项目不是官方项目，不隶属于、未经原游戏开发商或发行商认可。仓库和安装包均不包含游戏本体、
 官方启动器、图片、音乐、视频、字体、DLL、历史信件或其他官方资源。使用者必须自行准备原版客户端。
 
-当前源码版本为 `0.9.5`。这是针对 `v0.9.4` 安装失败问题的修复版本：安装器不再依赖目标电脑上的
+当前源码版本为 `0.9.6`。这是针对 `v0.9.4` 安装失败问题的后续修复版本：安装器不再依赖目标电脑上的
 `tar.exe`，会校验 ZIP 路径并处理文件/目录冲突，同时增加 64 位系统、目录可写性和启动器占用检查。
-图片导入仍是占位功能，不包含 OCR，也不会生成视频或转写音频。新的 `v0.9.5` Release 附件需要在
-发布后才可下载；在此之前，README 中保留的 `v0.9.4` 链接仍指向上一版安装包，不包含本次修复。
+本版本修复模型测试临时信件缺少数据库排除键导致的 SQLite 参数绑定错误，并保留图片导入占位行为：不包含 OCR，
+也不会生成视频或转写音频。新的 `v0.9.6` Release 附件需要在发布后才可下载；在此之前，下面的链接可能暂时不可用。
 
 ## 快速安装与启动（零基础）
 
@@ -30,12 +30,12 @@
 
 ### 第一步：下载安装程序
 
-- [Gitee 国内镜像：直接下载一键安装程序（v0.9.4）](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.9.4/LinliLocalMail-0.9.4-Setup.exe)
-- [Gitee：查看 v0.9.4 更新说明和 SHA-256 校验值](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.9.4)
-- [GitHub：直接下载一键安装程序（v0.9.4）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.9.4/LinliLocalMail-0.9.4-Setup.exe)
-- [GitHub：查看 v0.9.4 更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.9.4)
+- [Gitee 国内镜像：直接下载一键安装程序（v0.9.6）](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.9.6/LinliLocalMail-0.9.6-Setup.exe)
+- [Gitee：查看 v0.9.6 更新说明和 SHA-256 校验值](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.9.6)
+- [GitHub：直接下载一键安装程序（v0.9.6）](https://github.com/AETAVK/linli-local-mail/releases/download/v0.9.6/LinliLocalMail-0.9.6-Setup.exe)
+- [GitHub：查看 v0.9.6 更新说明和 SHA-256 校验值](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.9.6)
 
-普通玩家只需要下载 `LinliLocalMail-0.9.4-Setup.exe`，不需要下载页面下方的 `Source code`、
+普通玩家只需要下载 `LinliLocalMail-0.9.6-Setup.exe`，不需要下载页面下方的 `Source code`、
 `.json`、`.sha256` 或 `.cer` 文件。
 
 ### 第二步：找到游戏目录
@@ -47,12 +47,12 @@
 launcher.exe
 ```
 
-把刚下载的 `LinliLocalMail-0.9.4-Setup.exe` 移动到这个目录。这样安装器可以自动识别游戏，
+把刚下载的 `LinliLocalMail-0.9.6-Setup.exe` 移动到这个目录。这样安装器可以自动识别游戏，
 不需要手动选择路径。
 
 ### 第三步：安装
 
-双击运行 `LinliLocalMail-0.9.4-Setup.exe`，等待“安装完成”提示。
+双击运行 `LinliLocalMail-0.9.6-Setup.exe`，等待“安装完成”提示。
 
 安装器使用自签名证书，因此 Windows 可能显示“Windows 已保护你的电脑”或“未知发布者”。
 请先确认文件来自本仓库的 Release 页面；确认无误后，可以点击“更多信息”→“仍要运行”。
@@ -106,7 +106,7 @@ launcher.exe
 当前只支持 Windows。API Key 通过当前 Windows 账户的 DPAPI 加密保存在本机，
 不会写入 SQLite、备份 JSON 或源码仓库。
 
-官方历史恢复依赖仍可访问的官方接口；当前 `0.9.5` 源码已通过自动测试、脱敏日志检测，以及视频归档和本地
+官方历史恢复依赖仍可访问的官方接口；当前 `0.9.6` 源码已通过自动测试、脱敏日志检测，以及视频归档和本地
 Range 播放的源码级验证，但真实远端历史导入仍需使用者在自己的客户端上人工确认。该功能只接受官方
 Olivia 域名、固定请求头白名单和本机日志中的会话信息，不会把 Token 写入数据库、日志、导出文件或
 模型上下文。视频归档只保存官方已经返回的既有视频，不生成视频、不转写音频。
@@ -179,7 +179,7 @@ git push gitee main v<版本>
 git push origin main v<版本>
 ```
 
-例如版本为 `0.9.5` 时使用 `v0.9.5`。先把同一提交和标签推到 Gitee，可以让 Gitee Release 的源码标签
+例如本次版本为 `0.9.6` 时使用 `v0.9.6`。先把同一提交和标签推到 Gitee，可以让 Gitee Release 的源码标签
 与 GitHub 保持一致；随后推到 GitHub 才会触发工作流。工作流会检查标签格式和版本一致性，执行语法检查、
 Windows PowerShell 5.1/7 安装器解压冒烟测试、运行时白名单检查、安装器构建、SHA-256 校验并发布 GitHub Release。重复运行同一标签会只替换 GitHub
 Release 中的同名附件，不会删除其他附件；也可以通过 `workflow_dispatch` 手动选择一个已经存在且版本
@@ -189,7 +189,7 @@ Release 中的同名附件，不会删除其他附件；也可以通过 `workflo
 GitHub Release 成功后，再在已经下载该版本四个附件的本机或 Gitee Go 环境执行 Gitee 同步脚本。脚本
 要求工作目录中的 `dist/` 包含以下文件：安装器 EXE、同名 `.sha256`、同名 `.json` 和
 `LinliLocalMail-SelfSigned.cer`；将 `GITEE_TOKEN` 作为临时环境变量注入，完成后立即清除。当前
-已发布版本应按此方式验证 GitHub 与 Gitee 的四个附件一致；`v0.9.5` 发布后也必须完成同样的核对。
+已发布版本应按此方式验证 GitHub 与 Gitee 的四个附件一致；`v0.9.6` 发布后也必须完成同样的核对。
 
 ## 数据与隐私
 

@@ -22,7 +22,21 @@
     lettersModal: { mode: "export", items: [], selected: {}, busy: false },
     remoteImport: { checked: false, checking: false, candidate: false, running: false, pollTimer: null, lastStatus: null, retryAfter: 0 },
     remotePromptSettings: null,
-    update: { autoStarted: false, checking: false, applying: false, result: null }
+    update: { autoStarted: false, checking: false, applying: false, result: null },
+    music: {
+      loaded: false,
+      loading: false,
+      playlists: [],
+      activePlaylistId: null,
+      playlistItems: [],
+      batchMode: false,
+      selected: {},
+      busy: false,
+      confirmSelectionClear: true,
+      allowNativeTab: null,
+      nativeViewName: null,
+      noticeTimer: null
+    }
   };
   var sessionPromise = null;
 
@@ -346,6 +360,51 @@
       ".lm-update-release-name{min-width:0;overflow:hidden;color:var(--tp-text-tertiary,#7d818c);font-size:11px;text-align:right;text-overflow:ellipsis;white-space:nowrap}",
       ".lm-update-release-date{margin-top:3px;color:var(--tp-text-tertiary,#7d818c);font-size:10px}",
       ".lm-update-release-notes{margin-top:6px;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word}",
+      ".lm-music-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-left:auto;min-width:0;white-space:nowrap}",
+      ".lm-music-action{height:30px;padding:0 10px;border:1px solid var(--tp-grey-5,rgba(255,255,255,.22));border-radius:999px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:12px;line-height:28px;cursor:pointer;transition:background-color .15s,color .15s,border-color .15s}",
+      ".lm-music-action:hover:not(:disabled){border-color:var(--tp-grey-7,rgba(255,255,255,.42));background:var(--tp-surface-1,rgba(255,255,255,.07));color:var(--tp-text-title,#e8e9eb)}",
+      ".lm-music-action-primary{border-color:rgba(216,209,197,.45);background:rgba(216,209,197,.1);color:var(--tp-text-title,#e8e9eb)}",
+      ".lm-music-action:disabled{opacity:.42;cursor:not-allowed}",
+      ".lm-music-selected-count{max-width:112px;overflow:hidden;color:var(--tp-text-tertiary,#7d818c);font-size:11px;text-overflow:ellipsis}",
+      ".lm-music-status{position:absolute;right:0;top:34px;z-index:3;max-width:260px;color:var(--tp-text-secondary,#a1a5ad);font-size:11px;line-height:1.4;text-align:right;white-space:normal}",
+      ".lm-music-status[data-kind='error']{color:#e5aaa5}",
+      ".lm-music-checkbox{box-sizing:border-box;width:16px;height:16px;margin:0;accent-color:#d8d1c5;cursor:pointer;flex:0 0 auto}",
+      ".lm-music-row-checkbox{display:flex;align-items:center;justify-content:center;width:20px;min-width:20px;align-self:stretch}",
+      ".lm-music-header-checkbox{display:flex;align-items:center;justify-content:center;width:20px;min-width:20px}",
+      ".lm-music-playlists{display:flex;align-items:center;gap:12px;min-width:0;max-width:50vw;overflow-x:auto;padding-bottom:1px}",
+      ".lm-music-tab{position:relative;flex:0 0 auto;height:28px;padding:0;border:0;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:14px;font-weight:600;cursor:pointer}",
+      ".lm-music-tab:hover{color:var(--tp-text-title,#e8e9eb)}",
+      ".lm-music-tab[data-active='true']{color:var(--tp-text-title,#e8e9eb)}",
+      ".lm-music-tab[data-active='true']::after{position:absolute;right:0;bottom:-4px;left:0;height:3px;border-radius:999px;background:#e7e1d7;content:''}",
+      ".lm-music-new-playlist{display:flex;align-items:center;gap:3px;flex:0 0 auto;height:28px;padding:0 2px;border:0;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:13px;font-weight:600;cursor:pointer}",
+      ".lm-music-new-playlist:hover{color:var(--tp-text-title,#e8e9eb)}",
+      ".lm-music-custom-list{display:flex;flex-direction:column;gap:0;margin-right:16px}",
+      ".lm-music-custom-row{display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;color:var(--tp-text-body,#ced2d4)}",
+      ".lm-music-custom-row:hover{background:var(--tp-surface-1,rgba(255,255,255,.04))}",
+      ".lm-music-custom-index{display:flex;align-items:center;justify-content:center;width:44px;min-width:44px;color:var(--tp-text-tertiary,#7d818c);font-size:13px}",
+      ".lm-music-cover{width:48px;height:48px;overflow:hidden;border-radius:10px;background:var(--tp-grey-2,#34363c);object-fit:cover;flex:0 0 auto}",
+      ".lm-music-cover-placeholder{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:10px;background:var(--tp-grey-2,#34363c);color:var(--tp-text-tertiary,#7d818c);font-size:17px;flex:0 0 auto}",
+      ".lm-music-song{min-width:120px;flex:1;overflow:hidden}",
+      ".lm-music-song-name{overflow:hidden;color:var(--tp-text-title,#e8e9eb);font-size:15px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}",
+      ".lm-music-song-meta{margin-top:3px;overflow:hidden;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;text-overflow:ellipsis;white-space:nowrap}",
+      ".lm-music-mode{width:80px;min-width:80px;color:var(--tp-text-secondary,#a1a5ad);font-size:13px}",
+      ".lm-music-row-remove{height:28px;padding:0 9px;border:0;border-radius:7px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:12px;cursor:pointer}",
+      ".lm-music-row-remove:hover{background:rgba(255,255,255,.07);color:#e5aaa5}",
+      ".lm-music-empty{display:flex;min-height:180px;align-items:center;justify-content:center;color:var(--tp-text-secondary,#a1a5ad);font-size:14px}",
+      ".lm-music-dialog{width:min(460px,92vw);padding:24px}",
+      ".lm-music-dialog-copy{margin-bottom:14px;color:var(--tp-text-secondary,#a1a5ad);font-size:13px;line-height:1.55}",
+      ".lm-music-playlist-picker{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow:auto}",
+      ".lm-music-playlist-choice{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:11px 13px;border:1px solid rgba(255,255,255,.1);border-radius:9px;background:rgba(0,0,0,.1);color:var(--tp-text-body,#ced2d4);font:inherit;text-align:left;cursor:pointer}",
+      ".lm-music-playlist-choice:hover{background:rgba(255,255,255,.07)}",
+      ".lm-music-playlist-choice[data-selected='true']{border-color:rgba(216,209,197,.42);background:rgba(216,209,197,.09)}",
+      ".lm-music-playlist-choice-meta{color:var(--tp-text-tertiary,#7d818c);font-size:11px;white-space:nowrap}",
+      ".lm-music-confirm-check{display:flex;align-items:center;gap:8px;margin-top:14px;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;cursor:pointer}",
+      ".lm-music-confirm-check input{width:16px;height:16px;accent-color:#d8d1c5}",
+      ".lm-music-switch{display:flex;align-items:center;flex:0 0 auto;width:42px;height:24px}",
+      ".lm-music-switch input{width:42px;height:24px;margin:0;appearance:none;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:var(--tp-grey-3,#45474e);cursor:pointer;transition:background-color .16s,border-color .16s}",
+      ".lm-music-switch input::after{display:block;width:18px;height:18px;margin:2px;border-radius:50%;background:#f1eee8;content:'';transition:transform .16s}",
+      ".lm-music-switch input:checked{border-color:#e7e1d7;background:#d8d1c5}",
+      ".lm-music-switch input:checked::after{transform:translateX(18px);background:#2b2926}",
       "@media(max-width:900px){.lm-grid,.lm-provider-grid,.lm-parameter-grid{grid-template-columns:1fr}.lm-provider-grid .lm-wide,.lm-parameter-wide{grid-column:auto}.lm-toolbar{align-items:flex-start;flex-direction:column}.lm-config-item{flex-direction:column;align-items:flex-start}.lm-import-methods{grid-template-columns:1fr}.lm-model-manager-body{grid-template-columns:210px minmax(0,1fr)}.lm-provider-detail-scroll{padding:18px}.lm-model-edit-grid{grid-template-columns:1fr}}",
       "@media(max-width:680px){.lm-modal.lm-model-manager{height:90vh}.lm-model-manager-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.lm-provider-nav{max-height:190px;border-right:0;border-bottom:1px solid rgba(255,255,255,.09)}.lm-provider-detail-head{flex-direction:column}.lm-provider-detail-actions{justify-content:flex-start}}"
     ].join("");
@@ -2571,6 +2630,655 @@
     loadConfig();
   }
 
+  var MUSIC_CUSTOM_LIST_ID = "local-mail-music-custom-list";
+  var MUSIC_CUSTOM_TABS_ID = "local-mail-music-playlists";
+  var MUSIC_TOOLBAR_ID = "local-mail-music-toolbar";
+  var MUSIC_MODAL_ID = "local-mail-music-modal";
+  var MUSIC_BEHAVIOR_SETTING_ID = "local-mail-music-behavior-setting";
+  var MUSIC_NATIVE_TAB_NAMES = ["古典", "ACG", "轻音乐", "我的上传"];
+
+  function musicSection() {
+    var list = document.getElementById("tour-song-list");
+    return list ? (list.closest("section") || list.parentElement) : null;
+  }
+
+  function musicHeader() {
+    var section = musicSection();
+    if (!section) return null;
+    return Array.prototype.slice.call(section.querySelectorAll("div")).find(function (element) {
+      var text = element.textContent.replace(/\s+/g, " ").trim();
+      return element.classList.contains("border-b")
+        && text.indexOf("曲目") !== -1
+        && text.indexOf("模式") !== -1;
+    }) || null;
+  }
+
+  function musicTabControlForLabel(label) {
+    var section = musicSection();
+    if (!section) return null;
+    var leaf = Array.prototype.slice.call(section.querySelectorAll("*")).find(function (element) {
+      return element.children.length === 0 && element.textContent.trim() === label;
+    });
+    if (!leaf) return null;
+    var control = leaf;
+    while (control.parentElement && control.parentElement.textContent.trim() === label) control = control.parentElement;
+    return control;
+  }
+
+  function musicNativeTabs() {
+    return MUSIC_NATIVE_TAB_NAMES.map(function (name) {
+      return { name: name, control: musicTabControlForLabel(name) };
+    }).filter(function (item) { return item.control; });
+  }
+
+  function musicNativeTabFromTarget(target) {
+    return musicNativeTabs().find(function (item) {
+      return item.control.contains(target);
+    }) || null;
+  }
+
+  function isCustomMusicView() {
+    return Boolean(state.music.activePlaylistId);
+  }
+
+  function selectedMusicEntries() {
+    return Object.keys(state.music.selected).map(function (key) { return state.music.selected[key]; });
+  }
+
+  function clearMusicSelection() {
+    state.music.selected = {};
+  }
+
+  function musicEntryFromSong(song, sourceType, component) {
+    var id = String((song && (song.id || song.itemId)) || "").trim();
+    if (!id) return null;
+    var normalizedSourceType = Number(sourceType) === 3 ? 3 : 2;
+    return {
+      key: normalizedSourceType + ":" + id,
+      sourceType: normalizedSourceType,
+      song: song,
+      component: component || null
+    };
+  }
+
+  function musicSongComponent(row) {
+    var node = row;
+    while (node) {
+      var component = node.__vueParentComponent;
+      if (component && component.props && component.props.song) return component;
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function musicSourceTypeForSong(song) {
+    if (state.music.nativeViewName === "我的上传" || song.userSongId != null || song.shareCode !== undefined) return 3;
+    return 2;
+  }
+
+  function nativeMusicEntries() {
+    return Array.prototype.slice.call(document.querySelectorAll("#tour-song-list .song-item")).map(function (row) {
+      var component = musicSongComponent(row);
+      var song = component && component.props && component.props.song;
+      var entry = song ? musicEntryFromSong(song, musicSourceTypeForSong(song), component) : null;
+      if (entry) entry.row = row;
+      return entry;
+    }).filter(Boolean);
+  }
+
+  function customMusicEntries() {
+    return (state.music.playlistItems || []).map(function (item) {
+      return musicEntryFromSong(item.song || {}, item.sourceType, null);
+    }).filter(Boolean);
+  }
+
+  function visibleMusicEntries() {
+    return isCustomMusicView() ? customMusicEntries() : nativeMusicEntries();
+  }
+
+  function serializeMusicSong(entry) {
+    var song = entry.song || {};
+    return {
+      id: song.id || song.itemId,
+      sourceType: entry.sourceType,
+      name: song.name,
+      nameKey: song.nameKey,
+      iconUrl: song.iconUrl || song.coverUrl,
+      performanceType: song.performanceType,
+      performanceTypeDisplayShortName: song.performanceTypeDisplayShortName,
+      styleType: song.styleType,
+      styleTypeDisplayName: song.styleTypeDisplayName,
+      duration: song.duration || song.videoDuration || song.audioDuration,
+      videoUrl: song.videoUrl,
+      videoByTodView: song.videoByTodView
+    };
+  }
+
+  function musicNotice(text, kind) {
+    var toolbar = document.getElementById(MUSIC_TOOLBAR_ID);
+    var status = toolbar && toolbar.querySelector("[data-role='music-status']");
+    if (!status) return;
+    status.textContent = text || "";
+    status.dataset.kind = kind || "";
+    if (state.music.noticeTimer) clearTimeout(state.music.noticeTimer);
+    if (text) {
+      state.music.noticeTimer = setTimeout(function () {
+        if (status.isConnected) status.textContent = "";
+      }, 4200);
+    }
+  }
+
+  async function ensureMusicLibraryLoaded() {
+    if (state.music.loaded || state.music.loading) return;
+    state.music.loading = true;
+    try {
+      var data = await callApi("/api/music-library");
+      state.music.playlists = Array.isArray(data.playlists) ? data.playlists : [];
+      state.music.confirmSelectionClear = !data.preferences || data.preferences.confirmSelectionClear !== false;
+      state.music.loaded = true;
+    } catch (error) {
+      console.warn("[local-mail] unable to load music library", error);
+    } finally {
+      state.music.loading = false;
+      renderMusicEnhancements();
+      mountMusicBehaviorSetting();
+    }
+  }
+
+  async function reloadMusicLibrary() {
+    state.music.loaded = false;
+    await ensureMusicLibraryLoaded();
+  }
+
+  async function loadMusicPlaylist(playlistId) {
+    var detail = await callApi("/api/music-library/playlists/" + encodeURIComponent(playlistId));
+    state.music.activePlaylistId = detail.playlist.playlistId;
+    state.music.playlistItems = Array.isArray(detail.items) ? detail.items : [];
+  }
+
+  function renderMusicTabs() {
+    var uploadTab = musicTabControlForLabel("我的上传");
+    if (!uploadTab) return;
+    var tabs = document.getElementById(MUSIC_CUSTOM_TABS_ID);
+    if (!tabs) {
+      tabs = document.createElement("div");
+      tabs.id = MUSIC_CUSTOM_TABS_ID;
+      tabs.className = "lm-music-playlists";
+      uploadTab.insertAdjacentElement("afterend", tabs);
+    }
+    var html = '<button type="button" class="lm-music-new-playlist" data-music-action="new-playlist">＋ 自定义歌单</button>';
+    (state.music.playlists || []).forEach(function (playlist) {
+      html += '<button type="button" class="lm-music-tab" data-music-action="switch-playlist" data-playlist-id="' + escapeHtml(playlist.playlistId) + '" data-active="' + String(state.music.activePlaylistId === playlist.playlistId) + '">' + escapeHtml(playlist.name) + '</button>';
+    });
+    tabs.innerHTML = html;
+    tabs.onclick = function (event) {
+      var action = event.target.closest("[data-music-action]");
+      if (!action) return;
+      if (action.dataset.musicAction === "new-playlist") openMusicCreateDialog();
+      else if (action.dataset.musicAction === "switch-playlist") {
+        requestMusicViewSwitch({ kind: "custom", playlistId: action.dataset.playlistId });
+      }
+    };
+  }
+
+  function renderMusicToolbar() {
+    var header = musicHeader();
+    if (!header) return;
+    var toolbar = document.getElementById(MUSIC_TOOLBAR_ID);
+    if (!toolbar) {
+      toolbar = document.createElement("div");
+      toolbar.id = MUSIC_TOOLBAR_ID;
+      toolbar.className = "lm-music-toolbar";
+      header.appendChild(toolbar);
+    }
+    var selectedCount = selectedMusicEntries().length;
+    var actionDisabled = selectedCount === 0 || state.music.busy;
+    if (!state.music.batchMode) {
+      toolbar.innerHTML = '<button type="button" class="lm-music-action" data-music-action="begin-batch">批量选择</button><span class="lm-music-status" data-role="music-status"></span>';
+    } else {
+      toolbar.innerHTML =
+        '<label class="lm-music-header-checkbox" title="全选当前列表"><input class="lm-music-checkbox" type="checkbox" data-music-action="select-all"></label>' +
+        '<button type="button" class="lm-music-action" data-music-action="add-desktop"' + (actionDisabled ? " disabled" : "") + '>加播单</button>' +
+        '<button type="button" class="lm-music-action" data-music-action="add-playlist"' + (actionDisabled ? " disabled" : "") + '>加入歌单</button>' +
+        (isCustomMusicView() ? '<button type="button" class="lm-music-action" data-music-action="remove-playlist"' + (actionDisabled ? " disabled" : "") + '>移出歌单</button>' : "") +
+        '<span class="lm-music-selected-count">已选 ' + selectedCount + ' 首</span>' +
+        '<button type="button" class="lm-music-action lm-music-action-primary" data-music-action="end-batch">完成</button>' +
+        '<span class="lm-music-status" data-role="music-status"></span>';
+      var all = visibleMusicEntries();
+      var checkbox = toolbar.querySelector("[data-music-action='select-all']");
+      if (checkbox) {
+        var selectedVisible = all.filter(function (entry) { return state.music.selected[entry.key]; }).length;
+        checkbox.checked = all.length > 0 && selectedVisible === all.length;
+        checkbox.indeterminate = selectedVisible > 0 && selectedVisible < all.length;
+      }
+    }
+    toolbar.onclick = function (event) {
+      var button = event.target.closest("[data-music-action]");
+      if (!button || button.disabled) return;
+      var action = button.dataset.musicAction;
+      if (action === "begin-batch") {
+        state.music.batchMode = true;
+        renderMusicEnhancements();
+      } else if (action === "end-batch") {
+        state.music.batchMode = false;
+        clearMusicSelection();
+        renderMusicEnhancements();
+      } else if (action === "add-desktop") addSelectedToMusicDesktop();
+      else if (action === "add-playlist") openMusicPlaylistPicker();
+      else if (action === "remove-playlist") removeSelectedFromMusicPlaylist();
+    };
+    var allCheckbox = toolbar.querySelector("[data-music-action='select-all']");
+    if (allCheckbox) {
+      allCheckbox.onchange = function () {
+        visibleMusicEntries().forEach(function (entry) {
+          if (allCheckbox.checked) state.music.selected[entry.key] = entry;
+          else delete state.music.selected[entry.key];
+        });
+        renderMusicEnhancements();
+      };
+    }
+  }
+
+  function decorateNativeMusicRows() {
+    nativeMusicEntries().forEach(function (entry) {
+      var row = entry.row;
+      var existing = row.querySelector(".lm-music-row-checkbox");
+      if (!state.music.batchMode) {
+        if (existing) existing.remove();
+        return;
+      }
+      if (!existing) {
+        existing = document.createElement("label");
+        existing.className = "lm-music-row-checkbox";
+        existing.innerHTML = '<input class="lm-music-checkbox" type="checkbox" aria-label="选择曲目">';
+        row.insertBefore(existing, row.firstElementChild);
+        existing.addEventListener("click", function (event) { event.stopPropagation(); });
+        existing.addEventListener("dblclick", function (event) { event.stopPropagation(); });
+      }
+      var checkbox = existing.querySelector("input");
+      checkbox.checked = Boolean(state.music.selected[entry.key]);
+      checkbox.onchange = function () {
+        if (checkbox.checked) state.music.selected[entry.key] = entry;
+        else delete state.music.selected[entry.key];
+        renderMusicEnhancements();
+      };
+    });
+  }
+
+  function customMusicList() {
+    var original = document.getElementById("tour-song-list");
+    if (!original) return null;
+    var list = document.getElementById(MUSIC_CUSTOM_LIST_ID);
+    if (!list) {
+      list = document.createElement("div");
+      list.id = MUSIC_CUSTOM_LIST_ID;
+      list.className = "lm-music-custom-list";
+      original.insertAdjacentElement("afterend", list);
+    }
+    return list;
+  }
+
+  function renderCustomMusicList() {
+    var original = document.getElementById("tour-song-list");
+    var list = customMusicList();
+    if (!original || !list) return;
+    if (!isCustomMusicView()) {
+      original.hidden = false;
+      list.hidden = true;
+      return;
+    }
+    original.hidden = true;
+    list.hidden = false;
+    var items = customMusicEntries();
+    if (!items.length) {
+      list.innerHTML = '<div class="lm-music-empty">这个自定义歌单还没有曲目</div>';
+      return;
+    }
+    list.innerHTML = items.map(function (entry, index) {
+      var song = entry.song || {};
+      var cover = song.iconUrl || song.coverUrl
+        ? '<img class="lm-music-cover" src="' + escapeHtml(song.iconUrl || song.coverUrl) + '" alt="">'
+        : '<div class="lm-music-cover-placeholder">♪</div>';
+      var mode = song.performanceTypeDisplayShortName || song.styleTypeDisplayName || song.performanceType || "";
+      var check = state.music.batchMode
+        ? '<label class="lm-music-row-checkbox"><input class="lm-music-checkbox" type="checkbox" data-music-item-key="' + escapeHtml(entry.key) + '"' + (state.music.selected[entry.key] ? " checked" : "") + ' aria-label="选择曲目"></label>'
+        : '<div class="lm-music-row-checkbox"></div>';
+      return '<div class="lm-music-custom-row" data-music-item-key="' + escapeHtml(entry.key) + '">' +
+        check + '<div class="lm-music-custom-index">' + (index + 1) + '</div>' + cover +
+        '<div class="lm-music-song"><div class="lm-music-song-name">' + escapeHtml(song.name || "未命名曲目") + '</div><div class="lm-music-song-meta">' + escapeHtml(song.styleTypeDisplayName || song.nameKey || "") + '</div></div>' +
+        '<div class="lm-music-mode">' + escapeHtml(mode) + '</div>' +
+        '<button type="button" class="lm-music-row-remove" data-music-action="remove-one" data-music-item-key="' + escapeHtml(entry.key) + '">移出</button></div>';
+    }).join("");
+    list.querySelectorAll("input[data-music-item-key]").forEach(function (checkbox) {
+      checkbox.addEventListener("click", function (event) { event.stopPropagation(); });
+      checkbox.addEventListener("change", function () {
+        var entry = items.find(function (candidate) { return candidate.key === checkbox.dataset.musicItemKey; });
+        if (!entry) return;
+        if (checkbox.checked) state.music.selected[entry.key] = entry;
+        else delete state.music.selected[entry.key];
+        renderMusicEnhancements();
+      });
+    });
+    list.onclick = function (event) {
+      var action = event.target.closest("[data-music-action='remove-one']");
+      if (!action) return;
+      clearMusicSelection();
+      var entry = items.find(function (candidate) { return candidate.key === action.dataset.musicItemKey; });
+      if (entry) state.music.selected[entry.key] = entry;
+      removeSelectedFromMusicPlaylist();
+    };
+  }
+
+  function renderMusicEnhancements() {
+    if (!document.getElementById("tour-song-list")) return;
+    installStyles();
+    renderMusicTabs();
+    renderCustomMusicList();
+    renderMusicToolbar();
+    if (!isCustomMusicView()) decorateNativeMusicRows();
+  }
+
+  function ensureMusicModal() {
+    var modal = document.getElementById(MUSIC_MODAL_ID);
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = MUSIC_MODAL_ID;
+    modal.className = "lm-modal-backdrop";
+    modal.hidden = true;
+    modal.addEventListener("click", function (event) {
+      if (event.target === modal && !state.music.busy) closeMusicModal();
+      var action = event.target.closest("[data-music-modal-action]");
+      if (!action || action.disabled) return;
+      var kind = action.dataset.musicModalAction;
+      if (kind === "close") closeMusicModal();
+      else if (kind === "create") submitMusicPlaylistCreate();
+      else if (kind === "pick") addSelectionToMusicPlaylist(action.dataset.playlistId);
+      else if (kind === "create-from-picker") openMusicCreateDialog("add-selected");
+      else if (kind === "confirm-switch") confirmMusicViewSwitch();
+    });
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function closeMusicModal(force) {
+    if (state.music.busy && !force) return;
+    var modal = document.getElementById(MUSIC_MODAL_ID);
+    if (modal) modal.hidden = true;
+    state.music.pendingSwitch = null;
+    state.music.createAfter = null;
+  }
+
+  function openMusicCreateDialog(afterCreate) {
+    state.music.createAfter = afterCreate || null;
+    var modal = ensureMusicModal();
+    modal.innerHTML = '<div class="lm-modal lm-music-dialog" role="dialog" aria-modal="true">' +
+      '<div class="lm-modal-title">新建自定义歌单</div><div class="lm-music-dialog-copy">歌单保存在本机 SQLite 中。之后可从曲库批量加入或移出曲目。</div>' +
+      '<label class="lm-field"><span>歌单名称</span><input class="lm-input" data-role="music-playlist-name" maxlength="40" placeholder="例如：夜晚练琴"></label>' +
+      '<div class="lm-modal-actions"><span class="lm-modal-status" data-role="music-modal-status"></span><button type="button" class="lm-button" data-music-modal-action="close">取消</button><button type="button" class="lm-button lm-button-primary" data-music-modal-action="create">创建</button></div></div>';
+    modal.hidden = false;
+    setTimeout(function () {
+      var input = modal.querySelector("[data-role='music-playlist-name']");
+      if (input) input.focus();
+    }, 0);
+  }
+
+  function openMusicPlaylistPicker() {
+    var modal = ensureMusicModal();
+    var playlists = state.music.playlists || [];
+    var choices = playlists.length
+      ? '<div class="lm-music-playlist-picker">' + playlists.map(function (playlist) {
+        return '<button type="button" class="lm-music-playlist-choice" data-music-modal-action="pick" data-playlist-id="' + escapeHtml(playlist.playlistId) + '"><span>' + escapeHtml(playlist.name) + '</span><span class="lm-music-playlist-choice-meta">' + Number(playlist.itemCount || 0) + ' 首</span></button>';
+      }).join("") + '</div>'
+      : '<div class="lm-empty">还没有自定义歌单。先创建一个吧。</div>';
+    modal.innerHTML = '<div class="lm-modal lm-music-dialog" role="dialog" aria-modal="true">' +
+      '<div class="lm-modal-title">加入自定义歌单</div><div class="lm-music-dialog-copy">选择要加入的歌单；重复曲目会更新为当前曲目信息，不会重复出现。</div>' + choices +
+      '<div class="lm-modal-actions"><span class="lm-modal-status" data-role="music-modal-status"></span><button type="button" class="lm-button" data-music-modal-action="close">取消</button><button type="button" class="lm-button" data-music-modal-action="create-from-picker">新建歌单</button></div></div>';
+    modal.hidden = false;
+  }
+
+  function setMusicModalStatus(text, kind) {
+    var modal = document.getElementById(MUSIC_MODAL_ID);
+    var status = modal && modal.querySelector("[data-role='music-modal-status']");
+    if (status) {
+      status.textContent = text || "";
+      status.dataset.kind = kind || "";
+    }
+  }
+
+  async function submitMusicPlaylistCreate() {
+    var modal = ensureMusicModal();
+    var input = modal.querySelector("[data-role='music-playlist-name']");
+    var name = input ? input.value : "";
+    state.music.busy = true;
+    setMusicModalStatus("正在创建…");
+    try {
+      var playlist = await callApi("/api/music-library/playlists", { method: "POST", body: JSON.stringify({ name: name }) });
+      await reloadMusicLibrary();
+      if (state.music.createAfter === "add-selected") {
+        await addSelectionToMusicPlaylist(playlist.playlistId);
+      } else {
+        await loadMusicPlaylist(playlist.playlistId);
+        clearMusicSelection();
+        renderMusicEnhancements();
+        closeMusicModal(true);
+        musicNotice("已创建“" + playlist.name + "”。", "success");
+      }
+    } catch (error) {
+      setMusicModalStatus(error.message || String(error), "error");
+    } finally {
+      state.music.busy = false;
+      renderMusicToolbar();
+    }
+  }
+
+  async function addSelectionToMusicPlaylist(playlistId, options) {
+    var entries = selectedMusicEntries();
+    if (!entries.length) return;
+    state.music.busy = true;
+    renderMusicToolbar();
+    setMusicModalStatus("正在加入歌单…");
+    try {
+      var result = await callApi("/api/music-library/playlists/" + encodeURIComponent(playlistId) + "/items", {
+        method: "POST",
+        body: JSON.stringify({ songs: entries.map(serializeMusicSong) })
+      });
+      await reloadMusicLibrary();
+      if (state.music.activePlaylistId === playlistId) await loadMusicPlaylist(playlistId);
+      clearMusicSelection();
+      renderMusicEnhancements();
+      if (!(options && options.keepModal)) closeMusicModal(true);
+      musicNotice("已加入 " + result.added + " 首曲目" + (result.updated ? "，更新 " + result.updated + " 首" : "") + "。", "success");
+    } catch (error) {
+      setMusicModalStatus(error.message || String(error), "error");
+      musicNotice("加入歌单失败：" + (error.message || error), "error");
+    } finally {
+      state.music.busy = false;
+      renderMusicToolbar();
+    }
+  }
+
+  async function removeSelectedFromMusicPlaylist() {
+    var playlistId = state.music.activePlaylistId;
+    var entries = selectedMusicEntries();
+    if (!playlistId || !entries.length) return;
+    state.music.busy = true;
+    renderMusicToolbar();
+    try {
+      var result = await callApi("/api/music-library/playlists/" + encodeURIComponent(playlistId) + "/remove", {
+        method: "POST",
+        body: JSON.stringify({ itemKeys: entries.map(function (entry) { return entry.key; }) })
+      });
+      await reloadMusicLibrary();
+      await loadMusicPlaylist(playlistId);
+      clearMusicSelection();
+      renderMusicEnhancements();
+      musicNotice("已从歌单移出 " + result.removed + " 首曲目。", "success");
+    } catch (error) {
+      musicNotice("移出歌单失败：" + (error.message || error), "error");
+    } finally {
+      state.music.busy = false;
+      renderMusicToolbar();
+    }
+  }
+
+  async function callNativeMusicAdd(entry) {
+    var listener = entry.component && entry.component.vnode && entry.component.vnode.props && entry.component.vnode.props.onAddPlaylist;
+    if (typeof listener === "function") return listener(entry.song);
+    if (Array.isArray(listener) && typeof listener[0] === "function") return listener[0](entry.song);
+    if (window.__LOCAL_MUSIC_API__ && typeof window.__LOCAL_MUSIC_API__.addToPlaylist === "function") {
+      return window.__LOCAL_MUSIC_API__.addToPlaylist({ itemType: entry.sourceType, itemId: entry.song.id || entry.song.itemId });
+    }
+    throw new Error("原曲库加播单接口尚未加载，请重新启动游戏后再试");
+  }
+
+  async function addSelectedToMusicDesktop() {
+    var entries = selectedMusicEntries();
+    if (!entries.length) return;
+    state.music.busy = true;
+    renderMusicToolbar();
+    try {
+      var completed = 0;
+      for (var index = 0; index < entries.length; index += 1) {
+        await callNativeMusicAdd(entries[index]);
+        completed += 1;
+      }
+      clearMusicSelection();
+      renderMusicEnhancements();
+      musicNotice("已加入音乐桌面 " + completed + " 首曲目。", "success");
+    } catch (error) {
+      musicNotice("加播单在第 " + (completed + 1) + " 首停止：" + (error.message || error), "error");
+    } finally {
+      state.music.busy = false;
+      renderMusicToolbar();
+    }
+  }
+
+  async function persistMusicSelectionPreference(value) {
+    state.music.confirmSelectionClear = Boolean(value);
+    try {
+      await callApi("/api/music-library/preferences", {
+        method: "POST",
+        body: JSON.stringify({ confirmSelectionClear: state.music.confirmSelectionClear })
+      });
+    } catch (error) {
+      console.warn("[local-mail] unable to save music library preference", error);
+    }
+    mountMusicBehaviorSetting();
+  }
+
+  function openMusicSwitchConfirm(target) {
+    state.music.pendingSwitch = target;
+    var modal = ensureMusicModal();
+    modal.innerHTML = '<div class="lm-modal lm-music-dialog" role="dialog" aria-modal="true">' +
+      '<div class="lm-modal-title">切换曲库</div><div class="lm-music-dialog-copy">切换歌单或曲库分类不会保留当前选中的歌曲，是否继续？</div>' +
+      '<label class="lm-music-confirm-check"><input type="checkbox" data-role="music-disable-switch-prompt">不再提示 <span>（可在“设置 - 应用行为”中重新开启）</span></label>' +
+      '<div class="lm-modal-actions"><button type="button" class="lm-button" data-music-modal-action="close">取消</button><button type="button" class="lm-button lm-button-primary" data-music-modal-action="confirm-switch">继续切换</button></div></div>';
+    modal.hidden = false;
+  }
+
+  async function confirmMusicViewSwitch() {
+    var modal = ensureMusicModal();
+    var disablePrompt = modal.querySelector("[data-role='music-disable-switch-prompt']");
+    if (disablePrompt && disablePrompt.checked) await persistMusicSelectionPreference(false);
+    var target = state.music.pendingSwitch;
+    closeMusicModal();
+    performMusicViewSwitch(target);
+  }
+
+  function requestMusicViewSwitch(target) {
+    var current = isCustomMusicView()
+      ? "custom:" + state.music.activePlaylistId
+      : "native:" + (state.music.nativeViewName || "");
+    var next = target.kind === "custom" ? "custom:" + target.playlistId : "native:" + target.name;
+    if (current === next) return;
+    if (selectedMusicEntries().length && state.music.confirmSelectionClear) {
+      openMusicSwitchConfirm(target);
+      return;
+    }
+    performMusicViewSwitch(target);
+  }
+
+  async function performMusicViewSwitch(target) {
+    if (!target) return;
+    clearMusicSelection();
+    if (target.kind === "custom") {
+      try {
+        await loadMusicPlaylist(target.playlistId);
+        renderMusicEnhancements();
+      } catch (error) {
+        musicNotice("无法打开歌单：" + (error.message || error), "error");
+      }
+      return;
+    }
+    state.music.activePlaylistId = null;
+    state.music.playlistItems = [];
+    state.music.nativeViewName = target.name;
+    renderMusicEnhancements();
+    state.music.allowNativeTab = target.control;
+    target.control.click();
+    setTimeout(function () { state.music.allowNativeTab = null; }, 0);
+  }
+
+  function ensureMusicNativeTabGuard() {
+    if (window.__LOCAL_MAIL_MUSIC_TAB_GUARD__) return;
+    window.__LOCAL_MAIL_MUSIC_TAB_GUARD__ = true;
+    document.addEventListener("click", function (event) {
+      var tab = musicNativeTabFromTarget(event.target);
+      if (!tab) return;
+      if (state.music.allowNativeTab === tab.control) {
+        state.music.activePlaylistId = null;
+        state.music.playlistItems = [];
+        state.music.nativeViewName = tab.name;
+        return;
+      }
+      var current = isCustomMusicView()
+        ? "custom:" + state.music.activePlaylistId
+        : "native:" + (state.music.nativeViewName || "");
+      var next = "native:" + tab.name;
+      if (current === next) return;
+      if (selectedMusicEntries().length && state.music.confirmSelectionClear) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        openMusicSwitchConfirm({ kind: "native", name: tab.name, control: tab.control });
+        return;
+      }
+      clearMusicSelection();
+      state.music.activePlaylistId = null;
+      state.music.playlistItems = [];
+      state.music.nativeViewName = tab.name;
+      renderMusicEnhancements();
+    }, true);
+  }
+
+  function mountMusicBehaviorSetting() {
+    if (!isSettingsRoute()) return;
+    var section = Array.prototype.slice.call(document.querySelectorAll(".tp-settings-item")).find(function (item) {
+      var heading = item.firstElementChild;
+      return heading && heading.textContent.trim() === "应用行为";
+    });
+    if (!section) return;
+    var row = document.getElementById(MUSIC_BEHAVIOR_SETTING_ID);
+    if (!row) {
+      row = document.createElement("div");
+      row.id = MUSIC_BEHAVIOR_SETTING_ID;
+      row.className = "flex items-center justify-between px-0 py-3 rounded-3 lm-music-preference-row";
+      row.innerHTML = '<div class="flex flex-col gap-0 flex-1 min-w-0"><div class="text-text-body text-label-l">切换曲库时提醒清空批量选择</div><div class="text-text-secondary text-body-m font-regular">关闭后，切换歌单或曲库分类会直接清空已选曲目。</div></div><label class="lm-music-switch"><input type="checkbox" data-role="music-confirm-selection-clear" aria-label="切换曲库时提醒清空批量选择"></label>';
+      section.appendChild(row);
+      var checkbox = row.querySelector("[data-role='music-confirm-selection-clear']");
+      checkbox.addEventListener("change", function () { persistMusicSelectionPreference(checkbox.checked); });
+    }
+    var input = row.querySelector("[data-role='music-confirm-selection-clear']");
+    if (input) input.checked = state.music.confirmSelectionClear;
+    ensureMusicLibraryLoaded();
+  }
+
+  function mountMusicEnhancements() {
+    if (!document.getElementById("tour-song-list")) return;
+    ensureMusicNativeTabGuard();
+    ensureMusicLibraryLoaded();
+    renderMusicEnhancements();
+  }
+
   var mountQueued = false;
   function queueMount() {
     if (mountQueued) return;
@@ -2579,6 +3287,8 @@
       mountQueued = false;
       hideWatermark();
       mountSettingsSection();
+      mountMusicBehaviorSetting();
+      mountMusicEnhancements();
       mountMailboxTools();
       mountUpdateMenuItem();
       scheduleAutomaticUpdateCheck();

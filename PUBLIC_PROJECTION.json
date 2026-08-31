@@ -1,0 +1,288 @@
+{
+  "format": 1,
+  "generatedBy": "tools/export-public.mjs",
+  "canonicalCommit": "c6ade469a3a20bef67cf36b8c51e0376e6425950",
+  "packageVersion": "0.9.6",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "gitBlob": "a12abfabe41c9d0dc15f5c484eca7ec6d0f6c9b7",
+      "sha256": "4ee8456f0a011f74e2e8fc1cf155849f19756f076c3851d647f02d974851f66f"
+    },
+    {
+      "path": ".github/release-notes/v0.8.1.md",
+      "gitBlob": "6cae11581b5bed94cd9b6f708eb259edd0d94092",
+      "sha256": "b550ae54df7752794117813fd79cc7f0c04e33d3c5f7b9fd298ad9bc7c0938f4"
+    },
+    {
+      "path": ".github/release-notes/v0.9.0.md",
+      "gitBlob": "706884d70a4aceb451942751ce28e795da1fd5a5",
+      "sha256": "701223c03199a219988897934a7f059910677408db178af2e3862e2769eb1268"
+    },
+    {
+      "path": ".github/release-notes/v0.9.3.md",
+      "gitBlob": "fe297618c8bf6b0fd1f541e094eaf126952d9bfe",
+      "sha256": "4a2f1990b2f219fa1f7f25cc2a68f7cd9289b5af7a1402896e908b707ee1bf66"
+    },
+    {
+      "path": ".github/release-notes/v0.9.4.md",
+      "gitBlob": "e233939e3bfcca61a5c7dddc08ad979bebb81133",
+      "sha256": "3d6e5c780eeb373125a99965d9261cdb77f61ab315a3dfe85bb4c2bcb0564c73"
+    },
+    {
+      "path": ".github/release-notes/v0.9.5.md",
+      "gitBlob": "e52928b28ae02e94aee0f005e6c8e2fed79eadd4",
+      "sha256": "ff7eb49ef3a9c1d0f2730ae464697a1fef0b8878b6a9581cb4f0f2fa40cd5f8b"
+    },
+    {
+      "path": ".github/release-notes/v0.9.6.md",
+      "gitBlob": "7e4e4f1372185b0689c5c36665978c02a2482688",
+      "sha256": "4780eb04a717db0f0024f085903772437f42f0d06eb5cfc71858c945744474f5"
+    },
+    {
+      "path": ".github/scripts/installer-smoke.ps1",
+      "gitBlob": "c7b1a2f9d3b10399a40a4ab89493ee9732261e4d",
+      "sha256": "57ce2a7021da86bb757f53215c7e2c84061aaade0208dc355ef3966e14bef82c"
+    },
+    {
+      "path": ".github/scripts/publish-gitee-release.mjs",
+      "gitBlob": "32e4be253f7f19f6d784f720cc47af92d5c2e4b8",
+      "sha256": "29b36617e0d398d6c2f86e2829285a6abbb9ca8a32d3e8f14411372f46f2142f"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "gitBlob": "4aa0e29c09a1f19245eb60a02bafcc99a96f1b78",
+      "sha256": "490d37ab14441af33f98c9c44219751e1fd37ae0c06a1fa2d47566256598bd93"
+    },
+    {
+      "path": ".github/workflows/sync-gitee.yml",
+      "gitBlob": "64c5393771f83092aca8eed5bca4a94ed934c2de",
+      "sha256": "c1749e1d47b7064cc6b3b64d76e486aaed42370c0f9a8ed1039ae982a3eb3271"
+    },
+    {
+      "path": ".gitignore",
+      "gitBlob": "1723577e731845fdcd2ce1a715a0252160ae3076",
+      "sha256": "6b01e1010922856f43d92b13cef64210e64cc8b554fe3184d439f305cedfdb2e"
+    },
+    {
+      "path": "config/characters/linli.v1.json",
+      "gitBlob": "620b774bc663ae821e963547a055ed38ff999da2",
+      "sha256": "069dc4893d0bc194ab18b7fd74f27eb324ee6d7059a1fdfb80daa6c90d7d4b4f"
+    },
+    {
+      "path": "frontend/local-mail-poc.js",
+      "gitBlob": "affa50046173cc78f152be7302832e32325ef44f",
+      "sha256": "807ea883b14a3e61031814541a5122c9ccb9aa36609ba6abad3e3f32096e9f4a"
+    },
+    {
+      "path": "Install.cmd",
+      "gitBlob": "43fabb70ba3c849daded323f509e5082c866324a",
+      "sha256": "7412a32404f1731484de3d2f07898729b62960f0f0de3e5bc2a64f74ed86076e"
+    },
+    {
+      "path": "LICENSE",
+      "gitBlob": "a612ad9813b006ce81d1ee438dd784da99a54007",
+      "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
+    },
+    {
+      "path": "native/extract-payload.ps1",
+      "gitBlob": "ccb38a7d3d92478900ecc6d2f484c080677cde7a",
+      "sha256": "6818602b43b9f5dbf980b900342aa28f1cf96eb82a4fd44b4bbb2bc1fae8a983"
+    },
+    {
+      "path": "native/installer.rs",
+      "gitBlob": "3cf301fc8f1938d355047f7950ae905a0736ff25",
+      "sha256": "3d9425dc96c7fdf825cf579f2711d76c8b4698e2d2174a47549c7cc79352e587"
+    },
+    {
+      "path": "native/launcher-wrapper.rs",
+      "gitBlob": "b4def41a971c8296749c80e15448af448eebf178",
+      "sha256": "9a9860334ff43fd6a511b274a1f96e77cd71f38fe16b6d1b7b5fdfafb9c4717d"
+    },
+    {
+      "path": "NOTICE.md",
+      "gitBlob": "05a4483eac5a1895f0df6848ddbe84f084e6272c",
+      "sha256": "573315dccda4572800e9c9ad464d9bff36a67176fa7104a4fd848679c1cff823"
+    },
+    {
+      "path": "package.json",
+      "gitBlob": "7e61d4540de79923044cbeefe5fb238d32ba6e2c",
+      "sha256": "c1f11befc2840c1054dea60880100db1f11d8bc3cd84cca53d683b56bf021c66"
+    },
+    {
+      "path": "README.md",
+      "gitBlob": "0cb8cea9a19a42ceacea08714a67dc567bfbb732",
+      "sha256": "4c88a953204005dfb89c406cd6cc277c88c8c557ee9e80728545f455d164488f"
+    },
+    {
+      "path": "server.mjs",
+      "gitBlob": "94e189873f389905dde817887b5f0b4946254bbd",
+      "sha256": "5cc57966bd40c33be85abc7ca76b0147c0b8ebb977a6950ddfd4a7cb7f53e64c"
+    },
+    {
+      "path": "SOURCE_CODE.md",
+      "gitBlob": "644527917dae628c770ab3d10e2a89a723ec13c4",
+      "sha256": "e748931e64ad23dfd87942c0a48a12482d1bf869c567702e23a0e0c11f1e5c5b"
+    },
+    {
+      "path": "src/character.mjs",
+      "gitBlob": "1c8b4f68559a73d7c967b8acf945ce54cc610bfc",
+      "sha256": "b7b42ecd8f74bd8d5319f67cbe346391063cac48b90402712bcedb45268e0be1"
+    },
+    {
+      "path": "src/constants.mjs",
+      "gitBlob": "3d6ffc88a98483135d185018301e44adc83298fa",
+      "sha256": "086aefdd942fd4d77036a9c306a664c15b7039d7b4a5292fb7e6b6fc85c5d072"
+    },
+    {
+      "path": "src/context-budget.mjs",
+      "gitBlob": "2bad07779a9aec787a4b9ef1add1a2f716289448",
+      "sha256": "d05baf10bfed0702cb4801f587a062cce7cc5daa7430c20be9c8e1a6b938c784"
+    },
+    {
+      "path": "src/database.mjs",
+      "gitBlob": "09851dde1474c718b0da7b453a79cebc1348dc31",
+      "sha256": "c91fa5214266711161530638bd67272371a4142fa0bf6001e441bbea017a0a84"
+    },
+    {
+      "path": "src/file-import.mjs",
+      "gitBlob": "d9872c69ef22be4a879ba12532cdf98f033fbb07",
+      "sha256": "07f05eca746a2b1d7e84f38f40727b5130f7b9fab2d4f1c265485e42c4a92607"
+    },
+    {
+      "path": "src/history.mjs",
+      "gitBlob": "89b99344743b0146043ad53004fa3e5389d31fc9",
+      "sha256": "4ac219053cb0f839fde277aba03423af04c02acff52c67211c9da184e3b7d26e"
+    },
+    {
+      "path": "src/memory.mjs",
+      "gitBlob": "82dcfb85d6f2e4fba9065f897765972ec66cdf71",
+      "sha256": "4c29f0e3210644f299c7fb0f45b33f82867c7c3f862a026d2a3d1b42d0d7a9cc"
+    },
+    {
+      "path": "src/model-capabilities.mjs",
+      "gitBlob": "b3e3c7c3cb86a5228db487615cc5c91b3f3d2d72",
+      "sha256": "55457903b33e7aeb6f5a903ef6ab49e0371d3b8a9e20c3cc8bb540fe9f781f63"
+    },
+    {
+      "path": "src/model-config.mjs",
+      "gitBlob": "6d503d0edd6d3f64942bcbccacb3decae6af193e",
+      "sha256": "567d413ecde01d196d71b24499da76452802d74025a7c6bb3eb12bdc83249a32"
+    },
+    {
+      "path": "src/orchestrator.mjs",
+      "gitBlob": "9b865519e752712447ad47d99340e41454bc5644",
+      "sha256": "d344212550e51c6c984f2690a8540ec2736963d01caf551805b3a14a5395efc4"
+    },
+    {
+      "path": "src/providers.mjs",
+      "gitBlob": "d920af95133ff3f46591e7d3593199e99e7522f4",
+      "sha256": "3857d0836a4f9071fe5537dc08bfe64f97593288dbb4ecad5f7302efd3f22f01"
+    },
+    {
+      "path": "src/remote-import.mjs",
+      "gitBlob": "874cc4407eb7af8554032698868466f2eb650c25",
+      "sha256": "e363c2ad8c7284fd7f8c5fc6e898aca49a6d43dec1e6f82a1359166b23139ed8"
+    },
+    {
+      "path": "src/secrets.mjs",
+      "gitBlob": "973a3e1f3836006da0507fed166783587b334aa3",
+      "sha256": "2cc4c208865b75e21848d88105f499d30961f702838093d54560b3dbd1cb749e"
+    },
+    {
+      "path": "src/share-import.mjs",
+      "gitBlob": "1a6d2d9f3703917ee5a2bca16fac32ebc0226b28",
+      "sha256": "3ec8f8d6d369c8397a691313addebee0b283b7be848aa4a54fe879635841c54e"
+    },
+    {
+      "path": "src/updater.mjs",
+      "gitBlob": "3edf052a15e9d2079f1363faf6fe4b31394e3ee1",
+      "sha256": "27d2b901a59d77de7f25c8fec5661404d5d49d430a9276a2ef24f0e804eeff53"
+    },
+    {
+      "path": "src/utils.mjs",
+      "gitBlob": "887eabdefe92bc3bc30109dd8bd6a28a89206ac4",
+      "sha256": "89e1e0693bb65a306d17051746a3eeaae7014ba012c840458e5c0383947390a5"
+    },
+    {
+      "path": "src/video-assets.mjs",
+      "gitBlob": "5d9a836ea7e9b679e5b328b3c3d2c2221b11de86",
+      "sha256": "8fbabe45549a1ed6e83947667dd6b88e2c1804c8bb742075100ae7abc364cdd4"
+    },
+    {
+      "path": "Start-LinliLocalMail.ps1",
+      "gitBlob": "5f25de11129a8df02e0fbfd81c2d4ed09cccc210",
+      "sha256": "7775550c3b19d20c41ac3da595f4abe54ca103dee667456175ef43e11ec0dcd7"
+    },
+    {
+      "path": "Stop-LinliLocalMail.ps1",
+      "gitBlob": "e6904208deb176a4ff5a8eecef32bbb922271db0",
+      "sha256": "d4d998aae02fe4950be7d20f5ed8d9fea1dfe57eaee939e95c4cf71a3258dcb0"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "gitBlob": "1291a9e19868ed299f446cfc9087863e476fe671",
+      "sha256": "8065c5d1ba19620c410e7e8e025ce4a0146485506b4a2048904d0d99cad80074"
+    },
+    {
+      "path": "tools/backup.mjs",
+      "gitBlob": "e3182d0ba89c4df340d76f9ee40634b757d11982",
+      "sha256": "4d6c4e0bafda6d7aec3250db06267f04523cf091b0da24145cd006f6e6a94e1c"
+    },
+    {
+      "path": "tools/build-installer.ps1",
+      "gitBlob": "d6e1c035347d2cff55a0f757b3f36a817fef6d6a",
+      "sha256": "eefac1c09751f8f33f0e0d36ac9d5d7a69f75ac526a542774c769d11acc1b099"
+    },
+    {
+      "path": "tools/build-launcher-wrapper.ps1",
+      "gitBlob": "17822fa3db18780e59ca10a483cb21c05ae826ec",
+      "sha256": "5ea42a8a438577f54427573591287e6c9a8e430a2b66c1c1eaf2c824dedacd71"
+    },
+    {
+      "path": "tools/doctor.mjs",
+      "gitBlob": "80d82891e8df86b91d6aeece2483d4d16e3e2b64",
+      "sha256": "6afca21ef119b3394d42615c90fcb3220c1dbee497d0faf38971af3b034743d1"
+    },
+    {
+      "path": "tools/download-node-runtime.mjs",
+      "gitBlob": "47b82291bae5d31550f8b9bdccd152cf23209ee1",
+      "sha256": "5732ea881d4fc65cb93dd4c8673eb6b0a4af5087e3c3a01826e55febb8ee57f4"
+    },
+    {
+      "path": "tools/download-osslsigncode.mjs",
+      "gitBlob": "5189a461ebb7c047cfbf292aaff598601a11ce7f",
+      "sha256": "1400e26e4b56cd051302d7dbf2236662253441f3ab0c8b75b1b5d8bc722a6ea4"
+    },
+    {
+      "path": "tools/feapp.mjs",
+      "gitBlob": "6178d9c2d9238c980e09302c361d99f9a6197c38",
+      "sha256": "a10e962facfeb5795d6a29d7baab69800403f2150f44b44b89e4ee11b50c557e"
+    },
+    {
+      "path": "tools/history.mjs",
+      "gitBlob": "837a026fbb16b2e14928f0dbe5e198d705f1edf7",
+      "sha256": "899f5ef6e411e848579f01b629374b81fc71bfd64bf61be677380e22281f9dbd"
+    },
+    {
+      "path": "tools/install-launcher-wrapper.ps1",
+      "gitBlob": "3a1c52d679b02bfb9907acc00ebeb1d58bb7363e",
+      "sha256": "97c76a89e9a0faf86699433e8f12db5d139b58acc089c10631f17c8cc89375d7"
+    },
+    {
+      "path": "tools/install.ps1",
+      "gitBlob": "45d5d188b9b861dc044677fd3c6d40f240e5a60a",
+      "sha256": "cdad1caac4a9e4a2c5bcee5718e723c3a0a6466a368ce4c08d55c18ae662a28d"
+    },
+    {
+      "path": "tools/release.mjs",
+      "gitBlob": "2d5256dda33510dc76d853f0c5c57eb1603f7cff",
+      "sha256": "134de44c7af7786cd751e8a9ea50d6d1eec238e16ed468e27ae05ae94433db30"
+    },
+    {
+      "path": "tools/restore-launcher.ps1",
+      "gitBlob": "a8829e811ac2af6ab2b7a5656e7ba6392f9d94c4",
+      "sha256": "0aa910cf7d0fd8196a6c5f65c803d4702c86fa98a5f0ad72334746fbbb79d5a6"
+    }
+  ]
+}
