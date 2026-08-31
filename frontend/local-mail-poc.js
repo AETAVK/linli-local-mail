@@ -8,6 +8,7 @@
   var MAILBOX_IMPORT_MODAL_ID = "local-mail-import-modal";
   var LETTERS_MODAL_ID = "local-mail-letters-modal";
   var UPDATE_MENU_ITEM_ID = "local-mail-check-update-menu-item";
+  var UPDATE_OFFLINE_BUTTON_ID = "local-mail-check-update-offline-button";
   var UPDATE_MODAL_ID = "local-mail-update-modal";
   var state = {
     config: null,
@@ -341,6 +342,8 @@
       ".lm-update-menu-item{user-select:none}",
       ".lm-update-menu-icon{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;flex:0 0 auto;color:currentColor}",
       ".lm-update-menu-icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}",
+      ".lm-offline-update-button{position:absolute;top:calc(100% + 8px);right:0;z-index:9999;display:flex;box-sizing:border-box;align-items:center;gap:6px;width:160px;height:36px;padding:0 10px;border:1px solid rgba(255,255,255,.12);border-radius:8px;background:var(--tp-surface-1,#232529);color:var(--tp-text-body,#ced2d4);font:inherit;font-size:12px;text-align:left;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.28)}",
+      ".lm-offline-update-button:hover{background:var(--tp-grey-3,#45474e);color:var(--tp-text-title,#e8e9eb)}",
       ".lm-update-dialog{width:min(520px,92vw);padding:24px}",
       ".lm-update-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}",
       ".lm-update-heading .lm-modal-title{margin:0;font-size:18px}",
@@ -639,23 +642,38 @@
     return rect.width > 0 && rect.height > 0;
   }
 
+  function isRenderedElement(element) {
+    if (!element || !element.isConnected) return false;
+    var style = window.getComputedStyle(element);
+    return !element.hidden && style.display !== "none" && style.visibility !== "hidden";
+  }
+
+  function normalizedMenuLabel(value) {
+    return String(value == null ? "" : value).replace(/\s+/g, "").trim();
+  }
+
+  function isSettingsMenuLabel(value) {
+    var label = normalizedMenuLabel(value);
+    return label === "设置" || label === "Settings";
+  }
+
   function hasExactMenuLabel(container, label) {
     return Array.prototype.slice.call(container.querySelectorAll("div,button,a,[role='menuitem']"))
       .some(function (item) {
-        return isVisibleElement(item) && item.textContent.trim() === label;
+        return isRenderedElement(item) && normalizedMenuLabel(item.textContent) === label;
       });
   }
 
   function findUserMenuByLabels() {
     var candidates = Array.prototype.slice.call(document.querySelectorAll("div,button,a,[role='menuitem']"));
     var settingsItems = candidates.filter(function (item) {
-      return isVisibleElement(item) && item.textContent.trim() === "设置";
+      return isRenderedElement(item) && isSettingsMenuLabel(item.textContent);
     });
     for (var index = 0; index < settingsItems.length; index += 1) {
       var settingsItem = settingsItems[index];
       var menu = settingsItem.parentElement;
-      for (var depth = 0; menu && depth < 5; depth += 1, menu = menu.parentElement) {
-        if (!isVisibleElement(menu)) continue;
+      for (var depth = 0; menu && depth < 8; depth += 1, menu = menu.parentElement) {
+        if (!isRenderedElement(menu)) continue;
         if (!hasExactMenuLabel(menu, "账号中心") || !hasExactMenuLabel(menu, "个人资料")) continue;
         return { trigger: null, menu: menu, settingsItem: settingsItem };
       }
@@ -667,34 +685,86 @@
     var trigger = document.querySelector('button[aria-label="User menu"]');
     if (trigger && trigger.parentElement) {
       var menu = Array.prototype.slice.call(trigger.parentElement.children).find(function (child) {
-        return child !== trigger && child.matches && child.matches("div.absolute");
+        return child !== trigger && child.matches && child.matches("div.absolute") && isRenderedElement(child);
+      });
+      if (menu) return { trigger: trigger, menu: menu, settingsItem: null };
+      menu = Array.prototype.slice.call(trigger.parentElement.querySelectorAll("div.absolute")).find(function (candidate) {
+        return candidate !== trigger && isRenderedElement(candidate) && (hasExactMenuLabel(candidate, "设置") || hasExactMenuLabel(candidate, "Settings"));
       });
       if (menu) return { trigger: trigger, menu: menu, settingsItem: null };
     }
     return findUserMenuByLabels();
   }
 
-  function mountUpdateMenuItem() {
-    if (document.getElementById(UPDATE_MENU_ITEM_ID)) return;
-    var context = findUserMenu();
-    if (!context) return;
-    var settingsItem = context.settingsItem || Array.prototype.slice.call(context.menu.querySelectorAll("div,button,a,[role='menuitem']")).find(function (item) {
-      return isVisibleElement(item) && item.textContent.trim() === "设置";
-    });
-    if (!settingsItem || !settingsItem.parentElement) return;
-    installStyles();
-    var item = document.createElement("div");
-    item.id = UPDATE_MENU_ITEM_ID;
-    item.className = settingsItem.className + " lm-update-menu-item";
-    item.setAttribute("role", "menuitem");
-    item.innerHTML = '<span class="lm-update-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14.8 4.2"></path><path d="M4 12A8 8 0 0 1 18.8 7.8"></path><path d="m5 20 .2-3.8L9 16"></path><path d="m19 4-.2 3.8L15 8"></path></svg></span><span>检查补丁更新</span>';
+  function findOfflineSettingsTrigger() {
+    var selectors = [
+      'button[aria-label="设置"]',
+      'button[aria-label="user_menu_settings"]',
+      'button[aria-label="Settings"]'
+    ];
+    for (var index = 0; index < selectors.length; index += 1) {
+      var trigger = document.querySelector(selectors[index]);
+      if (isRenderedElement(trigger)) return trigger;
+    }
+    return null;
+  }
+
+  function updateMenuIconHtml() {
+    return '<span class="lm-update-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14.8 4.2"></path><path d="M4 12A8 8 0 0 1 18.8 7.8"></path><path d="m5 20 .2-3.8L9 16"></path><path d="m19 4-.2 3.8L15 8"></path></svg></span><span>检查补丁更新</span>';
+  }
+
+  function attachUpdateAction(item, trigger) {
     item.addEventListener("click", function (event) {
       event.preventDefault();
       event.stopPropagation();
-      if (context.trigger && typeof context.trigger.click === "function") context.trigger.click();
+      if (trigger && typeof trigger.click === "function") trigger.click();
       checkForUpdate(true);
     });
-    settingsItem.insertAdjacentElement("afterend", item);
+  }
+
+  function mountUpdateMenuItem() {
+    var context = findUserMenu();
+    if (context && context.menu) {
+      var existing = context.menu.querySelector("#" + UPDATE_MENU_ITEM_ID);
+      if (existing) return;
+      var stale = document.getElementById(UPDATE_MENU_ITEM_ID);
+      if (stale) stale.remove();
+      var settingsItem = context.settingsItem || Array.prototype.slice.call(context.menu.querySelectorAll("div,button,a,[role='menuitem']")).find(function (item) {
+        return isRenderedElement(item) && isSettingsMenuLabel(item.textContent);
+      });
+      if (!settingsItem || !settingsItem.parentElement) return;
+      installStyles();
+      var item = document.createElement("div");
+      item.id = UPDATE_MENU_ITEM_ID;
+      item.className = settingsItem.className + " lm-update-menu-item";
+      item.setAttribute("role", "menuitem");
+      item.innerHTML = updateMenuIconHtml();
+      attachUpdateAction(item, context.trigger);
+      settingsItem.insertAdjacentElement("afterend", item);
+      return;
+    }
+
+    // .627 离线分支只有设置齿轮，没有官方用户下拉菜单；将入口固定在齿轮下方，
+    // 保持原菜单的宽度、颜色与点击语义，避免更新功能随停服后的布局消失。
+    var offlineTrigger = findOfflineSettingsTrigger();
+    if (!offlineTrigger || !offlineTrigger.parentElement) return;
+    if (document.getElementById(UPDATE_OFFLINE_BUTTON_ID)) return;
+    installStyles();
+    var offlineItem = document.createElement("button");
+    offlineItem.id = UPDATE_OFFLINE_BUTTON_ID;
+    offlineItem.type = "button";
+    offlineItem.className = "lm-offline-update-button";
+    offlineItem.setAttribute("aria-label", "检查补丁更新");
+    offlineItem.title = "检查补丁更新";
+    offlineItem.innerHTML = updateMenuIconHtml();
+    attachUpdateAction(offlineItem, null);
+    offlineTrigger.insertAdjacentElement("afterend", offlineItem);
+  }
+
+  function scheduleUpdateMenuMount() {
+    [0, 24, 96, 240, 500].forEach(function (delay) {
+      window.setTimeout(mountUpdateMenuItem, delay);
+    });
   }
 
   function scheduleAutomaticUpdateCheck() {
@@ -3294,6 +3364,15 @@
       scheduleAutomaticUpdateCheck();
     });
   }
+
+  document.addEventListener("click", function (event) {
+    var target = event.target && event.target.nodeType === 1 ? event.target : event.target && event.target.parentElement;
+    if (!target || !target.closest) return;
+    if (target.closest('button[aria-label="User menu"],button[aria-label="设置"],button[aria-label="user_menu_settings"],button[aria-label="Settings"]')) {
+      // 用户菜单由 Vue 在点击后异步创建，覆盖整个过渡窗口而不是只抢首帧。
+      scheduleUpdateMenuMount();
+    }
+  }, true);
 
   var observer = new MutationObserver(queueMount);
   observer.observe(document.documentElement, { childList: true, subtree: true });

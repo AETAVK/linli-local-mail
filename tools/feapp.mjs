@@ -22,6 +22,12 @@ const PATCH_RULES = [
   ["Te.get(\"/letter/unread_count\"", "window.__LOCAL_MAIL_HTTP__.get(\"/letter/unread_count\""],
   ["Te.post(\"/letter/share\"", "window.__LOCAL_MAIL_HTTP__.post(\"/letter/share\""],
   ["Te.post(\"/letter/resend\"", "window.__LOCAL_MAIL_HTTP__.post(\"/letter/resend\""],
+  // .627 客户端在停止在线服务后把写信入口绑定到恒为 false 的 N3。
+  // 本地回信服务仍提供完整的 /letter/send 链路，因此永不隐藏原生写信入口。
+  [
+    "\"hide-write\":o(p)||!o(N3)",
+    "\"hide-write\":!1"
+  ],
   [
     "async function Us(e,t){return Te.get(\"/searchPlaylist\",{params:e,...t}).then(s=>({...s.data,list:s.data.list.map(i=>({...i,itemId:i.itemId,performanceId:i.performanceId??\"\",songId:i.songId??\"\",id:i.itemId}))}))}async function Xp",
     "async function Us(e,t){return Te.get(\"/searchPlaylist\",{params:e,...t}).then(s=>({...s.data,list:s.data.list.map(i=>({...i,itemId:i.itemId,performanceId:i.performanceId??\"\",songId:i.songId??\"\",id:i.itemId}))}))}window.__LOCAL_MUSIC_API__=Object.freeze({addToPlaylist:An,removeFromPlaylist:Nn,searchPlaylist:Us});async function Xp"
@@ -30,6 +36,12 @@ const PATCH_RULES = [
   ["J=async()=>{Q(),await C(),await H(),L=setInterval(H,U)}", "J=async()=>{if(Ie().isOfflineMode)return;Q(),await C(),await H(),L=setInterval(H,U)}"],
   ["w=()=>{l.value=!0}", "w=()=>{Ie().isOfflineMode?ze.warning(\"离线版尚未接入 MIDI 定制演奏服务\"):l.value=!0}"]
 ];
+
+// 兼容上一版已经安装过的补丁：旧补丁把 hide-write 改成了 o(p)，
+// 在缺少 required 基线、需要从现有安装包逆向恢复时也应能正常还原。
+const LEGACY_PATCH_AFTERS = new Map([
+  ["\"hide-write\":o(p)||!o(N3)", ["\"hide-write\":o(p)"]]
+]);
 
 function sha256Sync(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -221,7 +233,19 @@ function unpatchEntries(patchedEntries) {
   index.data = Buffer.from(indexText, "utf8");
 
   let mainText = main.data.toString("utf8");
-  for (const [before, after] of PATCH_RULES) mainText = exactReplace(mainText, after, before);
+  for (const [before, after] of PATCH_RULES) {
+    if (mainText.includes(after)) {
+      mainText = exactReplace(mainText, after, before);
+      continue;
+    }
+    const legacyAfter = (LEGACY_PATCH_AFTERS.get(before) || [])
+      .find((candidate) => mainText.includes(candidate));
+    if (legacyAfter) {
+      mainText = exactReplace(mainText, legacyAfter, before);
+      continue;
+    }
+    throw new Error(`Expected patched frontend rule was not found: ${after}`);
+  }
   main.data = Buffer.from(mainText, "utf8");
   return entries;
 }

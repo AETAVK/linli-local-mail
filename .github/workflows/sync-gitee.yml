@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "要同步到 Gitee 的 GitHub Release 标签，例如 v0.9.4"
+        description: "要同步到 Gitee 的 GitHub Release 标签，例如 v0.9.8"
         required: true
         type: string
 jobs:
