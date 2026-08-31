@@ -155,6 +155,8 @@ async function uploadAttachment(apiRoot, releaseId, asset) {
       `@${headerFile}`,
       "--header",
       "Expect:",
+      "--form-string",
+      `access_token=${token}`,
       "--form",
       `file=@${asset.filePath};type=application/octet-stream`,
       endpoint,
