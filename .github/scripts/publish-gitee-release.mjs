@@ -6,6 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const curlCommand = process.platform === "win32" ? "curl.exe" : "curl";
 
 const token = String(process.env.GITEE_TOKEN || "").trim();
 const repository = String(process.env.GITEE_REPOSITORY || "sforlife/linli-local-mail").trim();
@@ -158,7 +159,7 @@ async function uploadAttachment(apiRoot, releaseId, asset) {
       `file=@${asset.filePath};type=application/octet-stream`,
       endpoint,
     ];
-    const { stdout, stderr } = await execFileAsync("curl.exe", args, {
+    const { stdout, stderr } = await execFileAsync(curlCommand, args, {
       windowsHide: true,
       maxBuffer: 2_000_000,
     });
