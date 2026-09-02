@@ -12,7 +12,7 @@ jobs:
     # 上会长时间无响应；Ubuntu runner 使用另一条网络出口，作为默认同步路径。
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: main
       - name: Fetch published assets from GitHub Release into dist/

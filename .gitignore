@@ -18,6 +18,7 @@
 /imports/history/*.json
 /imports/legacy/*.json
 /installer-artifacts/
+/.tmp-installer-e2e/
 
 *.cer
 *.key

@@ -2,13 +2,19 @@
   "use strict";
 
   var API_BASE = "http://127.0.0.1:27149";
+  var LOCAL_CAPABILITIES = Object.freeze({ mail: true, music: true, widgets: true, midi: false });
+  Object.defineProperty(window, "__LINLI_LOCAL_CAPABILITIES__", {
+    value: LOCAL_CAPABILITIES,
+    configurable: false,
+    enumerable: false,
+    writable: false
+  });
   var SECTION_ID = "local-mail-settings-section";
   var MAILBOX_TOOLS_ID = "local-mail-mailbox-tools";
   var MAILBOX_IMPORT_BUTTON_ID = "local-mail-mailbox-import-button";
   var MAILBOX_IMPORT_MODAL_ID = "local-mail-import-modal";
   var LETTERS_MODAL_ID = "local-mail-letters-modal";
-  var UPDATE_MENU_ITEM_ID = "local-mail-check-update-menu-item";
-  var UPDATE_OFFLINE_BUTTON_ID = "local-mail-check-update-offline-button";
+  var PATCH_VERSION_SECTION_ID = "local-mail-patch-version-section";
   var UPDATE_MODAL_ID = "local-mail-update-modal";
   var state = {
     config: null,
@@ -24,6 +30,23 @@
     remoteImport: { checked: false, checking: false, candidate: false, running: false, pollTimer: null, lastStatus: null, retryAfter: 0 },
     remotePromptSettings: null,
     update: { autoStarted: false, checking: false, applying: false, result: null },
+    settingsSync: {
+      store: null,
+      unsubscribe: null,
+      discoveryStarted: false,
+      discoveryTimer: null,
+      lastSentSignature: "",
+      desired: null,
+      flushing: false
+    },
+    desktopCommand: {
+      started: false,
+      timer: null,
+      inFlight: false,
+      lastCommandId: "",
+      lastNavigatedCommandId: "",
+      lastAckedCommandId: ""
+    },
     music: {
       loaded: false,
       loading: false,
@@ -138,11 +161,174 @@
     return (await window.__LOCAL_MAIL_HTTP__.post(path, body, request)).data;
   }
 
+  function localMusicRequest(input) {
+    var request = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+    var rawSong = request.song && typeof request.song === "object" && !Array.isArray(request.song)
+      ? request.song
+      : request;
+    var itemId = request.itemId != null ? request.itemId : rawSong.itemId != null ? rawSong.itemId : rawSong.id;
+    var itemType = request.itemType != null
+      ? request.itemType
+      : request.sourceType != null
+        ? request.sourceType
+        : rawSong.sourceType;
+    if (itemId == null || String(itemId).trim() === "") throw new Error("本地音乐桌面请求缺少曲目编号");
+    var song = Object.assign({}, rawSong);
+    if (song.id == null) song.id = itemId;
+    if (song.itemId == null) song.itemId = itemId;
+    if (itemType != null && song.sourceType == null) song.sourceType = itemType;
+    return { itemType: itemType, itemId: itemId, song: song };
+  }
+
+  function localMusicIds(input) {
+    var request = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+    var values;
+    if (Array.isArray(input)) values = input;
+    else values = request.itemIds != null
+      ? request.itemIds
+      : request.ids != null
+        ? request.ids
+        : request.itemId != null
+          ? request.itemId
+          : request.id;
+    if (values == null && request.song && typeof request.song === "object") {
+      values = request.song.itemId != null ? request.song.itemId : request.song.id;
+    }
+    if (!Array.isArray(values)) values = values == null ? [] : [values];
+    return values.filter(function (value) { return value != null && String(value).trim() !== ""; });
+  }
+
+  function normalizeNativeMusicItem(value, fallback) {
+    var raw = value && typeof value === "object" ? value : {};
+    var nested = raw.item && typeof raw.item === "object" ? raw.item
+      : raw.nativeItem && typeof raw.nativeItem === "object" ? raw.nativeItem
+        : raw.song && typeof raw.song === "object" ? raw.song
+          : raw.data && typeof raw.data === "object" ? raw.data
+            : raw;
+    // /api/music-desktop returns both a native-looking top-level row and the
+    // original song object. Keep both layers: Rt/Mt need row metadata while
+    // SongLiteItem/VideoTodViewItem need the original media fields.
+    var normalized = nested !== raw ? Object.assign({}, nested, raw) : Object.assign({}, raw);
+    var source = fallback && typeof fallback === "object" ? fallback : {};
+    var sourceSong = source.song && typeof source.song === "object" ? source.song : source;
+    var itemId = raw.itemId != null ? raw.itemId
+      : raw.id != null ? raw.id
+        : normalized.itemId != null ? normalized.itemId
+          : normalized.id != null ? normalized.id
+            : source.itemId != null ? source.itemId
+              : source.id != null ? source.id
+                : sourceSong.itemId != null ? sourceSong.itemId : sourceSong.id;
+    if (itemId != null) {
+      normalized.itemId = itemId;
+      normalized.id = itemId;
+    }
+    var itemType = normalized.itemType != null ? normalized.itemType
+      : normalized.sourceType != null ? normalized.sourceType
+        : source.itemType != null ? source.itemType : source.sourceType;
+    if (itemType != null) {
+      if (normalized.itemType == null) normalized.itemType = itemType;
+      if (normalized.sourceType == null) normalized.sourceType = itemType;
+    }
+    if (normalized.performanceId == null) normalized.performanceId = "";
+    if (normalized.songId == null) normalized.songId = "";
+    var firstValue = function (keys) {
+      for (var index = 0; index < keys.length; index += 1) {
+        var candidate = normalized[keys[index]];
+        if (candidate != null && candidate !== "") return candidate;
+      }
+      return null;
+    };
+    var cover = firstValue(["coverUrl", "iconUrl", "cover", "icon"]);
+    if (cover != null) {
+      ["coverUrl", "iconUrl", "cover", "icon"].forEach(function (key) {
+        if (normalized[key] == null || normalized[key] === "") normalized[key] = cover;
+      });
+    }
+    var nameKey = firstValue(["nameKey", "songNameKey"]);
+    if (nameKey != null) {
+      if (normalized.nameKey == null || normalized.nameKey === "") normalized.nameKey = nameKey;
+      if (normalized.songNameKey == null || normalized.songNameKey === "") normalized.songNameKey = nameKey;
+    }
+    if (normalized.videoUrl == null && normalized.videoURL != null) normalized.videoUrl = normalized.videoURL;
+    if (normalized.audioUrl == null && normalized.audioURL != null) normalized.audioUrl = normalized.audioURL;
+    if (normalized.duration == null) {
+      if (normalized.videoDuration != null) normalized.duration = normalized.videoDuration;
+      else if (normalized.audioDuration != null) normalized.duration = normalized.audioDuration;
+    }
+    return normalized;
+  }
+
+  async function localMusicAdd(input, config) {
+    var request = localMusicRequest(input);
+    var result = await callApi("/api/music-desktop/items", {
+      method: "POST",
+      body: JSON.stringify({ itemType: request.itemType, itemId: request.itemId, song: request.song }),
+      signal: config && config.signal
+    });
+    return normalizeNativeMusicItem(result && result.item, request);
+  }
+
+  async function localMusicRemove(input, config) {
+    var request = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+    var itemIds = localMusicIds(input);
+    if (!itemIds.length) throw new Error("本地音乐桌面移除请求缺少曲目编号");
+    var itemType = request.itemType != null ? request.itemType : request.sourceType;
+    if (itemType == null && request.song && typeof request.song === "object") itemType = request.song.sourceType;
+    var results = [];
+    for (var index = 0; index < itemIds.length; index += 1) {
+      results.push(await callApi("/api/music-desktop/remove", {
+        method: "POST",
+        body: JSON.stringify({ itemType: itemType, itemId: itemIds[index] }),
+        signal: config && config.signal
+      }));
+    }
+    return results.length === 1 ? results[0] : results;
+  }
+
+  async function localMusicSearch(params, config) {
+    var result = await callApi("/api/music-desktop", {
+      params: params || {},
+      signal: config && config.signal
+    });
+    var data = Array.isArray(result) ? { list: result } : result && typeof result === "object" ? result : {};
+    var list = Array.isArray(data.list) ? data.list : Array.isArray(data.items) ? data.items : [];
+    return Object.assign({}, data, {
+      list: list.map(function (item) { return normalizeNativeMusicItem(item); })
+    });
+  }
+
+  async function localMusicOrder(input, config) {
+    return callApi("/api/music-desktop/order", {
+      method: "POST",
+      body: JSON.stringify(input == null ? {} : input),
+      signal: config && config.signal
+    });
+  }
+
+  window.__LOCAL_MUSIC_API__ = Object.freeze({
+    addToPlaylist: localMusicAdd,
+    removeFromPlaylist: localMusicRemove,
+    searchPlaylist: localMusicSearch,
+    order: localMusicOrder
+  });
+
   function isSettingsRoute() {
     return /\/settings\/?$/.test(window.location.pathname) || /#\/settings\/?$/.test(window.location.hash);
   }
 
   function hideWatermark() {
+    Array.prototype.forEach.call(document.querySelectorAll(".watermark-overlay"), function (node) {
+      if (node.style && typeof node.style.setProperty === "function") {
+        var priority = typeof node.style.getPropertyPriority === "function"
+          ? node.style.getPropertyPriority("display")
+          : node.style.priorities && node.style.priorities.display;
+        if (node.style.getPropertyValue("display") !== "none" || priority !== "important") {
+          node.style.setProperty("display", "none", "important");
+        }
+      } else if (node.style) {
+        if (node.style.display !== "none") node.style.display = "none";
+      }
+    });
     if (!document.getElementById("local-mail-watermark-style")) {
       var style = document.createElement("style");
       style.id = "local-mail-watermark-style";
@@ -156,7 +342,7 @@
     var style = document.createElement("style");
     style.id = "local-mail-settings-style";
     style.textContent = [
-      "#" + SECTION_ID + "{padding:0 0 12px;color:var(--tp-text-body,#ced2d4);color-scheme:dark}",
+      "#" + SECTION_ID + ",#" + PATCH_VERSION_SECTION_ID + "{padding:0 0 12px;color:var(--tp-text-body,#ced2d4);color-scheme:dark}",
       ".lm-title-row{display:flex;align-items:center;justify-content:space-between;gap:16px}",
       ".lm-title{font-size:20px;font-weight:600;color:var(--tp-text-title,#e8e9eb)}",
       ".lm-subtitle{font-size:13px;line-height:1.6;color:var(--tp-text-secondary,#a1a5ad)}",
@@ -273,7 +459,6 @@
       ".lm-check{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--tp-text-secondary,#a1a5ad)}",
       ".lm-check[hidden]{display:none}",
       ".lm-check input{width:16px;height:16px;accent-color:#d8d1c5}",
-      ".lm-diagnostics{margin-top:10px;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,.16);font-size:12px;line-height:1.65;color:var(--tp-text-secondary,#a1a5ad);white-space:pre-wrap}",
       ".lm-mailbox-tools{display:flex;align-items:center;gap:8px;margin-left:auto;margin-right:12px}",
       ".lm-mailbox-import-button{height:24px;padding:0 11px;border:1px solid var(--tp-grey-5,rgba(255,255,255,.22));border-radius:999px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;line-height:22px;cursor:pointer;transition:background-color .15s,color .15s,border-color .15s}",
       ".lm-mailbox-import-button:hover{border-color:var(--tp-grey-7,rgba(255,255,255,.42));background:var(--tp-surface-1,rgba(255,255,255,.07));color:var(--tp-text-title,#e8e9eb)}",
@@ -339,15 +524,11 @@
       ".lm-letter-summary{display:block;font-size:13px;color:var(--tp-text-title,#e8e9eb);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
       ".lm-letter-sub{display:block;margin-top:2px;font-size:11px;color:var(--tp-text-tertiary,#7d818c)}",
       ".lm-letter-status{flex:0 0 auto;font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);color:var(--tp-text-secondary,#a1a5ad)}",
-      ".lm-update-menu-item{user-select:none}",
-      ".lm-update-menu-icon{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;flex:0 0 auto;color:currentColor}",
-      ".lm-update-menu-icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}",
-      ".lm-offline-update-button{position:absolute;top:calc(100% + 8px);right:0;z-index:9999;display:flex;box-sizing:border-box;align-items:center;gap:6px;width:160px;height:36px;padding:0 10px;border:1px solid rgba(255,255,255,.12);border-radius:8px;background:var(--tp-surface-1,#232529);color:var(--tp-text-body,#ced2d4);font:inherit;font-size:12px;text-align:left;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.28)}",
-      ".lm-offline-update-button:hover{background:var(--tp-grey-3,#45474e);color:var(--tp-text-title,#e8e9eb)}",
       ".lm-update-dialog{width:min(520px,92vw);padding:24px}",
       ".lm-update-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}",
       ".lm-update-heading .lm-modal-title{margin:0;font-size:18px}",
       ".lm-update-version{display:flex;align-items:center;gap:10px;margin:14px 0;padding:12px 14px;border:1px solid rgba(255,255,255,.09);border-radius:10px;background:rgba(0,0,0,.14)}",
+      ".lm-update-version[hidden]{display:none}",
       ".lm-update-version-current,.lm-update-version-latest{font-size:14px;font-weight:600;color:var(--tp-text-title,#e8e9eb)}",
       ".lm-update-version-arrow{color:var(--tp-text-tertiary,#7d818c)}",
       ".lm-update-copy{font-size:13px;line-height:1.65;color:var(--tp-text-secondary,#a1a5ad);white-space:pre-line}",
@@ -363,6 +544,12 @@
       ".lm-update-release-name{min-width:0;overflow:hidden;color:var(--tp-text-tertiary,#7d818c);font-size:11px;text-align:right;text-overflow:ellipsis;white-space:nowrap}",
       ".lm-update-release-date{margin-top:3px;color:var(--tp-text-tertiary,#7d818c);font-size:10px}",
       ".lm-update-release-notes{margin-top:6px;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word}",
+      "#local-mail-local-navigation{position:fixed;top:18px;left:18px;z-index:45;display:flex;align-items:center;gap:5px;padding:5px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(28,29,33,.94);box-shadow:0 8px 24px rgba(0,0,0,.24);color-scheme:dark;backdrop-filter:blur(10px);-webkit-app-region:no-drag;pointer-events:auto}",
+      "#local-mail-local-navigation[hidden]{display:none!important}",
+      ".lm-local-nav-button{display:flex;align-items:center;gap:6px;height:42px;padding:0 18px;border:0;border-radius:8px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:16px;font-weight:600;cursor:pointer;white-space:nowrap;-webkit-app-region:no-drag;pointer-events:auto}",
+      ".lm-local-nav-button:hover,.lm-local-nav-button[data-active='true']{background:var(--tp-surface-1,rgba(255,255,255,.07));color:var(--tp-text-title,#e8e9eb)}",
+      ".lm-local-nav-button[hidden]{display:none!important}",
+      ".lm-local-nav-mark{display:flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:rgba(255,255,255,.04);color:var(--tp-text-title,#e8e9eb);font-size:11px}",
       ".lm-music-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-left:auto;min-width:0;white-space:nowrap}",
       ".lm-music-action{height:30px;padding:0 10px;border:1px solid var(--tp-grey-5,rgba(255,255,255,.22));border-radius:999px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:12px;line-height:28px;cursor:pointer;transition:background-color .15s,color .15s,border-color .15s}",
       ".lm-music-action:hover:not(:disabled){border-color:var(--tp-grey-7,rgba(255,255,255,.42));background:var(--tp-surface-1,rgba(255,255,255,.07));color:var(--tp-text-title,#e8e9eb)}",
@@ -391,6 +578,9 @@
       ".lm-music-song-name{overflow:hidden;color:var(--tp-text-title,#e8e9eb);font-size:15px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}",
       ".lm-music-song-meta{margin-top:3px;overflow:hidden;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;text-overflow:ellipsis;white-space:nowrap}",
       ".lm-music-mode{width:80px;min-width:80px;color:var(--tp-text-secondary,#a1a5ad);font-size:13px}",
+      ".lm-music-row-add{height:28px;padding:0 9px;border:0;border-radius:7px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}",
+      ".lm-music-row-add:hover:not(:disabled){background:rgba(255,255,255,.07);color:var(--tp-text-title,#e8e9eb)}",
+      ".lm-music-row-add:disabled{opacity:.45;cursor:not-allowed}",
       ".lm-music-row-remove{height:28px;padding:0 9px;border:0;border-radius:7px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:12px;cursor:pointer}",
       ".lm-music-row-remove:hover{background:rgba(255,255,255,.07);color:#e5aaa5}",
       ".lm-music-empty{display:flex;min-height:180px;align-items:center;justify-content:center;color:var(--tp-text-secondary,#a1a5ad);font-size:14px}",
@@ -408,8 +598,9 @@
       ".lm-music-switch input::after{display:block;width:18px;height:18px;margin:2px;border-radius:50%;background:#f1eee8;content:'';transition:transform .16s}",
       ".lm-music-switch input:checked{border-color:#e7e1d7;background:#d8d1c5}",
       ".lm-music-switch input:checked::after{transform:translateX(18px);background:#2b2926}",
+      ".lm-desktop-preference-status{margin-left:8px;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;font-weight:400;white-space:nowrap}",
       "@media(max-width:900px){.lm-grid,.lm-provider-grid,.lm-parameter-grid{grid-template-columns:1fr}.lm-provider-grid .lm-wide,.lm-parameter-wide{grid-column:auto}.lm-toolbar{align-items:flex-start;flex-direction:column}.lm-config-item{flex-direction:column;align-items:flex-start}.lm-import-methods{grid-template-columns:1fr}.lm-model-manager-body{grid-template-columns:210px minmax(0,1fr)}.lm-provider-detail-scroll{padding:18px}.lm-model-edit-grid{grid-template-columns:1fr}}",
-      "@media(max-width:680px){.lm-modal.lm-model-manager{height:90vh}.lm-model-manager-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.lm-provider-nav{max-height:190px;border-right:0;border-bottom:1px solid rgba(255,255,255,.09)}.lm-provider-detail-head{flex-direction:column}.lm-provider-detail-actions{justify-content:flex-start}}"
+      "@media(max-width:680px){#local-mail-local-navigation{top:10px}.lm-modal.lm-model-manager{height:90vh}.lm-model-manager-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.lm-provider-nav{max-height:190px;border-right:0;border-bottom:1px solid rgba(255,255,255,.09)}.lm-provider-detail-head{flex-direction:column}.lm-provider-detail-actions{justify-content:flex-start}}"
     ].join("");
     document.head.appendChild(style);
   }
@@ -524,16 +715,22 @@
     var status = modal.querySelector('[data-role="update-status"]');
     var close = modal.querySelector('[data-update-action="close"]');
     var apply = modal.querySelector('[data-update-action="apply"]');
+    current.textContent = "";
+    latest.textContent = "";
     version.hidden = true;
+    releases.querySelector('[data-role="update-release-list"]').textContent = "";
     releases.hidden = true;
+    warning.textContent = "";
     warning.hidden = true;
-    apply.hidden = true;
-    close.hidden = false;
-    close.disabled = false;
-    close.textContent = "关闭";
     status.textContent = "";
     status.dataset.kind = "";
     meta.textContent = "";
+    apply.hidden = true;
+    apply.disabled = false;
+    apply.textContent = "更新到最新版";
+    close.hidden = false;
+    close.disabled = false;
+    close.textContent = "关闭";
 
     if (kind === "checking") {
       title.textContent = "检查补丁更新";
@@ -575,9 +772,14 @@
       close.disabled = true;
       close.textContent = "正在处理";
     } else if (kind === "launched") {
-      title.textContent = "更新程序已启动";
-      copy.textContent = "安装程序已经打开，本地回信服务将自动退出。请按安装程序提示完成更新，然后重新启动游戏。";
-      warning.textContent = "如果安装窗口被其他窗口遮挡，请在任务栏中查找“林离本地回信”安装程序。";
+      var deferred = Boolean(result && (result.deferred || result.scheduled));
+      title.textContent = deferred ? "更新已准备" : "更新程序已启动";
+      copy.textContent = deferred
+        ? "更新已准备，完全退出游戏后会自动安装。"
+        : "安装程序已经打开，本地回信服务将自动退出。请按安装程序提示完成更新，然后重新启动游戏。";
+      warning.textContent = deferred
+        ? "请完全退出游戏；退出后更新程序会自动安装准备好的版本。"
+        : "如果安装窗口被其他窗口遮挡，请在任务栏中查找“林离本地回信”安装程序。";
       warning.hidden = false;
       status.textContent = "目标版本：v" + (result && result.version ? result.version : "");
       status.dataset.kind = "success";
@@ -632,139 +834,6 @@
         status.dataset.kind = "error";
       }
     }
-  }
-
-  function isVisibleElement(element) {
-    if (!element || !element.isConnected) return false;
-    var style = window.getComputedStyle(element);
-    if (style.display === "none" || style.visibility === "hidden") return false;
-    var rect = element.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  }
-
-  function isRenderedElement(element) {
-    if (!element || !element.isConnected) return false;
-    var style = window.getComputedStyle(element);
-    return !element.hidden && style.display !== "none" && style.visibility !== "hidden";
-  }
-
-  function normalizedMenuLabel(value) {
-    return String(value == null ? "" : value).replace(/\s+/g, "").trim();
-  }
-
-  function isSettingsMenuLabel(value) {
-    var label = normalizedMenuLabel(value);
-    return label === "设置" || label === "Settings";
-  }
-
-  function hasExactMenuLabel(container, label) {
-    return Array.prototype.slice.call(container.querySelectorAll("div,button,a,[role='menuitem']"))
-      .some(function (item) {
-        return isRenderedElement(item) && normalizedMenuLabel(item.textContent) === label;
-      });
-  }
-
-  function findUserMenuByLabels() {
-    var candidates = Array.prototype.slice.call(document.querySelectorAll("div,button,a,[role='menuitem']"));
-    var settingsItems = candidates.filter(function (item) {
-      return isRenderedElement(item) && isSettingsMenuLabel(item.textContent);
-    });
-    for (var index = 0; index < settingsItems.length; index += 1) {
-      var settingsItem = settingsItems[index];
-      var menu = settingsItem.parentElement;
-      for (var depth = 0; menu && depth < 8; depth += 1, menu = menu.parentElement) {
-        if (!isRenderedElement(menu)) continue;
-        if (!hasExactMenuLabel(menu, "账号中心") || !hasExactMenuLabel(menu, "个人资料")) continue;
-        return { trigger: null, menu: menu, settingsItem: settingsItem };
-      }
-    }
-    return null;
-  }
-
-  function findUserMenu() {
-    var trigger = document.querySelector('button[aria-label="User menu"]');
-    if (trigger && trigger.parentElement) {
-      var menu = Array.prototype.slice.call(trigger.parentElement.children).find(function (child) {
-        return child !== trigger && child.matches && child.matches("div.absolute") && isRenderedElement(child);
-      });
-      if (menu) return { trigger: trigger, menu: menu, settingsItem: null };
-      menu = Array.prototype.slice.call(trigger.parentElement.querySelectorAll("div.absolute")).find(function (candidate) {
-        return candidate !== trigger && isRenderedElement(candidate) && (hasExactMenuLabel(candidate, "设置") || hasExactMenuLabel(candidate, "Settings"));
-      });
-      if (menu) return { trigger: trigger, menu: menu, settingsItem: null };
-    }
-    return findUserMenuByLabels();
-  }
-
-  function findOfflineSettingsTrigger() {
-    var selectors = [
-      'button[aria-label="设置"]',
-      'button[aria-label="user_menu_settings"]',
-      'button[aria-label="Settings"]'
-    ];
-    for (var index = 0; index < selectors.length; index += 1) {
-      var trigger = document.querySelector(selectors[index]);
-      if (isRenderedElement(trigger)) return trigger;
-    }
-    return null;
-  }
-
-  function updateMenuIconHtml() {
-    return '<span class="lm-update-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14.8 4.2"></path><path d="M4 12A8 8 0 0 1 18.8 7.8"></path><path d="m5 20 .2-3.8L9 16"></path><path d="m19 4-.2 3.8L15 8"></path></svg></span><span>检查补丁更新</span>';
-  }
-
-  function attachUpdateAction(item, trigger) {
-    item.addEventListener("click", function (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (trigger && typeof trigger.click === "function") trigger.click();
-      checkForUpdate(true);
-    });
-  }
-
-  function mountUpdateMenuItem() {
-    var context = findUserMenu();
-    if (context && context.menu) {
-      var existing = context.menu.querySelector("#" + UPDATE_MENU_ITEM_ID);
-      if (existing) return;
-      var stale = document.getElementById(UPDATE_MENU_ITEM_ID);
-      if (stale) stale.remove();
-      var settingsItem = context.settingsItem || Array.prototype.slice.call(context.menu.querySelectorAll("div,button,a,[role='menuitem']")).find(function (item) {
-        return isRenderedElement(item) && isSettingsMenuLabel(item.textContent);
-      });
-      if (!settingsItem || !settingsItem.parentElement) return;
-      installStyles();
-      var item = document.createElement("div");
-      item.id = UPDATE_MENU_ITEM_ID;
-      item.className = settingsItem.className + " lm-update-menu-item";
-      item.setAttribute("role", "menuitem");
-      item.innerHTML = updateMenuIconHtml();
-      attachUpdateAction(item, context.trigger);
-      settingsItem.insertAdjacentElement("afterend", item);
-      return;
-    }
-
-    // .627 离线分支只有设置齿轮，没有官方用户下拉菜单；将入口固定在齿轮下方，
-    // 保持原菜单的宽度、颜色与点击语义，避免更新功能随停服后的布局消失。
-    var offlineTrigger = findOfflineSettingsTrigger();
-    if (!offlineTrigger || !offlineTrigger.parentElement) return;
-    if (document.getElementById(UPDATE_OFFLINE_BUTTON_ID)) return;
-    installStyles();
-    var offlineItem = document.createElement("button");
-    offlineItem.id = UPDATE_OFFLINE_BUTTON_ID;
-    offlineItem.type = "button";
-    offlineItem.className = "lm-offline-update-button";
-    offlineItem.setAttribute("aria-label", "检查补丁更新");
-    offlineItem.title = "检查补丁更新";
-    offlineItem.innerHTML = updateMenuIconHtml();
-    attachUpdateAction(offlineItem, null);
-    offlineTrigger.insertAdjacentElement("afterend", offlineItem);
-  }
-
-  function scheduleUpdateMenuMount() {
-    [0, 24, 96, 240, 500].forEach(function (delay) {
-      window.setTimeout(mountUpdateMenuItem, delay);
-    });
   }
 
   function scheduleAutomaticUpdateCheck() {
@@ -1314,7 +1383,6 @@
         state.remoteImport.candidate = false;
         hideRemoteToast();
         state.remotePromptSettings = { promptDisabled: true };
-        applyRemotePromptVisibility();
       } else if (action === "close") {
         state.remoteImport.candidate = false;
         hideRemoteToast();
@@ -1384,14 +1452,6 @@
     } finally {
       state.remoteImport.checking = false;
     }
-  }
-
-  function applyRemotePromptVisibility() {
-    var section = document.getElementById(SECTION_ID);
-    var button = section && section.querySelector('[data-action="restore-remote-prompt"]');
-    if (!button) return;
-    var disabled = Boolean(state.remotePromptSettings && state.remotePromptSettings.promptDisabled);
-    button.hidden = !disabled;
   }
 
   var LETTER_STATUS_LABELS = {
@@ -1607,7 +1667,7 @@
     state.lettersModal.selected = {};
     modal.querySelector('[data-role="letters-title"]').textContent = state.lettersModal.mode === "delete" ? "批量删除信件" : "批量导出信件";
     modal.querySelector('[data-role="letters-description"]').textContent = state.lettersModal.mode === "delete"
-      ? "勾选要删除的信件。去信、回信与生成记录会一并删除，且不可恢复；建议先在设置页“服务与数据”中导出备份。"
+      ? "勾选要删除的信件。去信、回信与生成记录会一并删除，且不可恢复；如需保留这些信件，请先在信箱页使用“导出”按钮导出所选信件。"
       : "勾选要导出的信件，会连同内部调试字段（生成状态、Provider、错误等）下载为一个 .json 文件。";
     var submit = modal.querySelector('[data-role="letters-submit"]');
     submit.textContent = state.lettersModal.mode === "delete" ? "删除所选" : "导出所选";
@@ -1653,6 +1713,35 @@
       if (button.dataset.mailboxAction === "import") return;
       button.hidden = !state.debugMode;
     });
+  }
+
+  function formatServiceVersion(value) {
+    var text = String(value == null ? "" : value).trim();
+    if (!text) return "未知";
+    return /^v/i.test(text) ? text : "v" + text;
+  }
+
+  function patchVersionSectionHtml() {
+    return '<div class="lm-card lm-patch-version-card">' +
+      '<div class="lm-card-head"><div class="lm-card-title">补丁版本</div>' +
+      '<div class="lm-actions"><span class="lm-patch-version" data-role="service-version">正在读取…</span>' +
+      '<button class="lm-button lm-button-small" type="button" data-action="check-update">检查更新</button></div></div>' +
+      '<div class="lm-note">当前本地回信服务版本；点击“检查更新”后会查询公开发布源。</div>' +
+      '</div>';
+  }
+
+  function renderPatchVersion(value) {
+    var section = document.getElementById(PATCH_VERSION_SECTION_ID);
+    var version = section && section.querySelector('[data-role="service-version"]');
+    if (version) version.textContent = formatServiceVersion(value);
+  }
+
+  function bindPatchVersionSection(section) {
+    if (!section || section.dataset.updateBound === "true") return;
+    var button = section.querySelector('[data-action="check-update"]');
+    if (!button) return;
+    section.dataset.updateBound = "true";
+    button.addEventListener("click", function () { checkForUpdate(true); });
   }
 
   function sectionHtml() {
@@ -1710,13 +1799,9 @@
       '  </div>',
       '</div>',
       '<div class="lm-card">',
-      '  <div class="lm-card-head"><div class="lm-card-title">服务与数据</div><div class="lm-actions"><button class="lm-button lm-button-small" type="button" data-action="refresh-diagnostics">刷新</button><button class="lm-button lm-button-small" type="button" data-action="export-backup">导出 JSON 备份</button><button class="lm-button lm-button-small" type="button" data-action="restore-remote-prompt" hidden>恢复历史导入提示</button></div></div>',
-      '  <div class="lm-diagnostics" data-role="diagnostics">正在读取服务状态…</div>',
-      '</div>',
-      '<div class="lm-card">',
       '  <div class="lm-card-title">调试模式</div>',
       '  <label class="lm-check"><input type="checkbox" data-role="debug-mode">启用调试模式</label>',
-      '  <div class="lm-note">打开后信箱页“导入”按钮左侧显示“导出”和“删除”按钮，可勾选信件后批量导出为 .json 或批量删除，并解锁下方每日写信上限调整。删除不可恢复，建议先在“服务与数据”中导出备份。开关会立即保存到本地服务。</div>',
+      '  <div class="lm-note">打开后信箱页“导入”按钮左侧显示“导出”和“删除”按钮，可勾选信件后批量导出为 .json 或批量删除，并解锁下方每日写信上限调整。删除不可恢复；如需保留信件，请先在信箱页使用“导出”按钮导出所选信件。开关会立即保存到本地服务。</div>',
       '  <div data-debug-only hidden>',
       '    <div class="lm-grid" style="margin-top:12px">',
       '      <label class="lm-field"><span>每日写信上限（3~99）</span><input class="lm-input" type="number" min="3" max="99" step="1" data-role="daily-letter-limit"></label>',
@@ -1882,18 +1967,12 @@
 
   function renderDiagnostics() {
     var section = document.getElementById(SECTION_ID);
-    if (!section || !state.diagnostics) return;
+    if (!state.diagnostics) return;
     var data = state.diagnostics;
     var database = data.database || {};
-    var worker = data.worker || {};
-    var jobs = database.jobs || {};
-    section.querySelector('[data-role="service-badge"]').textContent = database.integrity === "ok" ? "服务正常" : "需要检查";
-    section.querySelector('[data-role="diagnostics"]').textContent = [
-      "服务版本：" + (data.serviceVersion || "未知"),
-      "SQLite：" + (database.integrity || "未知") + " · 共 " + (database.letters == null ? "?" : database.letters) + " 封信",
-      "生成队列：等待 " + (jobs.queued || 0) + " · 处理中 " + (jobs.running || 0) + " · 失败 " + (jobs.failed || 0),
-      "工作器：" + (worker.running ? "正在处理" : "空闲") + (worker.lastError ? " · 最近错误：" + worker.lastError : "")
-    ].join("\n");
+    var badge = section && section.querySelector('[data-role="service-badge"]');
+    if (badge) badge.textContent = database.integrity === "ok" ? "服务正常" : "需要检查";
+    renderPatchVersion(data.serviceVersion);
   }
 
   var API_STYLE_LABELS = {
@@ -2111,20 +2190,9 @@
       renderDiagnostics();
     } catch (error) {
       var section = document.getElementById(SECTION_ID);
-      if (section) {
-        section.querySelector('[data-role="service-badge"]').textContent = "服务断开";
-        section.querySelector('[data-role="diagnostics"]').textContent = error.message;
-      }
-    }
-  }
-
-  async function exportBackup() {
-    try {
-      var data = await callApi("/api/export");
-      downloadJson(data, "linli-local-mail-backup");
-      setStatus("model-status", "本地信件、记忆与非敏感设置已导出；API Key 不会写入备份。", "success");
-    } catch (error) {
-      setStatus("model-status", "导出失败：" + error.message, "error");
+      var badge = section && section.querySelector('[data-role="service-badge"]');
+      if (badge) badge.textContent = "服务断开";
+      renderPatchVersion(null);
     }
   }
 
@@ -2629,23 +2697,6 @@
       }
       else if (action === "save-all") saveAllSettings();
       else if (action === "test-model") testCurrentModel();
-      else if (action === "refresh-diagnostics") refreshDiagnostics();
-      else if (action === "export-backup") exportBackup();
-      else if (action === "restore-remote-prompt") {
-        callApi("/api/remote-import/prompt", { method: "POST", body: JSON.stringify({ action: "enable" }) })
-          .then(function (prompt) {
-            state.remotePromptSettings = prompt;
-            state.remoteImport.checked = false;
-            state.remoteImport.candidate = false;
-            state.remoteImport.retryAfter = 0;
-            applyRemotePromptVisibility();
-            setStatus("model-status", "已恢复官方历史导入提示。", "success");
-            if (mailboxHeader()) detectRemoteHistoryOnce();
-          })
-          .catch(function (error) {
-            setStatus("model-status", "恢复失败：" + error.message, "error");
-          });
-      }
     });
   }
 
@@ -2662,14 +2713,16 @@
       state.diagnostics = loaded[2];
       state.remotePromptSettings = (loaded[3] && loaded[3].prompt) || {};
       state.debugMode = Boolean(state.runtime && state.runtime.debugMode);
+      syncOfficialSettingsStore();
       syncActiveSelectors();
       renderDiagnostics();
-      applyRemotePromptVisibility();
       setStatus("model-status", "配置已从本机 SQLite 读取；模型调用与关系时间线已接入。", "success");
     } catch (error) {
       setStatus("model-status", "无法连接本地回信服务：" + error.message, "error");
       var section = document.getElementById(SECTION_ID);
-      if (section) section.querySelector('[data-role="service-badge"]').textContent = "服务断开";
+      var badge = section && section.querySelector('[data-role="service-badge"]');
+      if (badge) badge.textContent = "服务断开";
+      renderPatchVersion(null);
     }
   }
 
@@ -2681,23 +2734,648 @@
   }
 
   function mountSettingsSection() {
-    if (!isSettingsRoute() || document.getElementById(SECTION_ID) || state.mounting) return;
+    if (!isSettingsRoute() || state.mounting) return;
     var container = findSettingsContainer();
     if (!container) return;
+    var localSection = document.getElementById(SECTION_ID);
+    var patchSection = document.getElementById(PATCH_VERSION_SECTION_ID);
+    if (localSection && patchSection) return;
     state.mounting = true;
     installStyles();
-    var section = document.createElement("section");
-    section.id = SECTION_ID;
-    section.className = "tp-settings-item";
-    section.innerHTML = sectionHtml();
-    var account = Array.prototype.slice.call(container.children).find(function (child) {
-      return child.querySelector && child.querySelector(".tp-settings-user-icon");
-    });
-    if (account && account.nextSibling) container.insertBefore(section, account.nextSibling);
-    else container.insertBefore(section, container.firstChild);
-    bindSection(section);
+    var createdLocal = false;
+    if (!localSection) {
+      localSection = document.createElement("section");
+      localSection.id = SECTION_ID;
+      localSection.className = "tp-settings-item";
+      localSection.innerHTML = sectionHtml();
+      var account = Array.prototype.slice.call(container.children).find(function (child) {
+        return child.querySelector && child.querySelector(".tp-settings-user-icon");
+      });
+      if (account && account.nextSibling) container.insertBefore(localSection, account.nextSibling);
+      else container.insertBefore(localSection, container.firstChild);
+      bindSection(localSection);
+      createdLocal = true;
+    }
+    if (!patchSection) {
+      patchSection = document.createElement("section");
+      patchSection.id = PATCH_VERSION_SECTION_ID;
+      patchSection.className = "tp-settings-item";
+      patchSection.innerHTML = patchVersionSectionHtml();
+    }
+    bindPatchVersionSection(patchSection);
+    container.insertBefore(patchSection, localSection);
     state.mounting = false;
-    loadConfig();
+    if (createdLocal) loadConfig();
+    else if (state.diagnostics) renderDiagnostics();
+  }
+
+  var LOCAL_NAVIGATION_ID = "local-mail-local-navigation";
+  var LOCAL_NAVIGATION_ROUTES = Object.freeze({ mail: "/collection", music: "/studio" });
+
+  function localVueApp() {
+    var appRoot = document.getElementById("app");
+    return appRoot && appRoot.__vue_app__ ? appRoot.__vue_app__ : null;
+  }
+
+  function localAppGlobalProperties() {
+    var app = localVueApp();
+    return app && app.config && app.config.globalProperties ? app.config.globalProperties : null;
+  }
+
+  var DESKTOP_COMMAND_ROUTES = Object.freeze({ mail: "/collection", music: "/studio" });
+  var DESKTOP_COMMAND_POLL_INTERVAL_MS = 1000;
+  var SETTINGS_STORE_IDS = Object.freeze(["settings", "setting", "user-settings", "app-settings"]);
+
+  function hasOwn(object, key) {
+    return Boolean(object && Object.prototype.hasOwnProperty.call(object, key));
+  }
+
+  function localVueRouter() {
+    if (window.__LINLI_VUE_ROUTER__) return window.__LINLI_VUE_ROUTER__;
+    var globals = localAppGlobalProperties();
+    return globals && globals.$router ? globals.$router : null;
+  }
+
+  function piniaLike(value) {
+    return Boolean(value && typeof value === "object" && (value._s || value.state));
+  }
+
+  function findOfficialPinia() {
+    var app = localVueApp();
+    var globals = localAppGlobalProperties();
+    var provides = app && app._context && app._context.provides;
+    var candidates = [
+      globals && globals.$pinia,
+      provides && provides.pinia,
+      window.__pinia,
+      window.__PINIA__
+    ];
+    if (provides && typeof provides === "object") {
+      Object.keys(provides).forEach(function (key) { candidates.push(provides[key]); });
+      if (typeof Object.getOwnPropertySymbols === "function") {
+        Object.getOwnPropertySymbols(provides).forEach(function (key) { candidates.push(provides[key]); });
+      }
+    }
+    for (var index = 0; index < candidates.length; index += 1) {
+      if (piniaLike(candidates[index])) return candidates[index];
+    }
+    return null;
+  }
+
+  function piniaStoreEntries(pinia) {
+    var stores = pinia && pinia._s;
+    if (!stores) return [];
+    var entries = [];
+    if (typeof stores.forEach === "function") {
+      stores.forEach(function (store, key) { entries.push({ key: key, store: store }); });
+      return entries;
+    }
+    if (typeof stores === "object") {
+      Object.keys(stores).forEach(function (key) { entries.push({ key: key, store: stores[key] }); });
+    }
+    return entries;
+  }
+
+  function officialStoreLooksLikeSettings(store) {
+    if (!store || typeof store !== "object") return false;
+    var id = String(store.$id || store.id || "").trim().toLowerCase();
+    if (SETTINGS_STORE_IDS.indexOf(id) !== -1) return true;
+    return Boolean(readOfficialWidgetSettings(store));
+  }
+
+  function findOfficialSettingsStore() {
+    var app = localVueApp();
+    var globals = localAppGlobalProperties();
+    var pinia = findOfficialPinia();
+    var direct = [
+      globals && globals.$settingsStore,
+      globals && globals.settingsStore,
+      app && app.config && app.config.globalProperties && app.config.globalProperties.$settings
+    ];
+    for (var directIndex = 0; directIndex < direct.length; directIndex += 1) {
+      if (officialStoreLooksLikeSettings(direct[directIndex])) return direct[directIndex];
+    }
+    var entries = piniaStoreEntries(pinia);
+    for (var index = 0; index < SETTINGS_STORE_IDS.length; index += 1) {
+      var preferredId = SETTINGS_STORE_IDS[index];
+      var preferred = entries.find(function (entry) {
+        return String(entry.key || entry.store && (entry.store.$id || entry.store.id) || "").toLowerCase() === preferredId;
+      });
+      if (preferred && preferred.store) return preferred.store;
+    }
+    return entries.map(function (entry) { return entry.store; }).find(officialStoreLooksLikeSettings) || null;
+  }
+
+  function officialWidgetValue(value) {
+    if (value && typeof value === "object" && hasOwn(value, "value")) value = value.value;
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return value !== 0;
+    if (typeof value === "string") {
+      var normalized = value.trim().toLowerCase();
+      if (["1", "true", "yes", "on", "enabled"].indexOf(normalized) !== -1) return true;
+      if (["0", "false", "no", "off", "disabled"].indexOf(normalized) !== -1) return false;
+    }
+    return null;
+  }
+
+  function officialWidgetCandidates(store) {
+    var candidates = [];
+    function add(value) {
+      if (!value || typeof value !== "object") return;
+      candidates.push(value);
+      if (value.value && typeof value.value === "object") candidates.push(value.value);
+    }
+    add(store && store.settingsData);
+    add(store && store.$state && store.$state.settingsData);
+    add(store && store.settings);
+    add(store && store.$state && store.$state.settings);
+    add(store && store.$state);
+    add(store);
+    return candidates;
+  }
+
+  function readOfficialWidgetSettings(store) {
+    if (!store || typeof store !== "object") return null;
+    var result = {};
+    ["mailWidget", "musicWidget"].forEach(function (key) {
+      var candidates = officialWidgetCandidates(store);
+      for (var index = 0; index < candidates.length; index += 1) {
+        var candidate = candidates[index];
+        if (!hasOwn(candidate, key)) continue;
+        var value = officialWidgetValue(candidate[key]);
+        if (value == null) continue;
+        result[key] = value;
+        break;
+      }
+    });
+    return Object.keys(result).length ? result : null;
+  }
+
+  function widgetSettingsSignature(values) {
+    return ["mailWidget", "musicWidget"].map(function (key) {
+      return hasOwn(values, key) ? key + "=" + String(values[key]) : "";
+    }).join("|");
+  }
+
+  function applyWidgetValuesToLocalRuntime(values) {
+    if (!state.runtime || !values) return;
+    ["mailWidget", "musicWidget"].forEach(function (key) {
+      if (hasOwn(values, key)) state.runtime[key] = values[key];
+    });
+  }
+
+  async function flushWidgetSettings() {
+    if (state.settingsSync.flushing) return;
+    state.settingsSync.flushing = true;
+    try {
+      while (state.settingsSync.desired) {
+        var desired = state.settingsSync.desired;
+        if (desired.signature === state.settingsSync.lastSentSignature) {
+          if (state.settingsSync.desired.signature === desired.signature) state.settingsSync.desired = null;
+          continue;
+        }
+        try {
+          var saved = await callApi("/api/settings", { method: "POST", body: desired.payload });
+          state.settingsSync.lastSentSignature = desired.signature;
+          var savedValues = saved && typeof saved === "object"
+            && (hasOwn(saved, "mailWidget") || hasOwn(saved, "musicWidget"))
+            ? saved
+            : desired.payload;
+          applyWidgetValuesToLocalRuntime(savedValues);
+          if (state.settingsSync.desired && state.settingsSync.desired.signature === desired.signature) {
+            state.settingsSync.desired = null;
+          }
+        } catch (error) {
+          // Keep the desired value so the discovery pass can retry after a transient service failure.
+          break;
+        }
+      }
+    } finally {
+      state.settingsSync.flushing = false;
+    }
+  }
+
+  function queueWidgetSettingsSync(values) {
+    if (!values || typeof values !== "object") return;
+    var payload = {};
+    ["mailWidget", "musicWidget"].forEach(function (key) {
+      if (hasOwn(values, key)) payload[key] = Boolean(values[key]);
+    });
+    if (!Object.keys(payload).length) return;
+    var signature = widgetSettingsSignature(payload);
+    if (state.settingsSync.desired && state.settingsSync.desired.signature === signature) {
+      if (!state.settingsSync.flushing) void flushWidgetSettings();
+      return;
+    }
+    if (signature === state.settingsSync.lastSentSignature) return;
+    state.settingsSync.desired = { payload: payload, signature: signature };
+    void flushWidgetSettings();
+  }
+
+  function disconnectOfficialSettingsStore() {
+    if (typeof state.settingsSync.unsubscribe === "function") {
+      try { state.settingsSync.unsubscribe(); } catch (error) { /* stale Pinia store */ }
+    }
+    state.settingsSync.unsubscribe = null;
+    state.settingsSync.store = null;
+  }
+
+  function watchOfficialSettingsStore(store) {
+    if (!store || state.settingsSync.store === store) return;
+    disconnectOfficialSettingsStore();
+    state.settingsSync.store = store;
+    if (typeof store.$subscribe === "function") {
+      try {
+        var unsubscribe = store.$subscribe(function (_mutation, snapshot) {
+          var source = snapshot && typeof snapshot === "object" ? { $state: snapshot } : store;
+          queueWidgetSettingsSync(readOfficialWidgetSettings(source) || readOfficialWidgetSettings(store));
+        }, { detached: true });
+        if (typeof unsubscribe === "function") state.settingsSync.unsubscribe = unsubscribe;
+      } catch (error) {
+        // Some production builds expose the store without the detached option.
+        try {
+          var fallbackUnsubscribe = store.$subscribe(function () {
+            queueWidgetSettingsSync(readOfficialWidgetSettings(store));
+          });
+          if (typeof fallbackUnsubscribe === "function") state.settingsSync.unsubscribe = fallbackUnsubscribe;
+        } catch (fallbackError) { /* discovery polling remains the fallback */ }
+      }
+    }
+  }
+
+  function syncOfficialSettingsStore() {
+    var store = findOfficialSettingsStore();
+    if (!store) return false;
+    watchOfficialSettingsStore(store);
+    queueWidgetSettingsSync(readOfficialWidgetSettings(store));
+    return true;
+  }
+
+  function startOfficialSettingsDiscovery() {
+    if (state.settingsSync.discoveryStarted) return;
+    state.settingsSync.discoveryStarted = true;
+    state.settingsSync.discoveryTimer = window.setInterval(syncOfficialSettingsStore, 1000);
+    syncOfficialSettingsStore();
+  }
+
+  function secondaryRendererMarker(value) {
+    return /(^|[\s:/_.-])(video|pip|picture[-_ ]?in[-_ ]?picture|player|playback|media-player)(?=$|[\s:/?&#_.=-])/i.test(String(value || ""));
+  }
+
+  function mainRendererMarker(value) {
+    return /^(main|primary|game|shell|default)(?:[-_ ]?(?:renderer|window))?$/i.test(String(value || "").trim());
+  }
+
+  function explicitRendererMarker() {
+    var app = localVueApp();
+    var root = document.documentElement;
+    var body = document.body;
+    var values = [
+      window.__LINLI_RENDERER_KIND__,
+      window.__LINLI_RENDERER_ROLE__,
+      window.__LINLI_RENDERER__,
+      window.__LOCAL_MAIL_RENDERER_KIND__,
+      window.__LOCAL_MAIL_RENDERER_ROLE__,
+      window.__LOCAL_MAIL_RENDERER__,
+      window.__LOCAL_MAIL_WINDOW_KIND__,
+      root && root.getAttribute && root.getAttribute("data-renderer"),
+      root && root.getAttribute && root.getAttribute("data-renderer-kind"),
+      body && body.getAttribute && body.getAttribute("data-renderer"),
+      body && body.getAttribute && body.getAttribute("data-renderer-kind"),
+      app && app.config && app.config.globalProperties && app.config.globalProperties.$rendererKind
+    ];
+    for (var index = 0; index < values.length; index += 1) {
+      if (values[index] != null && String(values[index]).trim()) return String(values[index]).trim();
+    }
+    return "";
+  }
+
+  function isMainRenderer() {
+    var location = window.location || {};
+    var locationMarker = [location.pathname, location.search, location.hash].join(" ");
+    if (secondaryRendererMarker(window.name) || secondaryRendererMarker(locationMarker)) return false;
+    var explicit = explicitRendererMarker();
+    if (explicit) return mainRendererMarker(explicit) && !secondaryRendererMarker(explicit);
+    return Boolean(localVueRouter());
+  }
+
+  async function navigateDesktopCommand(route) {
+    if (route !== DESKTOP_COMMAND_ROUTES.mail && route !== DESKTOP_COMMAND_ROUTES.music) return false;
+    if (!isMainRenderer()) return false;
+    var router = localVueRouter();
+    if (!router) return false;
+    var navigate = typeof router.push === "function" ? router.push : typeof router.replace === "function" ? router.replace : null;
+    if (!navigate) return false;
+    try {
+      await Promise.resolve(navigate.call(router, route));
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async function acknowledgeDesktopCommand(commandId) {
+    try {
+      var result = await callApi("/api/desktop-command/ack", {
+        method: "POST",
+        body: { commandId: commandId }
+      });
+      return Boolean(result && result.cleared === true);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async function pollDesktopCommand() {
+    if (state.desktopCommand.inFlight || !isMainRenderer()) return null;
+    state.desktopCommand.inFlight = true;
+    try {
+      var command = await callApi("/api/desktop-command");
+      var commandId = command && String(command.commandId || "").trim();
+      var route = command && command.route;
+      if (!commandId || (route !== DESKTOP_COMMAND_ROUTES.mail && route !== DESKTOP_COMMAND_ROUTES.music)) return null;
+      state.desktopCommand.lastCommandId = commandId;
+      if (state.desktopCommand.lastAckedCommandId === commandId) return command;
+      var navigated = state.desktopCommand.lastNavigatedCommandId === commandId
+        || await navigateDesktopCommand(route);
+      if (!navigated) return command;
+      state.desktopCommand.lastNavigatedCommandId = commandId;
+      if (await acknowledgeDesktopCommand(commandId)) state.desktopCommand.lastAckedCommandId = commandId;
+      return command;
+    } catch (error) {
+      return null;
+    } finally {
+      state.desktopCommand.inFlight = false;
+    }
+  }
+
+  function startDesktopCommandPolling() {
+    if (state.desktopCommand.started) return;
+    state.desktopCommand.started = true;
+    state.desktopCommand.timer = window.setInterval(function () { void pollDesktopCommand(); }, DESKTOP_COMMAND_POLL_INTERVAL_MS);
+    void pollDesktopCommand();
+  }
+
+  function currentLocalRoutePath() {
+    var hash = String(window.location.hash || "");
+    var path = /^#\//.test(hash)
+      ? hash.slice(1).split(/[?#]/)[0]
+      : String(window.location.pathname || "/");
+    return path.replace(/\/+$/, "") || "/";
+  }
+
+  function localRouteFallback(path) {
+    try {
+      var targetHash = "#" + path;
+      if (String(window.location.hash || "") !== targetHash) window.location.hash = targetHash;
+      queueMount();
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function navigateLocalRoute(path) {
+    if (path !== LOCAL_NAVIGATION_ROUTES.mail && path !== LOCAL_NAVIGATION_ROUTES.music) return false;
+    var router = localVueRouter();
+    if (router) {
+      var method = typeof router.replace === "function" ? "replace"
+        : typeof router.push === "function" ? "push" : null;
+      if (method) {
+        try {
+          var result = router[method].call(router, path);
+          if (result && typeof result.then === "function") {
+            result.then(function () {}, function () {
+              localRouteFallback(path);
+            });
+          }
+          return true;
+        } catch (error) {
+          return localRouteFallback(path);
+        }
+      }
+    }
+    return localRouteFallback(path);
+  }
+
+  function localNavigationElementVisible(element) {
+    if (!element || element.hidden || element.getAttribute("aria-hidden") === "true") return false;
+    var style = element.style;
+    if (!style || typeof style.getPropertyValue !== "function") return true;
+    return style.getPropertyValue("display") !== "none"
+      && style.getPropertyValue("visibility") !== "hidden";
+  }
+
+  function localNavigationTitleLike(element) {
+    var tag = String(element && element.tagName || "").toUpperCase();
+    var className = String(element && element.className || "");
+    return /^H[1-6]$/.test(tag)
+      || /(^|[\s_-])(title|heading|header|page-title|section-title)([\s_-]|$)/i.test(className);
+  }
+
+  function findLocalNavigationTitle(navigation, expectedLabel) {
+    var labels = expectedLabel ? [expectedLabel] : ["曲库", "信箱"];
+    var mains = document.querySelectorAll("main");
+    var best = null;
+    var bestScore = -1;
+    var bestDepth = -1;
+    Array.prototype.forEach.call(mains, function (main) {
+      Array.prototype.forEach.call(main.querySelectorAll("*"), function (element) {
+        if (navigation && (element === navigation || navigation.contains(element))) return;
+        if (!localNavigationElementVisible(element)) return;
+        var text = String(element.textContent || "").replace(/\s+/g, " ").trim();
+        if (labels.indexOf(text) < 0) return;
+        var parent = element.parentElement;
+        var score = localNavigationTitleLike(element) ? 10 : 0;
+        if (parent && localNavigationTitleLike(parent)) score += 7;
+        if (/^H[1-6]$/.test(String(element.tagName || "").toUpperCase())) score += 4;
+        if (!element.children || element.children.length === 0) score += 2;
+        var depth = 0;
+        var cursor = element;
+        while (cursor && cursor !== main) {
+          depth += 1;
+          cursor = cursor.parentElement;
+        }
+        if (score > bestScore || score === bestScore && depth > bestDepth) {
+          best = element;
+          bestScore = score;
+          bestDepth = depth;
+        }
+      });
+    });
+    return best;
+  }
+
+  function localNavigationTitleLabel(path) {
+    if (path === LOCAL_NAVIGATION_ROUTES.music) return "曲库";
+    if (path === LOCAL_NAVIGATION_ROUTES.mail) return "信箱";
+    return "";
+  }
+
+  var LOCAL_NAVIGATION_FALLBACK_TOP = 18;
+  var LOCAL_NAVIGATION_FALLBACK_LEFT = 18;
+
+  function setLocalNavigationStyle(navigation, property, value) {
+    if (!navigation || !navigation.style || typeof navigation.style.setProperty !== "function") return;
+    if (typeof navigation.style.getPropertyValue === "function"
+      && navigation.style.getPropertyValue(property) === value) return;
+    navigation.style.setProperty(property, value);
+  }
+
+  function localNavigationStyleValue(style, property) {
+    if (!style) return "";
+    if (typeof style.getPropertyValue === "function") return style.getPropertyValue(property);
+    return String(style[property] || "");
+  }
+
+  function localNavigationStylePriority(style, property) {
+    if (!style || typeof style.getPropertyPriority !== "function") return "";
+    return style.getPropertyPriority(property);
+  }
+
+  function setLocalNavigationTitleStyle(style, property, value, priority) {
+    if (!style || typeof style.setProperty !== "function") return;
+    if (localNavigationStyleValue(style, property) === value
+      && localNavigationStylePriority(style, property) === priority) return;
+    style.setProperty(property, value, priority);
+  }
+
+  function restoreLocalNavigationTitle(navigation) {
+    var state = navigation && navigation.__linliNavigationTitleState;
+    if (!state) {
+      if (navigation) navigation.__linliNavigationTitle = null;
+      return;
+    }
+    var style = state.element && state.element.style;
+    setLocalNavigationTitleStyle(style, "visibility", state.visibility, state.visibilityPriority);
+    setLocalNavigationTitleStyle(style, "pointer-events", state.pointerEvents, state.pointerEventsPriority);
+    navigation.__linliNavigationTitleState = null;
+    navigation.__linliNavigationTitle = null;
+  }
+
+  function hideLocalNavigationTitle(navigation, title) {
+    if (!navigation || !title) {
+      restoreLocalNavigationTitle(navigation);
+      return;
+    }
+    var state = navigation.__linliNavigationTitleState;
+    if (state && state.element !== title) {
+      restoreLocalNavigationTitle(navigation);
+      state = null;
+    }
+    if (!state) {
+      var style = title.style;
+      state = {
+        element: title,
+        visibility: localNavigationStyleValue(style, "visibility"),
+        visibilityPriority: localNavigationStylePriority(style, "visibility"),
+        pointerEvents: localNavigationStyleValue(style, "pointer-events"),
+        pointerEventsPriority: localNavigationStylePriority(style, "pointer-events")
+      };
+      navigation.__linliNavigationTitleState = state;
+    }
+    navigation.__linliNavigationTitle = title;
+    setLocalNavigationTitleStyle(title.style, "visibility", "hidden", "important");
+    setLocalNavigationTitleStyle(title.style, "pointer-events", "none", "important");
+  }
+
+  function positionLocalNavigation(navigation, path) {
+    var left = LOCAL_NAVIGATION_FALLBACK_LEFT;
+    var top = LOCAL_NAVIGATION_FALLBACK_TOP;
+    var placement = "fallback";
+    var expectedLabel = localNavigationTitleLabel(path);
+    var title = navigation && navigation.__linliNavigationTitle;
+    if (!title || !title.isConnected
+      || String(title.textContent || "").replace(/\s+/g, " ").trim() !== expectedLabel) {
+      title = findLocalNavigationTitle(navigation, expectedLabel);
+    }
+    if (title && typeof title.getBoundingClientRect === "function") {
+      try {
+        var rect = title.getBoundingClientRect();
+        var rectLeft = Number(rect && rect.left);
+        var rectTop = Number(rect && rect.top);
+        if (Number.isFinite(rectLeft) && Number.isFinite(rectTop)) {
+          left = rectLeft;
+          top = rectTop;
+          placement = "body";
+        }
+      } catch (error) {
+        // The title can be replaced between discovery and layout; keep the safe fixed fallback.
+      }
+    }
+    hideLocalNavigationTitle(navigation, placement === "body" ? title : null);
+    setLocalNavigationStyle(navigation, "left", left + "px");
+    setLocalNavigationStyle(navigation, "top", top + "px");
+    if (navigation.getAttribute("data-local-navigation-placement") !== placement) {
+      navigation.setAttribute("data-local-navigation-placement", placement);
+    }
+  }
+
+  function ensureLocalNavigation() {
+    var navigation = document.getElementById(LOCAL_NAVIGATION_ID);
+    installStyles();
+    if (!navigation) {
+      navigation = document.createElement("nav");
+      navigation.id = LOCAL_NAVIGATION_ID;
+    }
+    if (document.body && navigation.parentElement !== document.body) document.body.appendChild(navigation);
+    if (navigation.getAttribute("aria-label") !== "曲库与信箱") navigation.setAttribute("aria-label", "曲库与信箱");
+    var buttons = navigation.querySelectorAll("[data-local-route]");
+    var hasStableTabs = buttons.length === 2
+      && buttons[0].dataset.localTab === "music"
+      && buttons[1].dataset.localTab === "mail";
+    if (!hasStableTabs) {
+      navigation.innerHTML =
+        '<button type="button" class="lm-local-nav-button" data-local-tab="music" data-local-route="/studio">曲库</button>' +
+        '<button type="button" class="lm-local-nav-button" data-local-tab="mail" data-local-route="/collection">信箱</button>';
+    }
+    Array.prototype.forEach.call(navigation.querySelectorAll("[data-local-route]"), function (button) {
+      if (button.style && typeof button.style.setProperty === "function") {
+        if (button.style.getPropertyValue("-webkit-app-region") !== "no-drag") {
+          button.style.setProperty("-webkit-app-region", "no-drag", "important");
+        }
+        if (button.style.getPropertyValue("pointer-events") !== "auto") {
+          button.style.setProperty("pointer-events", "auto", "important");
+        }
+      }
+    });
+    if (!navigation.__linliNavigationBound) {
+      navigation.addEventListener("click", function (event) {
+        var button = event.target && event.target.closest ? event.target.closest("[data-local-route]") : null;
+        if (!button || !navigation.contains(button)) return;
+        if (event.preventDefault) event.preventDefault();
+        if (event.stopPropagation) event.stopPropagation();
+        navigateLocalRoute(button.dataset.localRoute);
+      }, true);
+      navigation.__linliNavigationBound = true;
+    }
+    return navigation;
+  }
+
+  function renderLocalNavigation() {
+    var navigation = ensureLocalNavigation();
+    var currentPath = currentLocalRoutePath();
+    var isTargetRoute = Boolean(localNavigationTitleLabel(currentPath));
+    if (!isTargetRoute) {
+      restoreLocalNavigationTitle(navigation);
+      if (!navigation.hidden) navigation.hidden = true;
+      if (navigation.getAttribute("data-local-navigation-placement") !== "hidden") {
+        navigation.setAttribute("data-local-navigation-placement", "hidden");
+      }
+    } else {
+      positionLocalNavigation(navigation, currentPath);
+      if (navigation.hidden) navigation.hidden = false;
+    }
+    Array.prototype.forEach.call(navigation.querySelectorAll("[data-local-route]"), function (button) {
+      var active = isTargetRoute && button.dataset.localRoute === currentPath;
+      if (button.dataset.active !== String(active)) button.dataset.active = String(active);
+      if (active && button.getAttribute("aria-current") !== "page") button.setAttribute("aria-current", "page");
+      else if (!active && button.getAttribute("aria-current") != null) button.removeAttribute("aria-current");
+    });
+  }
+
+  function mountLocalNavigation() {
+    renderLocalNavigation();
   }
 
   var MUSIC_CUSTOM_LIST_ID = "local-mail-music-custom-list";
@@ -2706,16 +3384,11 @@
   var MUSIC_MODAL_ID = "local-mail-music-modal";
   var MUSIC_BEHAVIOR_SETTING_ID = "local-mail-music-behavior-setting";
   var MUSIC_NATIVE_TAB_NAMES = ["古典", "ACG", "轻音乐", "我的上传"];
+  var MUSIC_EXPERIMENTAL_UI_ENABLED = false;
 
-  function musicSection() {
-    var list = document.getElementById("tour-song-list");
-    return list ? (list.closest("section") || list.parentElement) : null;
-  }
-
-  function musicHeader() {
-    var section = musicSection();
-    if (!section) return null;
-    return Array.prototype.slice.call(section.querySelectorAll("div")).find(function (element) {
+  function musicHeaderIn(root) {
+    if (!root) return null;
+    return Array.prototype.slice.call(root.querySelectorAll("div")).find(function (element) {
       var text = element.textContent.replace(/\s+/g, " ").trim();
       return element.classList.contains("border-b")
         && text.indexOf("曲目") !== -1
@@ -2723,16 +3396,50 @@
     }) || null;
   }
 
-  function musicTabControlForLabel(label) {
-    var section = musicSection();
-    if (!section) return null;
-    var leaf = Array.prototype.slice.call(section.querySelectorAll("*")).find(function (element) {
-      return element.children.length === 0 && element.textContent.trim() === label;
+  function musicTabControlIn(root, label) {
+    if (!root) return null;
+    var nativeList = document.getElementById("tour-song-list");
+    var customList = document.getElementById(MUSIC_CUSTOM_LIST_ID);
+    var customTabs = document.getElementById(MUSIC_CUSTOM_TABS_ID);
+    var leaf = Array.prototype.slice.call(root.querySelectorAll("*")).find(function (element) {
+      if (element.children.length !== 0 || element.textContent.trim() !== label) return false;
+      if (nativeList && nativeList.contains(element)) return false;
+      if (customList && customList.contains(element)) return false;
+      if (customTabs && customTabs.contains(element)) return false;
+      return true;
     });
     if (!leaf) return null;
     var control = leaf;
-    while (control.parentElement && control.parentElement.textContent.trim() === label) control = control.parentElement;
+    while (control.parentElement && control.parentElement !== root
+      && control.parentElement.textContent.trim() === label) control = control.parentElement;
     return control;
+  }
+
+  function musicSection() {
+    var list = document.getElementById("tour-song-list");
+    if (!list) return null;
+    var candidate = list.parentElement;
+    var headerFallback = null;
+    while (candidate && candidate !== document) {
+      var header = musicHeaderIn(candidate);
+      if (header && !headerFallback) headerFallback = candidate;
+      var hasNativeTab = MUSIC_NATIVE_TAB_NAMES.some(function (name) {
+        return Boolean(musicTabControlIn(candidate, name));
+      });
+      if (header && hasNativeTab) return candidate;
+      candidate = candidate.parentElement;
+    }
+    return headerFallback || list.parentElement;
+  }
+
+  function musicHeader() {
+    var section = musicSection();
+    return musicHeaderIn(section);
+  }
+
+  function musicTabControlForLabel(label) {
+    var section = musicSection();
+    return musicTabControlIn(section, label);
   }
 
   function musicNativeTabs() {
@@ -2807,21 +3514,55 @@
   }
 
   function serializeMusicSong(entry) {
-    var song = entry.song || {};
-    return {
-      id: song.id || song.itemId,
-      sourceType: entry.sourceType,
-      name: song.name,
-      nameKey: song.nameKey,
-      iconUrl: song.iconUrl || song.coverUrl,
-      performanceType: song.performanceType,
-      performanceTypeDisplayShortName: song.performanceTypeDisplayShortName,
-      styleType: song.styleType,
-      styleTypeDisplayName: song.styleTypeDisplayName,
-      duration: song.duration || song.videoDuration || song.audioDuration,
-      videoUrl: song.videoUrl,
-      videoByTodView: song.videoByTodView
-    };
+    var source = entry && entry.song && typeof entry.song === "object" ? entry.song : {};
+    var song = Object.assign({}, source);
+    var id = song.id != null ? song.id : song.itemId != null ? song.itemId : song.songId;
+    if (id != null) {
+      song.id = id;
+      if (song.itemId == null) song.itemId = id;
+    }
+    if (entry && entry.sourceType != null) {
+      song.sourceType = entry.sourceType;
+      if (song.itemType == null) song.itemType = entry.sourceType;
+    }
+    var cover = song.coverUrl || song.iconUrl || song.cover || song.icon;
+    if (cover) {
+      if (song.coverUrl == null) song.coverUrl = cover;
+      if (song.iconUrl == null) song.iconUrl = cover;
+      if (song.cover == null) song.cover = cover;
+      if (song.icon == null) song.icon = cover;
+    }
+    var nameKey = song.nameKey || song.songNameKey;
+    if (nameKey) {
+      if (song.nameKey == null) song.nameKey = nameKey;
+      if (song.songNameKey == null) song.songNameKey = nameKey;
+    }
+    if (song.videoUrl == null && song.videoURL != null) song.videoUrl = song.videoURL;
+    if (song.audioUrl == null && song.audioURL != null) song.audioUrl = song.audioURL;
+    if (song.duration == null) {
+      if (song.videoDuration != null) song.duration = song.videoDuration;
+      else if (song.audioDuration != null) song.duration = song.audioDuration;
+    }
+    return song;
+  }
+
+  async function addMusicEntryToDesktop(entry, button) {
+    if (!entry || state.music.busy) return;
+    if (button) {
+      button.disabled = true;
+      button.textContent = "加入中…";
+    }
+    try {
+      await callNativeMusicAdd(entry);
+      musicNotice("已加入音乐桌面。", "success");
+    } catch (error) {
+      musicNotice("加入音乐桌面失败：" + (error.message || error), "error");
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "加播单";
+      }
+    }
   }
 
   function musicNotice(text, kind) {
@@ -2866,29 +3607,103 @@
     state.music.playlistItems = Array.isArray(detail.items) ? detail.items : [];
   }
 
+  function nextLocalElement(node) {
+    var sibling = node && node.nextSibling;
+    while (sibling) {
+      if (sibling.tagName) return sibling;
+      sibling = sibling.nextSibling;
+    }
+    return null;
+  }
+
+  function placeLocalElementAfter(anchor, node) {
+    if (!anchor || !node || !anchor.parentElement) return;
+    if (node.parentElement === anchor.parentElement && nextLocalElement(anchor) === node) return;
+    anchor.insertAdjacentElement("afterend", node);
+  }
+
+  function setLocalElementText(element, value) {
+    if (!element) return;
+    var text = value == null ? "" : String(value);
+    if (element.textContent !== text) element.textContent = text;
+  }
+
+  function setLocalElementHidden(element, hidden) {
+    if (element && element.hidden !== Boolean(hidden)) element.hidden = Boolean(hidden);
+  }
+
+  function setLocalElementDisabled(element, disabled) {
+    if (element && element.disabled !== Boolean(disabled)) element.disabled = Boolean(disabled);
+  }
+
+  function setLocalElementChecked(element, checked) {
+    if (element && element.checked !== Boolean(checked)) element.checked = Boolean(checked);
+  }
+
   function renderMusicTabs() {
-    var uploadTab = musicTabControlForLabel("我的上传");
-    if (!uploadTab) return;
+    var nativeTabs = musicNativeTabs();
+    if (!nativeTabs.length) return;
+    var anchorTab = nativeTabs[nativeTabs.length - 1].control;
     var tabs = document.getElementById(MUSIC_CUSTOM_TABS_ID);
     if (!tabs) {
       tabs = document.createElement("div");
       tabs.id = MUSIC_CUSTOM_TABS_ID;
       tabs.className = "lm-music-playlists";
-      uploadTab.insertAdjacentElement("afterend", tabs);
+      tabs.setAttribute("aria-label", "本地自定义歌单");
     }
-    var html = '<button type="button" class="lm-music-new-playlist" data-music-action="new-playlist">＋ 自定义歌单</button>';
-    (state.music.playlists || []).forEach(function (playlist) {
-      html += '<button type="button" class="lm-music-tab" data-music-action="switch-playlist" data-playlist-id="' + escapeHtml(playlist.playlistId) + '" data-active="' + String(state.music.activePlaylistId === playlist.playlistId) + '">' + escapeHtml(playlist.name) + '</button>';
+    placeLocalElementAfter(anchorTab, tabs);
+    if (!tabs.__linliMusicTabsBound) {
+      tabs.onclick = function (event) {
+        var action = event.target.closest("[data-music-action]");
+        if (!action) return;
+        if (action.dataset.musicAction === "new-playlist") openMusicCreateDialog();
+        else if (action.dataset.musicAction === "switch-playlist") {
+          requestMusicViewSwitch({ kind: "custom", playlistId: action.dataset.playlistId });
+        }
+      };
+      tabs.__linliMusicTabsBound = true;
+    }
+    var playlists = state.music.playlists || [];
+    var signature = JSON.stringify({
+      active: state.music.activePlaylistId || "",
+      playlists: playlists.map(function (playlist) { return [playlist.playlistId, playlist.name]; })
     });
-    tabs.innerHTML = html;
-    tabs.onclick = function (event) {
-      var action = event.target.closest("[data-music-action]");
-      if (!action) return;
-      if (action.dataset.musicAction === "new-playlist") openMusicCreateDialog();
-      else if (action.dataset.musicAction === "switch-playlist") {
-        requestMusicViewSwitch({ kind: "custom", playlistId: action.dataset.playlistId });
+    if (tabs.__linliMusicTabsSignature === signature) return;
+    var newPlaylistButton = tabs.querySelector("[data-music-action='new-playlist']");
+    if (!newPlaylistButton) {
+      newPlaylistButton = document.createElement("button");
+      newPlaylistButton.type = "button";
+      newPlaylistButton.className = "lm-music-new-playlist";
+      newPlaylistButton.setAttribute("data-music-action", "new-playlist");
+      tabs.insertBefore(newPlaylistButton, tabs.firstElementChild);
+    } else if (tabs.firstElementChild !== newPlaylistButton) {
+      tabs.insertBefore(newPlaylistButton, tabs.firstElementChild);
+    }
+    setLocalElementText(newPlaylistButton, "＋ 自定义歌单");
+    var cursor = newPlaylistButton;
+    var retained = [];
+    playlists.forEach(function (playlist) {
+      var playlistId = String(playlist.playlistId == null ? "" : playlist.playlistId);
+      var button = Array.prototype.slice.call(tabs.querySelectorAll("[data-music-action='switch-playlist']")).find(function (candidate) {
+        return candidate.getAttribute("data-playlist-id") === playlistId;
+      });
+      if (!button) {
+        button = document.createElement("button");
+        button.type = "button";
+        button.className = "lm-music-tab";
+        button.setAttribute("data-music-action", "switch-playlist");
       }
-    };
+      button.setAttribute("data-playlist-id", playlistId);
+      button.setAttribute("data-active", String(state.music.activePlaylistId === playlist.playlistId));
+      setLocalElementText(button, playlist.name || "未命名歌单");
+      if (nextLocalElement(cursor) !== button) tabs.insertBefore(button, nextLocalElement(cursor));
+      cursor = button;
+      retained.push(button);
+    });
+    Array.prototype.forEach.call(tabs.querySelectorAll("[data-music-action='switch-playlist']"), function (button) {
+      if (retained.indexOf(button) < 0) button.remove();
+    });
+    tabs.__linliMusicTabsSignature = signature;
   }
 
   function renderMusicToolbar() {
@@ -2901,57 +3716,94 @@
       toolbar.className = "lm-music-toolbar";
       header.appendChild(toolbar);
     }
-    var selectedCount = selectedMusicEntries().length;
-    var actionDisabled = selectedCount === 0 || state.music.busy;
-    if (!state.music.batchMode) {
-      toolbar.innerHTML = '<button type="button" class="lm-music-action" data-music-action="begin-batch">批量选择</button><span class="lm-music-status" data-role="music-status"></span>';
-    } else {
+    if (!toolbar.querySelector("[data-role='select-all-wrap']")
+      || !toolbar.querySelector("[data-role='selected-count']")) {
       toolbar.innerHTML =
-        '<label class="lm-music-header-checkbox" title="全选当前列表"><input class="lm-music-checkbox" type="checkbox" data-music-action="select-all"></label>' +
-        '<button type="button" class="lm-music-action" data-music-action="add-desktop"' + (actionDisabled ? " disabled" : "") + '>加播单</button>' +
-        '<button type="button" class="lm-music-action" data-music-action="add-playlist"' + (actionDisabled ? " disabled" : "") + '>加入歌单</button>' +
-        (isCustomMusicView() ? '<button type="button" class="lm-music-action" data-music-action="remove-playlist"' + (actionDisabled ? " disabled" : "") + '>移出歌单</button>' : "") +
-        '<span class="lm-music-selected-count">已选 ' + selectedCount + ' 首</span>' +
+        '<button type="button" class="lm-music-action" data-music-action="begin-batch">批量选择</button>' +
+        '<label class="lm-music-header-checkbox" data-role="select-all-wrap" title="全选当前列表"><input class="lm-music-checkbox" type="checkbox" data-music-action="select-all"></label>' +
+        '<button type="button" class="lm-music-action" data-music-action="add-desktop">加播单</button>' +
+        '<button type="button" class="lm-music-action" data-music-action="add-playlist">加入歌单</button>' +
+        '<button type="button" class="lm-music-action" data-music-action="remove-playlist">移出歌单</button>' +
+        '<span class="lm-music-selected-count" data-role="selected-count"></span>' +
         '<button type="button" class="lm-music-action lm-music-action-primary" data-music-action="end-batch">完成</button>' +
         '<span class="lm-music-status" data-role="music-status"></span>';
-      var all = visibleMusicEntries();
+    }
+    if (!toolbar.__linliMusicToolbarBound) {
+      toolbar.onclick = function (event) {
+        var button = event.target.closest("[data-music-action]");
+        if (!button || button.disabled) return;
+        var action = button.dataset.musicAction;
+        if (action === "begin-batch") {
+          state.music.batchMode = true;
+          renderMusicEnhancements();
+        } else if (action === "end-batch") {
+          state.music.batchMode = false;
+          clearMusicSelection();
+          renderMusicEnhancements();
+        } else if (action === "add-desktop") addSelectedToMusicDesktop();
+        else if (action === "add-playlist") openMusicPlaylistPicker();
+        else if (action === "remove-playlist") removeSelectedFromMusicPlaylist();
+      };
+      var boundAllCheckbox = toolbar.querySelector("[data-music-action='select-all']");
+      if (boundAllCheckbox) {
+        boundAllCheckbox.onchange = function () {
+          visibleMusicEntries().forEach(function (entry) {
+            if (boundAllCheckbox.checked) state.music.selected[entry.key] = entry;
+            else delete state.music.selected[entry.key];
+          });
+          renderMusicEnhancements();
+        };
+      }
+      toolbar.__linliMusicToolbarBound = true;
+    }
+    var selectedCount = selectedMusicEntries().length;
+    var actionDisabled = selectedCount === 0 || state.music.busy;
+    var all = visibleMusicEntries();
+    var selectedKeys = Object.keys(state.music.selected).sort();
+    var signature = JSON.stringify({
+      batch: state.music.batchMode,
+      custom: isCustomMusicView(),
+      selected: selectedKeys,
+      visible: all.map(function (entry) { return entry.key; }),
+      busy: state.music.busy
+    });
+    if (toolbar.__linliMusicToolbarSignature === signature) return;
+    var begin = toolbar.querySelector("[data-music-action='begin-batch']");
+    var selectAllWrap = toolbar.querySelector("[data-role='select-all-wrap']");
+    var addDesktop = toolbar.querySelector("[data-music-action='add-desktop']");
+    var addPlaylist = toolbar.querySelector("[data-music-action='add-playlist']");
+    var removePlaylist = toolbar.querySelector("[data-music-action='remove-playlist']");
+    var selectedLabel = toolbar.querySelector("[data-role='selected-count']");
+    var end = toolbar.querySelector("[data-music-action='end-batch']");
+    var inBatch = Boolean(state.music.batchMode);
+    setLocalElementHidden(begin, inBatch);
+    setLocalElementHidden(selectAllWrap, !inBatch);
+    setLocalElementHidden(addDesktop, !inBatch);
+    setLocalElementHidden(addPlaylist, !inBatch);
+    setLocalElementHidden(removePlaylist, !inBatch || !isCustomMusicView());
+    setLocalElementHidden(selectedLabel, !inBatch);
+    setLocalElementHidden(end, !inBatch);
+    setLocalElementDisabled(addDesktop, !inBatch || actionDisabled);
+    setLocalElementDisabled(addPlaylist, !inBatch || actionDisabled);
+    setLocalElementDisabled(removePlaylist, !inBatch || actionDisabled);
+    setLocalElementText(selectedLabel, "已选 " + selectedCount + " 首");
+    if (inBatch) {
       var checkbox = toolbar.querySelector("[data-music-action='select-all']");
-      if (checkbox) {
-        var selectedVisible = all.filter(function (entry) { return state.music.selected[entry.key]; }).length;
-        checkbox.checked = all.length > 0 && selectedVisible === all.length;
+      var selectedVisible = all.filter(function (entry) { return state.music.selected[entry.key]; }).length;
+      setLocalElementChecked(checkbox, all.length > 0 && selectedVisible === all.length);
+      if (checkbox && checkbox.indeterminate !== (selectedVisible > 0 && selectedVisible < all.length)) {
         checkbox.indeterminate = selectedVisible > 0 && selectedVisible < all.length;
       }
     }
-    toolbar.onclick = function (event) {
-      var button = event.target.closest("[data-music-action]");
-      if (!button || button.disabled) return;
-      var action = button.dataset.musicAction;
-      if (action === "begin-batch") {
-        state.music.batchMode = true;
-        renderMusicEnhancements();
-      } else if (action === "end-batch") {
-        state.music.batchMode = false;
-        clearMusicSelection();
-        renderMusicEnhancements();
-      } else if (action === "add-desktop") addSelectedToMusicDesktop();
-      else if (action === "add-playlist") openMusicPlaylistPicker();
-      else if (action === "remove-playlist") removeSelectedFromMusicPlaylist();
-    };
-    var allCheckbox = toolbar.querySelector("[data-music-action='select-all']");
-    if (allCheckbox) {
-      allCheckbox.onchange = function () {
-        visibleMusicEntries().forEach(function (entry) {
-          if (allCheckbox.checked) state.music.selected[entry.key] = entry;
-          else delete state.music.selected[entry.key];
-        });
-        renderMusicEnhancements();
-      };
-    }
+    toolbar.__linliMusicToolbarSignature = signature;
   }
 
   function decorateNativeMusicRows() {
     nativeMusicEntries().forEach(function (entry) {
       var row = entry.row;
+      Array.prototype.forEach.call(row.querySelectorAll(".lm-music-row-add[data-music-action='add-desktop-one']"), function (button) {
+        button.remove();
+      });
       var existing = row.querySelector(".lm-music-row-checkbox");
       if (!state.music.batchMode) {
         if (existing) existing.remove();
@@ -2966,12 +3818,18 @@
         existing.addEventListener("dblclick", function (event) { event.stopPropagation(); });
       }
       var checkbox = existing.querySelector("input");
-      checkbox.checked = Boolean(state.music.selected[entry.key]);
-      checkbox.onchange = function () {
-        if (checkbox.checked) state.music.selected[entry.key] = entry;
-        else delete state.music.selected[entry.key];
-        renderMusicEnhancements();
-      };
+      checkbox.__linliMusicEntry = entry;
+      setLocalElementChecked(checkbox, Boolean(state.music.selected[entry.key]));
+      if (!checkbox.__linliMusicChangeBound) {
+        checkbox.onchange = function () {
+          var currentEntry = checkbox.__linliMusicEntry;
+          if (!currentEntry) return;
+          if (checkbox.checked) state.music.selected[currentEntry.key] = currentEntry;
+          else delete state.music.selected[currentEntry.key];
+          renderMusicEnhancements();
+        };
+        checkbox.__linliMusicChangeBound = true;
+      }
     });
   }
 
@@ -2983,9 +3841,72 @@
       list = document.createElement("div");
       list.id = MUSIC_CUSTOM_LIST_ID;
       list.className = "lm-music-custom-list";
-      original.insertAdjacentElement("afterend", list);
     }
+    placeLocalElementAfter(original, list);
     return list;
+  }
+
+  function musicCoverValue(song) {
+    if (!song || typeof song !== "object") return "";
+    return song.coverUrl || song.iconUrl || song.cover || song.icon || "";
+  }
+
+  function customMusicRowMarkup() {
+    return '<label class="lm-music-row-checkbox" data-role="row-checkbox"><input class="lm-music-checkbox" type="checkbox" data-role="music-checkbox" aria-label="选择曲目"></label>' +
+      '<div class="lm-music-custom-index" data-role="music-index"></div>' +
+      '<div class="lm-music-cover" data-role="music-cover"></div>' +
+      '<div class="lm-music-song"><div class="lm-music-song-name" data-role="music-name"></div><div class="lm-music-song-meta" data-role="music-meta"></div></div>' +
+      '<div class="lm-music-mode" data-role="music-mode"></div>' +
+      '<button type="button" class="lm-music-row-add" data-music-action="add-desktop-one">加播单</button>' +
+      '<button type="button" class="lm-music-row-remove" data-music-action="remove-one">移出</button>';
+  }
+
+  function bindCustomMusicRow(row) {
+    if (row.__linliMusicRowBound) return;
+    row.onclick = function (event) {
+      var action = event.target.closest("[data-music-action]");
+      if (!action || action.disabled) return;
+      var entry = row.__linliMusicEntry;
+      if (!entry) return;
+      if (action.dataset.musicAction === "add-desktop-one") {
+        addMusicEntryToDesktop(entry, action);
+        return;
+      }
+      if (action.dataset.musicAction === "remove-one") {
+        clearMusicSelection();
+        state.music.selected[entry.key] = entry;
+        removeSelectedFromMusicPlaylist();
+      }
+    };
+    row.onchange = function (event) {
+      var checkbox = event.target.closest("[data-role='music-checkbox']");
+      var entry = row.__linliMusicEntry;
+      if (!checkbox || !entry) return;
+      if (checkbox.checked) state.music.selected[entry.key] = entry;
+      else delete state.music.selected[entry.key];
+      renderMusicEnhancements();
+    };
+    row.__linliMusicRowBound = true;
+  }
+
+  function updateCustomMusicCover(host, song) {
+    var cover = musicCoverValue(song);
+    var coverValue = String(cover || "");
+    if (host.__linliMusicCoverValue === coverValue && host.firstElementChild) return;
+    host.__linliMusicCoverValue = coverValue;
+    host.innerHTML = "";
+    if (coverValue) {
+      var image = document.createElement("img");
+      image.className = "lm-music-cover";
+      image.setAttribute("src", coverValue);
+      image.setAttribute("alt", "");
+      host.appendChild(image);
+    } else {
+      var placeholder = document.createElement("div");
+      placeholder.className = "lm-music-cover-placeholder";
+      placeholder.textContent = "♪";
+      host.appendChild(placeholder);
+    }
   }
 
   function renderCustomMusicList() {
@@ -2993,55 +3914,103 @@
     var list = customMusicList();
     if (!original || !list) return;
     if (!isCustomMusicView()) {
-      original.hidden = false;
-      list.hidden = true;
+      setLocalElementHidden(original, false);
+      setLocalElementHidden(list, true);
       return;
     }
-    original.hidden = true;
-    list.hidden = false;
+    setLocalElementHidden(original, true);
+    setLocalElementHidden(list, false);
     var items = customMusicEntries();
+    var signature = JSON.stringify({
+      items: items.map(function (entry) {
+        var song = entry.song || {};
+        return [entry.key, song.name, musicCoverValue(song), song.nameKey, song.songNameKey, song.styleTypeDisplayName, song.performanceTypeDisplayShortName, song.performanceType];
+      }),
+      batch: state.music.batchMode,
+      busy: state.music.busy,
+      selected: Object.keys(state.music.selected).sort()
+    });
+    if (list.__linliMusicListSignature === signature) return;
+    var empty = list.querySelector("[data-role='music-empty']");
+    if (!empty) {
+      empty = document.createElement("div");
+      empty.className = "lm-music-empty";
+      empty.setAttribute("data-role", "music-empty");
+      empty.textContent = "这个自定义歌单还没有曲目";
+      list.appendChild(empty);
+    }
     if (!items.length) {
-      list.innerHTML = '<div class="lm-music-empty">这个自定义歌单还没有曲目</div>';
+      Array.prototype.forEach.call(list.querySelectorAll(".lm-music-custom-row"), function (row) { row.remove(); });
+      setLocalElementHidden(empty, false);
+      list.__linliMusicListSignature = signature;
       return;
     }
-    list.innerHTML = items.map(function (entry, index) {
+    setLocalElementHidden(empty, true);
+    var rows = Array.prototype.slice.call(list.querySelectorAll(".lm-music-custom-row"));
+    var cursor = null;
+    var retained = [];
+    items.forEach(function (entry, index) {
+      var row = rows.find(function (candidate) { return candidate.getAttribute("data-music-item-key") === entry.key; });
+      if (!row) {
+        row = document.createElement("div");
+        row.className = "lm-music-custom-row";
+        row.innerHTML = customMusicRowMarkup();
+      }
+      bindCustomMusicRow(row);
       var song = entry.song || {};
-      var cover = song.iconUrl || song.coverUrl
-        ? '<img class="lm-music-cover" src="' + escapeHtml(song.iconUrl || song.coverUrl) + '" alt="">'
-        : '<div class="lm-music-cover-placeholder">♪</div>';
       var mode = song.performanceTypeDisplayShortName || song.styleTypeDisplayName || song.performanceType || "";
-      var check = state.music.batchMode
-        ? '<label class="lm-music-row-checkbox"><input class="lm-music-checkbox" type="checkbox" data-music-item-key="' + escapeHtml(entry.key) + '"' + (state.music.selected[entry.key] ? " checked" : "") + ' aria-label="选择曲目"></label>'
-        : '<div class="lm-music-row-checkbox"></div>';
-      return '<div class="lm-music-custom-row" data-music-item-key="' + escapeHtml(entry.key) + '">' +
-        check + '<div class="lm-music-custom-index">' + (index + 1) + '</div>' + cover +
-        '<div class="lm-music-song"><div class="lm-music-song-name">' + escapeHtml(song.name || "未命名曲目") + '</div><div class="lm-music-song-meta">' + escapeHtml(song.styleTypeDisplayName || song.nameKey || "") + '</div></div>' +
-        '<div class="lm-music-mode">' + escapeHtml(mode) + '</div>' +
-        '<button type="button" class="lm-music-row-remove" data-music-action="remove-one" data-music-item-key="' + escapeHtml(entry.key) + '">移出</button></div>';
-    }).join("");
-    list.querySelectorAll("input[data-music-item-key]").forEach(function (checkbox) {
-      checkbox.addEventListener("click", function (event) { event.stopPropagation(); });
-      checkbox.addEventListener("change", function () {
-        var entry = items.find(function (candidate) { return candidate.key === checkbox.dataset.musicItemKey; });
-        if (!entry) return;
-        if (checkbox.checked) state.music.selected[entry.key] = entry;
-        else delete state.music.selected[entry.key];
-        renderMusicEnhancements();
-      });
+      row.__linliMusicEntry = entry;
+      row.setAttribute("data-music-item-key", entry.key);
+      var checkbox = row.querySelector("[data-role='music-checkbox']");
+      var checkboxLabel = row.querySelector("[data-role='row-checkbox']");
+      var addButton = row.querySelector("[data-music-action='add-desktop-one']");
+      var removeButton = row.querySelector("[data-music-action='remove-one']");
+      if (checkbox) {
+        checkbox.setAttribute("data-music-item-key", entry.key);
+        setLocalElementChecked(checkbox, Boolean(state.music.selected[entry.key]));
+      }
+      if (addButton) addButton.setAttribute("data-music-item-key", entry.key);
+      if (removeButton) removeButton.setAttribute("data-music-item-key", entry.key);
+      setLocalElementHidden(checkboxLabel, !state.music.batchMode);
+      setLocalElementText(row.querySelector("[data-role='music-index']"), index + 1);
+      setLocalElementText(row.querySelector("[data-role='music-name']"), song.name || "未命名曲目");
+      setLocalElementText(row.querySelector("[data-role='music-meta']"), song.styleTypeDisplayName || song.nameKey || song.songNameKey || "");
+      setLocalElementText(row.querySelector("[data-role='music-mode']"), mode);
+      setLocalElementDisabled(addButton, state.music.busy);
+      setLocalElementDisabled(removeButton, state.music.busy);
+      updateCustomMusicCover(row.querySelector("[data-role='music-cover']"), song);
+      if (!cursor) {
+        if (list.firstElementChild !== row) list.insertBefore(row, list.firstElementChild);
+      } else if (nextLocalElement(cursor) !== row) {
+        list.insertBefore(row, nextLocalElement(cursor));
+      }
+      cursor = row;
+      retained.push(row);
     });
-    list.onclick = function (event) {
-      var action = event.target.closest("[data-music-action='remove-one']");
-      if (!action) return;
-      clearMusicSelection();
-      var entry = items.find(function (candidate) { return candidate.key === action.dataset.musicItemKey; });
-      if (entry) state.music.selected[entry.key] = entry;
-      removeSelectedFromMusicPlaylist();
-    };
+    rows.forEach(function (row) {
+      if (retained.indexOf(row) < 0) row.remove();
+    });
+    if (nextLocalElement(cursor) !== empty) list.appendChild(empty);
+    list.__linliMusicListSignature = signature;
   }
 
   function renderMusicEnhancements() {
     if (!document.getElementById("tour-song-list")) return;
     installStyles();
+    if (!MUSIC_EXPERIMENTAL_UI_ENABLED) {
+      state.music.batchMode = false;
+      clearMusicSelection();
+      var original = document.getElementById("tour-song-list");
+      setLocalElementHidden(original, false);
+      [MUSIC_CUSTOM_TABS_ID, MUSIC_TOOLBAR_ID, MUSIC_CUSTOM_LIST_ID, MUSIC_MODAL_ID].forEach(function (id) {
+        var node = document.getElementById(id);
+        if (node) node.remove();
+      });
+      Array.prototype.forEach.call(document.querySelectorAll("#tour-song-list .lm-music-row-checkbox"), function (node) {
+        node.remove();
+      });
+      return;
+    }
     renderMusicTabs();
     renderCustomMusicList();
     renderMusicToolbar();
@@ -3192,13 +4161,13 @@
   }
 
   async function callNativeMusicAdd(entry) {
-    var listener = entry.component && entry.component.vnode && entry.component.vnode.props && entry.component.vnode.props.onAddPlaylist;
-    if (typeof listener === "function") return listener(entry.song);
-    if (Array.isArray(listener) && typeof listener[0] === "function") return listener[0](entry.song);
-    if (window.__LOCAL_MUSIC_API__ && typeof window.__LOCAL_MUSIC_API__.addToPlaylist === "function") {
-      return window.__LOCAL_MUSIC_API__.addToPlaylist({ itemType: entry.sourceType, itemId: entry.song.id || entry.song.itemId });
-    }
-    throw new Error("原曲库加播单接口尚未加载，请重新启动游戏后再试");
+    if (!entry || !entry.song) throw new Error("本地音乐桌面请求缺少曲目资料");
+    var song = serializeMusicSong(entry);
+    return window.__LOCAL_MUSIC_API__.addToPlaylist({
+      itemType: entry.sourceType,
+      itemId: song.id != null ? song.id : song.itemId,
+      song: song
+    });
   }
 
   async function addSelectedToMusicDesktop() {
@@ -3321,6 +4290,11 @@
   }
 
   function mountMusicBehaviorSetting() {
+    if (!MUSIC_EXPERIMENTAL_UI_ENABLED) {
+      var existing = document.getElementById(MUSIC_BEHAVIOR_SETTING_ID);
+      if (existing) existing.remove();
+      return;
+    }
     if (!isSettingsRoute()) return;
     var section = Array.prototype.slice.call(document.querySelectorAll(".tp-settings-item")).find(function (item) {
       var heading = item.firstElementChild;
@@ -3342,11 +4316,69 @@
     ensureMusicLibraryLoaded();
   }
 
+  function mountDesktopPreferenceStatus() {
+    if (!isSettingsRoute()) return;
+    var section = Array.prototype.slice.call(document.querySelectorAll(".tp-settings-item")).find(function (item) {
+      var heading = item.firstElementChild;
+      return heading && heading !== item && String(heading.textContent || "").replace(/\s+/g, " ").trim() === "桌面偏好";
+    });
+    if (!section) return;
+    Array.prototype.slice.call(section.children).slice(1).forEach(function (row) {
+      if (row.querySelector("[data-local-desktop-preference-status]")) return;
+      var label = Array.prototype.slice.call(row.querySelectorAll("div,label")).find(function (candidate) {
+        var text = String(candidate.textContent || "").replace(/\s+/g, " ").trim();
+        return candidate.children.length === 0 && (text === "写信" || text === "音乐");
+      });
+      if (!label) return;
+      var marker = document.createElement("span");
+      marker.setAttribute("data-local-desktop-preference-status", "true");
+      marker.className = "lm-desktop-preference-status";
+      marker.textContent = "当前版本未修复";
+      label.appendChild(marker);
+    });
+  }
+
   function mountMusicEnhancements() {
     if (!document.getElementById("tour-song-list")) return;
+    if (!MUSIC_EXPERIMENTAL_UI_ENABLED) {
+      renderMusicEnhancements();
+      return;
+    }
     ensureMusicNativeTabGuard();
     ensureMusicLibraryLoaded();
     renderMusicEnhancements();
+  }
+
+  function localMountOwnedNode(node, navigation) {
+    if (!node) return false;
+    if (navigation && (node === navigation || navigation.contains(node))) return true;
+    var id = String(node.id || "");
+    if (id === LOCAL_NAVIGATION_ID || id === "local-mail-settings-style" || id === "local-mail-watermark-style") return true;
+    return String(node.className || "").split(/\s+/).indexOf("watermark-overlay") !== -1;
+  }
+
+  function localMountMutationIgnored(record) {
+    var navigation = document.getElementById(LOCAL_NAVIGATION_ID);
+    if (!record) return true;
+    if (localMountOwnedNode(record.target, navigation)) return true;
+    if (record.type === "attributes") return false;
+    var addedNodes = record.addedNodes ? Array.prototype.slice.call(record.addedNodes) : [];
+    var removedNodes = record.removedNodes ? Array.prototype.slice.call(record.removedNodes) : [];
+    if (navigation && removedNodes.indexOf(navigation) !== -1) return false;
+    if (navigation && addedNodes.indexOf(navigation) !== -1) {
+      return record.target === document.body && navigation.parentElement === document.body
+        && removedNodes.length === 0;
+    }
+    var changedNodes = addedNodes.concat(removedNodes);
+    return changedNodes.length > 0 && changedNodes.every(function (node) {
+      return localMountOwnedNode(node, navigation) && !(navigation && node === navigation);
+    });
+  }
+
+  function queueMountForMutations(records) {
+    if (!records || !records.length || Array.prototype.some.call(records, function (record) {
+      return !localMountMutationIgnored(record);
+    })) queueMount();
   }
 
   var mountQueued = false;
@@ -3355,30 +4387,57 @@
     mountQueued = true;
     window.requestAnimationFrame(function () {
       mountQueued = false;
+      startOfficialSettingsDiscovery();
+      startDesktopCommandPolling();
       hideWatermark();
+      mountLocalNavigation();
+      mountDesktopPreferenceStatus();
       mountSettingsSection();
       mountMusicBehaviorSetting();
       mountMusicEnhancements();
       mountMailboxTools();
-      mountUpdateMenuItem();
       scheduleAutomaticUpdateCheck();
     });
   }
 
-  document.addEventListener("click", function (event) {
-    var target = event.target && event.target.nodeType === 1 ? event.target : event.target && event.target.parentElement;
-    if (!target || !target.closest) return;
-    if (target.closest('button[aria-label="User menu"],button[aria-label="设置"],button[aria-label="user_menu_settings"],button[aria-label="Settings"]')) {
-      // 用户菜单由 Vue 在点击后异步创建，覆盖整个过渡窗口而不是只抢首帧。
-      scheduleUpdateMenuMount();
-    }
-  }, true);
+  function exposeTestHook() {
+    var hook = window.__LOCAL_MAIL_TEST_HOOK__;
+    if (!hook || typeof hook !== "object") return;
+    hook.renderUpdateModal = renderUpdateModal;
+    hook.mountSettingsSection = mountSettingsSection;
+    hook.patchVersionSectionHtml = patchVersionSectionHtml;
+    hook.sectionHtml = sectionHtml;
+    hook.hideWatermark = hideWatermark;
+    hook.mountLocalNavigation = mountLocalNavigation;
+    hook.queueMount = queueMount;
+    hook.navigateLocalRoute = navigateLocalRoute;
+    hook.mountDesktopPreferenceStatus = mountDesktopPreferenceStatus;
+    hook.findOfficialSettingsStore = findOfficialSettingsStore;
+    hook.syncOfficialSettingsStore = syncOfficialSettingsStore;
+    hook.pollDesktopCommand = pollDesktopCommand;
+    hook.startDesktopCommandPolling = startDesktopCommandPolling;
+    hook.isMainRenderer = isMainRenderer;
+    hook.navigateDesktopCommand = navigateDesktopCommand;
+    hook.renderMusicEnhancements = renderMusicEnhancements;
+    hook.addMusicEntryToDesktop = addMusicEntryToDesktop;
+    hook.serializeMusicSong = serializeMusicSong;
+    hook.callNativeMusicAdd = callNativeMusicAdd;
+    hook.localMusicApi = window.__LOCAL_MUSIC_API__;
+    hook.localCapabilities = window.__LINLI_LOCAL_CAPABILITIES__;
+    hook.musicState = state.music;
+  }
 
-  var observer = new MutationObserver(queueMount);
+  exposeTestHook();
+
+  var observer = new MutationObserver(queueMountForMutations);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", queueMount);
   window.addEventListener("hashchange", queueMount);
+  window.addEventListener("resize", queueMount);
+  window.addEventListener("scroll", queueMount, true);
   if (document.head) hideWatermark();
+  startOfficialSettingsDiscovery();
+  startDesktopCommandPolling();
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", queueMount, { once: true });
   else queueMount();
 })();

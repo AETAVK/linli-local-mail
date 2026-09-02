@@ -28,15 +28,16 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout tagged source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.source_ref || inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Set up Node.js for build scripts
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24.11.1"
+          package-manager-cache: false
 
       - name: Validate release tag and package version
         shell: pwsh
@@ -78,19 +79,35 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $file" }
           }
 
-      - name: Smoke test installer extractor (Windows PowerShell 5.1)
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File ".github\scripts\installer-smoke.ps1"
-          if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell 5.1 installer smoke test failed" }
+      - name: Verify governed public projection
+        shell: pwsh
+        run: npm run governance:check -- --expected-role public-projection --require-clean
 
-      - name: Smoke test installer extractor (PowerShell 7)
+      - name: Test installer transactions and updater arguments
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          & pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ".github\scripts\installer-smoke.ps1"
-          if ($LASTEXITCODE -ne 0) { throw "PowerShell 7 installer smoke test failed" }
+          npm run installer:test
+          if ($LASTEXITCODE -ne 0) { throw "installer:test failed" }
+
+      - name: Prepare optional stable signing certificate
+        shell: pwsh
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.LINLI_SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.LINLI_SIGNING_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_PFX_BASE64)) {
+            Write-Warning "LINLI_SIGNING_PFX_BASE64 is not configured; this run will create an ephemeral self-signed certificate."
+            exit 0
+          }
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_PFX_PASSWORD)) {
+            throw "LINLI_SIGNING_PFX_PASSWORD is required when LINLI_SIGNING_PFX_BASE64 is configured"
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP "linli-release-signing.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:SIGNING_PFX_BASE64))
+          "LINLI_SIGNING_PFX_PATH=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "LINLI_SIGNING_PFX_PASSWORD=$($env:SIGNING_PFX_PASSWORD)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build installer and verify runtime allowlist
         shell: pwsh
@@ -116,6 +133,7 @@ jobs:
           if ($actual -ne $declared) { throw "SHA-256 sidecar does not match installer" }
           $manifest = Get-Content -Raw -LiteralPath $manifestFile | ConvertFrom-Json
           if ($actual -ne ([string]$manifest.installerSha256).ToLowerInvariant()) { throw "Manifest SHA-256 does not match installer" }
+          if ([string]$manifest.installerEngine -ne "Inno Setup 7.1.0 x64") { throw "Unexpected installer engine: $($manifest.installerEngine)" }
           Write-Host "Installer SHA-256: $actual"
           Write-Host "Installer size: $((Get-Item -LiteralPath $installer).Length) bytes"
 

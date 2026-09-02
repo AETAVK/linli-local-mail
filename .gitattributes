@@ -9,6 +9,7 @@ LICENSE text eol=lf
 *.js text eol=lf
 *.mjs text eol=lf
 *.json text eol=lf
+.githooks/* text eol=lf
 
 .gitignore export-ignore
 .gitattributes export-ignore

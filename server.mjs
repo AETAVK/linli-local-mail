@@ -37,7 +37,14 @@ const secretStore = new SecretStore(SECRETS_PATH);
 const worker = new GenerationWorker({ database, configRoot: CONFIG_ROOT, secretStore });
 const videoStore = new VideoAssetStore(MEDIA_ROOT);
 const remoteImporter = new RemoteImportManager({ database, mediaStore: videoStore });
-const updateManager = new UpdateManager({ currentVersion: SERVICE_VERSION, serviceRoot: ROOT, updateRoot: UPDATE_ROOT });
+const updateManager = new UpdateManager({
+  currentVersion: SERVICE_VERSION,
+  serviceRoot: ROOT,
+  updateRoot: UPDATE_ROOT,
+  servicePid: process.pid,
+  serviceHost: HOST,
+  servicePort: PORT
+});
 
 function isAllowedOrigin(req) {
   const origin = req.headers.origin;
@@ -402,8 +409,54 @@ const server = http.createServer(async (req, res) => {
       ok(req, res, database.updateRuntimeSettings(await readJsonBody(req)));
       return;
     }
+    // Desktop command contract: GET returns the durable single-slot command
+    // without consuming it; only an ACK for the exact commandId clears it.
+    if (url.pathname === "/api/desktop-command") {
+      if (req.method === "GET") {
+        ok(req, res, database.getPendingDesktopCommand());
+        return;
+      }
+      if (req.method === "POST") {
+        const body = await readJsonBody(req);
+        ok(req, res, database.enqueueDesktopCommand(body && typeof body === "object" ? body.route : undefined));
+        return;
+      }
+      fail(req, res, 404, `No local route for ${req.method} ${url.pathname}`);
+      return;
+    }
+    if (url.pathname === "/api/desktop-command/ack") {
+      if (req.method === "POST") {
+        const body = await readJsonBody(req);
+        const commandId = body && typeof body === "object" ? body.commandId : undefined;
+        const cleared = database.ackDesktopCommand(commandId);
+        if (!cleared) {
+          fail(req, res, 409, "Desktop command ACK does not match the pending command");
+          return;
+        }
+        ok(req, res, { commandId: String(commandId ?? "").trim(), cleared });
+        return;
+      }
+      fail(req, res, 404, `No local route for ${req.method} ${url.pathname}`);
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/api/music-library") {
       ok(req, res, database.getMusicLibrary());
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/music-desktop") {
+      ok(req, res, database.listMusicDesktop());
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/music-desktop/items") {
+      ok(req, res, database.addMusicDesktopItems(await readJsonBody(req)));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/music-desktop/remove") {
+      ok(req, res, database.removeMusicDesktopItems(await readJsonBody(req)));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/music-desktop/order") {
+      ok(req, res, database.reorderMusicDesktop(await readJsonBody(req)));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/music-library/preferences") {
@@ -438,7 +491,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/update/apply") {
       const result = await updateManager.apply(await readJsonBody(req));
       ok(req, res, result);
-      setTimeout(closeAndExit, 250).unref();
+      // A deferred handoff owns the service lifetime. It waits for the game,
+      // validates this PID, stops the service, and only then starts Inno. A
+      // timer here would let the launcher watchdog restart us while the game
+      // is still holding the official archives and runtime files.
+      if (!result.deferred && !result.scheduled) setTimeout(closeAndExit, 250).unref();
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/model-config") {

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "repositoryId": "linli-local-mail",
+  "role": "public-projection",
+  "canonicalBranch": "main",
+  "approvedOrigin": "https://github.com/AETAVK/linli-local-mail.git",
+  "generatedOnly": true
+}

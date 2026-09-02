@@ -4,8 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { PRIVATE_ROLE, PUBLIC_ROLE, assertRepositoryRole } from "./repo-guard.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+assertRepositoryRole(ROOT, [PRIVATE_ROLE, PUBLIC_ROLE]);
 const DIST = path.join(ROOT, "dist");
 const ALLOW_DIRTY = process.argv.includes("--allow-dirty");
 // 运行时包只从这份白名单取文件；源码仓库中的 docs/tests/历史/开发工具不会进入玩家包。
@@ -27,6 +29,7 @@ const RUNTIME_SOURCE_ALLOWLIST = [
   "tools/doctor.mjs",
   "tools/feapp.mjs",
   "tools/history.mjs",
+  "tools/installer-core.mjs",
   "tools/install.ps1",
   "tools/install-launcher-wrapper.ps1",
   "tools/restore-launcher.ps1"
@@ -172,9 +175,13 @@ const staging = fs.mkdtempSync(path.join(os.tmpdir(), "linli-release-"));
 try {
   // 直接按运行时白名单从 HEAD 取文件，避免先把源码仓库的私人数据复制进暂存目录。
   const tarPath = path.join(staging, "archive.tar");
+  // --allow-dirty 的候选构建可能新增尚未进入 HEAD 的白名单文件。git archive
+  // 不能接受这种 pathspec，因此这里只归档 HEAD 中确实存在的来源，随后再由
+  // overlayDirtyRuntimeSources 按同一白名单补入当前工作树版本。
+  const archivedSources = RUNTIME_SOURCE_ALLOWLIST.filter((source) => trackedFilesUnder(source).length > 0);
   execFileSync(
     "git",
-    ["archive", "--format=tar", "-o", tarPath, "HEAD", "--", ...RUNTIME_SOURCE_ALLOWLIST],
+    ["archive", "--format=tar", "-o", tarPath, "HEAD", "--", ...archivedSources],
     { cwd: ROOT, windowsHide: true }
   );
   execFileSync("tar", ["-xf", tarPath, "-C", staging], { windowsHide: true });

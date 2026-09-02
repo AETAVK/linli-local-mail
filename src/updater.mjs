@@ -49,6 +49,79 @@ export function compareVersions(left, right) {
   return 0;
 }
 
+export function installerLaunchArguments(gameRoot, pid = process.pid) {
+  const normalizedRoot = path.resolve(String(gameRoot || ""));
+  const normalizedPid = Number(pid);
+  if (!String(gameRoot || "").trim()) {
+    throw new UpdateError("游戏目录不能为空", { status: 400, code: "invalid_game_root" });
+  }
+  if (!Number.isSafeInteger(normalizedPid) || normalizedPid <= 0) {
+    throw new UpdateError("等待进程编号无效", { status: 400, code: "invalid_wait_pid" });
+  }
+  return [
+    `/GAME_ROOT=${normalizedRoot}`,
+    "/CONFIRMED_UPDATE=1",
+    `/WAIT_PID=${normalizedPid}`
+  ];
+}
+
+export function handoffLaunchArguments({
+  gameRoot,
+  installerCorePath,
+  installerPath,
+  expectedSha256,
+  servicePid = process.pid,
+  serviceRoot = null,
+  serviceHost = null,
+  servicePort = null,
+  serviceVersion = null
+} = {}) {
+  const normalizedRoot = path.resolve(String(gameRoot || ""));
+  const normalizedCorePath = path.resolve(String(installerCorePath || ""));
+  const normalizedInstallerPath = path.resolve(String(installerPath || ""));
+  const normalizedServicePid = Number(servicePid);
+  const normalizedHash = String(expectedSha256 || "").trim().toLowerCase();
+  if (!String(gameRoot || "").trim()) {
+    throw new UpdateError("游戏目录不能为空", { status: 400, code: "invalid_game_root" });
+  }
+  if (!String(installerCorePath || "").trim() || !String(installerPath || "").trim()) {
+    throw new UpdateError("更新交接参数不完整", { status: 500, code: "invalid_handoff_arguments" });
+  }
+  if (!Number.isSafeInteger(normalizedServicePid) || normalizedServicePid <= 0) {
+    throw new UpdateError("本地服务进程编号无效", { status: 500, code: "invalid_service_pid" });
+  }
+  if (!/^[0-9a-f]{64}$/i.test(normalizedHash)) {
+    throw new UpdateError("更新交接缺少有效的 SHA-256", { status: 500, code: "invalid_expected_sha256" });
+  }
+  if (servicePort != null) {
+    const normalizedPort = Number(servicePort);
+    if (!Number.isSafeInteger(normalizedPort) || normalizedPort <= 0 || normalizedPort > 65535) {
+      throw new UpdateError("更新交接服务端口无效", { status: 500, code: "invalid_service_port" });
+    }
+  }
+  if (serviceHost != null && String(serviceHost) !== "127.0.0.1") {
+    throw new UpdateError("更新交接服务地址必须是本机回环地址", { status: 500, code: "invalid_service_host" });
+  }
+
+  const args = [
+    normalizedCorePath,
+    "handoff",
+    "--game-root",
+    normalizedRoot,
+    "--installer",
+    normalizedInstallerPath,
+    "--sha256",
+    normalizedHash,
+    "--service-pid",
+    String(normalizedServicePid)
+  ];
+  if (serviceRoot) args.push("--service-root", path.resolve(String(serviceRoot)));
+  if (serviceHost) args.push("--service-host", String(serviceHost));
+  if (servicePort != null) args.push("--service-port", String(Number(servicePort)));
+  if (serviceVersion) args.push("--service-version", String(serviceVersion));
+  return args;
+}
+
 function expectedAssetNames(version) {
   const installer = `LinliLocalMail-${version}-Setup.exe`;
   return {
@@ -171,6 +244,10 @@ export class UpdateManager {
     fetchImpl = globalThis.fetch,
     spawnImpl = spawnProcess,
     platform = process.platform,
+    nodeExecutable = process.execPath,
+    servicePid = process.pid,
+    serviceHost = "127.0.0.1",
+    servicePort = null,
     now = () => Date.now(),
     cacheMilliseconds = CACHE_MILLISECONDS,
     requestTimeoutMilliseconds = REQUEST_TIMEOUT_MILLISECONDS,
@@ -186,6 +263,10 @@ export class UpdateManager {
     this.fetchImpl = fetchImpl;
     this.spawnImpl = spawnImpl;
     this.platform = platform;
+    this.nodeExecutable = path.resolve(String(nodeExecutable || process.execPath));
+    this.servicePid = Number(servicePid);
+    this.serviceHost = String(serviceHost || "127.0.0.1");
+    this.servicePort = servicePort == null ? null : Number(servicePort);
     this.now = now;
     this.cacheMilliseconds = cacheMilliseconds;
     this.requestTimeoutMilliseconds = requestTimeoutMilliseconds;
@@ -194,6 +275,7 @@ export class UpdateManager {
     this.cachedPublicCheck = null;
     this.cacheExpiresAt = 0;
     this.applying = false;
+    this.handoffScheduled = false;
   }
 
   async fetchJson(url, options = {}) {
@@ -398,22 +480,52 @@ export class UpdateManager {
     if (!fs.existsSync(installerPath) || this.sha256(installerPath) !== expectedSha256) {
       throw new UpdateError("准备运行的安装包未通过最终校验", { status: 409, code: "prepared_update_invalid" });
     }
-    const child = this.spawnImpl(
+    const installerCorePath = path.join(this.serviceRoot, "tools", "installer-core.mjs");
+    let coreStat;
+    try { coreStat = fs.lstatSync(installerCorePath); } catch {}
+    if (!coreStat?.isFile() || coreStat.isSymbolicLink()) {
+      throw new UpdateError("找不到安全更新交接程序，已拒绝启动安装包", {
+        status: 409,
+        code: "handoff_helper_missing"
+      });
+    }
+    const handoffArguments = handoffLaunchArguments({
+      gameRoot: this.gameRoot,
+      installerCorePath,
       installerPath,
-      ["--game-root", this.gameRoot, "--confirmed-update", "--wait-pid", String(process.pid)],
+      expectedSha256,
+      servicePid: this.servicePid,
+      serviceRoot: this.serviceRoot,
+      serviceHost: this.serviceHost,
+      servicePort: this.servicePort,
+      serviceVersion: this.currentVersion
+    });
+    const child = this.spawnImpl(
+      this.nodeExecutable,
+      handoffArguments,
       {
-        cwd: this.gameRoot,
+        cwd: this.serviceRoot,
         detached: true,
         stdio: "ignore",
-        windowsHide: false
+        windowsHide: true
       }
     );
     child.unref?.();
+    return {
+      handoffStarted: true,
+      handoffPid: Number.isSafeInteger(child?.pid) ? child.pid : null
+    };
   }
 
   async apply({ version } = {}) {
     if (this.applying) {
       throw new UpdateError("补丁更新已经在处理中", { status: 409, code: "update_busy" });
+    }
+    if (this.handoffScheduled) {
+      throw new UpdateError("补丁更新交接已经排队，请退出游戏后等待安装完成", {
+        status: 409,
+        code: "update_scheduled"
+      });
     }
     this.applying = true;
     try {
@@ -427,14 +539,22 @@ export class UpdateManager {
       }
       const expectedSha256 = await this.resolveExpectedSha256(this.cachedCandidate);
       const prepared = await this.downloadInstaller(this.cachedCandidate, expectedSha256);
-      this.launchInstaller(prepared.installerPath, expectedSha256);
+      const handoff = this.launchInstaller(prepared.installerPath, expectedSha256);
+      this.handoffScheduled = true;
       return {
-        launched: true,
+        // Keep the legacy field, but make its meaning explicit: the Inno setup
+        // process is deferred; only the detached handoff helper has started.
+        launched: false,
+        handoffStarted: handoff.handoffStarted,
+        handoffPid: handoff.handoffPid,
+        deferred: true,
+        scheduled: true,
         version: this.cachedCandidate.version,
         source: this.cachedCandidate.source,
         sha256: expectedSha256,
         reusedDownload: prepared.reused,
-        restartRequired: true
+        restartRequired: true,
+        message: "更新包已校验并排队；退出游戏和启动器后将自动停止本地服务并安装。"
       };
     } finally {
       this.applying = false;

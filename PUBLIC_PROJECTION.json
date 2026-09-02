@@ -1,13 +1,73 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "be9b23ee19ba356721c47586c742e9f3e11dde3d",
-  "packageVersion": "0.9.8",
+  "canonicalCommit": "4a0704ecddc9b34486e795487b7ca123c0be5cfc",
+  "packageVersion": "0.10.9",
   "files": [
     {
       "path": ".gitattributes",
-      "gitBlob": "a12abfabe41c9d0dc15f5c484eca7ec6d0f6c9b7",
-      "sha256": "4ee8456f0a011f74e2e8fc1cf155849f19756f076c3851d647f02d974851f66f"
+      "gitBlob": "d42c9a190dab7f1238a72f52f2db0fe1dff6ae51",
+      "sha256": "4638c925f499b35fee4dd4c5c7550f2b0c48814d58295f23286eff70d4360a82"
+    },
+    {
+      "path": ".githooks/pre-commit",
+      "gitBlob": "4f60d9aec2c16564d0c486288296bcbb462b611b",
+      "sha256": "2aeb30372dc617ae8837e1f7bcb03617385464d4da8d3184754f290fa227b351"
+    },
+    {
+      "path": ".githooks/pre-push",
+      "gitBlob": "db920cc15cd1eaf341c69d46cc705902da04c104",
+      "sha256": "58a44aa4e8bad22159321e02d42c28e844bf5fac0af23faa084fb49048bf3628"
+    },
+    {
+      "path": ".github/release-notes/v0.10.0.md",
+      "gitBlob": "0fd07f72a2657cf7907ea8cb03c76d3e4272dd41",
+      "sha256": "09b1cc204f5e2b495c845039039210d3c09fe24f9687ec29b866d315e407b5af"
+    },
+    {
+      "path": ".github/release-notes/v0.10.1.md",
+      "gitBlob": "2d644a6c6108dcf21d5632f5afac4b0d17a8fe80",
+      "sha256": "885ae6be9447e5215c56b738727859a66f28f84f5966cea518f298619b71011f"
+    },
+    {
+      "path": ".github/release-notes/v0.10.2.md",
+      "gitBlob": "a97deff6342416725216465a34787d348858483d",
+      "sha256": "2ca0748b34002aa62835edd0a458e60c05bf551011624d2f28529a4448897519"
+    },
+    {
+      "path": ".github/release-notes/v0.10.3.md",
+      "gitBlob": "fdc4dc80002cff085254fa824bf8781118635932",
+      "sha256": "5c8fc605786403500b1cd59885a1fded1546c3adfee640a3a3214f9cd403ed94"
+    },
+    {
+      "path": ".github/release-notes/v0.10.4.md",
+      "gitBlob": "04a6d30709872bbb80e58201f438c8c61c70cb71",
+      "sha256": "746f7c38ab47ef85e4bc8ce2fc30392cd26b50f31737d8e7420229023b131c54"
+    },
+    {
+      "path": ".github/release-notes/v0.10.5.md",
+      "gitBlob": "9113fc43d8310ff9ee98cbb1ece171680be84933",
+      "sha256": "339f7e7e70c954d5d36f8b23d995c6cad3f3b4cc0dfea654fca1fe92b76ddee7"
+    },
+    {
+      "path": ".github/release-notes/v0.10.6.md",
+      "gitBlob": "c18d667108315b266fd83a1737e4af5169706f2b",
+      "sha256": "90919b3f7a8cf00c448c18c65c5ffb527b24d5d321a87e559095f4f873e853dd"
+    },
+    {
+      "path": ".github/release-notes/v0.10.7.md",
+      "gitBlob": "3d5425fb895495098bd88be6642a928de9b80300",
+      "sha256": "61ea831be73b0585dfab1973c6acf36f982c62bf288881cbd1ea8b70d0b3f48a"
+    },
+    {
+      "path": ".github/release-notes/v0.10.8.md",
+      "gitBlob": "ae145862260a9b0c35f77ebf0ac24851010356c7",
+      "sha256": "0393f57bdef1e8d55b8804d52d63c8a506f507daaa5584797584bd55424e4135"
+    },
+    {
+      "path": ".github/release-notes/v0.10.9.md",
+      "gitBlob": "4f0e57eed95a23b17fc6859e19f16e1c2607151a",
+      "sha256": "99164dedd192135b9d603ada13330a69ede8698c081e3e9af3d33de257ba3c6d"
     },
     {
       "path": ".github/release-notes/v0.8.1.md",
@@ -45,29 +105,34 @@
       "sha256": "c2cae2498c9b6871e6f26e35616b4e57538bbc126a976b8ce56f9eda8b7e5ffb"
     },
     {
-      "path": ".github/scripts/installer-smoke.ps1",
-      "gitBlob": "c7b1a2f9d3b10399a40a4ab89493ee9732261e4d",
-      "sha256": "57ce2a7021da86bb757f53215c7e2c84061aaade0208dc355ef3966e14bef82c"
+      "path": ".github/scripts/publish-gitee-release.mjs",
+      "gitBlob": "42727b7f1370953af4f567d4067f2c82b23a23da",
+      "sha256": "9f904bdb95e6e5c3036ec064397bb0a00b080718c320d0728e741e955bc87b18"
     },
     {
-      "path": ".github/scripts/publish-gitee-release.mjs",
-      "gitBlob": "32e4be253f7f19f6d784f720cc47af92d5c2e4b8",
-      "sha256": "29b36617e0d398d6c2f86e2829285a6abbb9ca8a32d3e8f14411372f46f2142f"
+      "path": ".github/workflows/governance.yml",
+      "gitBlob": "09e64a4741c447aac79aaf8660e7db4e336909a3",
+      "sha256": "aabdff1f1efae85c9086d8c7f32b86eedfc49fba45488d826a18752042bcfdc1"
     },
     {
       "path": ".github/workflows/release.yml",
-      "gitBlob": "e359bbc61dbe53f67fb34acad7a75db1aa942f22",
-      "sha256": "7d021491d093e7dc4b7422632bab0518eed34b86788242d460d6aa1a1ace0e7a"
+      "gitBlob": "3839979ea4cb46b1a03eb0911f4e97e671302c5a",
+      "sha256": "04d989a5f06982234710b969b383b75fd33817404c0105b1c0b630f242828d9b"
     },
     {
       "path": ".github/workflows/sync-gitee.yml",
-      "gitBlob": "e98d59cc654ff520574cee2acc37f58b1b228b6b",
-      "sha256": "71c009b562564f520177a0c596c3629f940af3853acf9a100d2918907dee4858"
+      "gitBlob": "2a5f0085161b65911bea653c8542a13258ca3161",
+      "sha256": "28730f3fa0e2816e932eeba7a854ebb896ee0165a73866add3a28c0ea7f79cde"
     },
     {
       "path": ".gitignore",
-      "gitBlob": "1723577e731845fdcd2ce1a715a0252160ae3076",
-      "sha256": "6b01e1010922856f43d92b13cef64210e64cc8b554fe3184d439f305cedfdb2e"
+      "gitBlob": "181ff65142abf4f0939403792ee8dbfe6d2807cd",
+      "sha256": "4e46924495245ffa53215fafd31f11a7f87bddd59af99490d822de1e33c02f00"
+    },
+    {
+      "path": "AGENTS.md",
+      "gitBlob": "7b208fd5e207988b62f61b4c850df445272a2ea0",
+      "sha256": "160fbd607911f6d0c385d516f3b08d4995876d96af29e2aa9a58be5ab56a82e5"
     },
     {
       "path": "config/characters/linli.v1.json",
@@ -76,8 +141,8 @@
     },
     {
       "path": "frontend/local-mail-poc.js",
-      "gitBlob": "32cbb1014234c621f5915dae184130ce9293f0c8",
-      "sha256": "f4c00619d6f44778e198ec2d60186bfe0b219b5a2e9a7ac1b48e6fd34bf02cad"
+      "gitBlob": "f6ced57c58e1e63cefdb34b48bd4a2d8fa34f18e",
+      "sha256": "94b10a9f4690d57bacfc36d1bfb54de99d26130afe7a1cd46c9ca2e00ce5c67d"
     },
     {
       "path": "Install.cmd",
@@ -85,24 +150,19 @@
       "sha256": "7412a32404f1731484de3d2f07898729b62960f0f0de3e5bc2a64f74ed86076e"
     },
     {
+      "path": "installer/LinliLocalMail.iss",
+      "gitBlob": "32395ddaa8efc9566dc9022002b1b10a1322db83",
+      "sha256": "5593f12b27ff784369e1bffb5aaa01a6ba1f2b707e380b390672cb2d0296913c"
+    },
+    {
       "path": "LICENSE",
       "gitBlob": "a612ad9813b006ce81d1ee438dd784da99a54007",
       "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
     },
     {
-      "path": "native/extract-payload.ps1",
-      "gitBlob": "ccb38a7d3d92478900ecc6d2f484c080677cde7a",
-      "sha256": "6818602b43b9f5dbf980b900342aa28f1cf96eb82a4fd44b4bbb2bc1fae8a983"
-    },
-    {
-      "path": "native/installer.rs",
-      "gitBlob": "3cf301fc8f1938d355047f7950ae905a0736ff25",
-      "sha256": "3d9425dc96c7fdf825cf579f2711d76c8b4698e2d2174a47549c7cc79352e587"
-    },
-    {
       "path": "native/launcher-wrapper.rs",
-      "gitBlob": "b4def41a971c8296749c80e15448af448eebf178",
-      "sha256": "9a9860334ff43fd6a511b274a1f96e77cd71f38fe16b6d1b7b5fdfafb9c4717d"
+      "gitBlob": "d53001d41695d57ff2ee9fc56d89ab14088853d8",
+      "sha256": "2a1d904e07577e584406167f809625a67683631069b56eca63a206fff630321d"
     },
     {
       "path": "NOTICE.md",
@@ -111,23 +171,28 @@
     },
     {
       "path": "package.json",
-      "gitBlob": "74b47e47b688a003b0ace9a162ff2f347809e345",
-      "sha256": "914a23bed7b41053a1edf7a4c6d9b8e7a1965d3620d13821504de0b7cedfcdc6"
+      "gitBlob": "ba0f29f848a65cc0f0d247a8caea362db26ed197",
+      "sha256": "720d1b34fc3319356ff192c4a0bd678781da81ce12d91f88c04de3d657d64355"
     },
     {
       "path": "README.md",
-      "gitBlob": "8589abd392fd26391becfb1bba3f79558d4c4bc0",
-      "sha256": "433fc3c781e08908dcb49b4a2193c9c7ffe34e19f2bd1eb98babb3a72a8f31ed"
+      "gitBlob": "c19061ca3216334e34b79bdb53ea0e7ed11ecf86",
+      "sha256": "c66a1745e8f13c2ddf8ab40fb3ba097afd752c4eeb620f42123c264228ea5574"
+    },
+    {
+      "path": "repo-role.json",
+      "gitBlob": "ce88a493d3a9c346037ad41dd9f372e14af55808",
+      "sha256": "6b77de7ff396ed48ae72c68e45f123b2861f57e155bc7d838eec432a9cd8b77b"
     },
     {
       "path": "server.mjs",
-      "gitBlob": "94e189873f389905dde817887b5f0b4946254bbd",
-      "sha256": "5cc57966bd40c33be85abc7ca76b0147c0b8ebb977a6950ddfd4a7cb7f53e64c"
+      "gitBlob": "93d8b111f398a363fa5ade90336473645b8a61a7",
+      "sha256": "0d105cc184087f40eb1f83d672ed890091e27a31049339b179deaa576b564496"
     },
     {
       "path": "SOURCE_CODE.md",
-      "gitBlob": "9872c9b55fab85ceaabca67f400f8d0ee2c003e2",
-      "sha256": "d924a505c2f962d1d70db02f8fe893050f387227810db8ea1314570f16d67d79"
+      "gitBlob": "63ba07e5d476c3f93287297a08c8fc155b23731a",
+      "sha256": "3b3c9a550b48b5ac441699a01dfc6deec1cf1df5b235d37ac0d5cb0877b90340"
     },
     {
       "path": "src/character.mjs",
@@ -136,8 +201,8 @@
     },
     {
       "path": "src/constants.mjs",
-      "gitBlob": "3d6ffc88a98483135d185018301e44adc83298fa",
-      "sha256": "086aefdd942fd4d77036a9c306a664c15b7039d7b4a5292fb7e6b6fc85c5d072"
+      "gitBlob": "e2a9db09ed233d10500923915d90c214cfef86fc",
+      "sha256": "062283c9855d1a40fa6fc2de082b6bc219bc0f1c1f77838313d9db1196f9759d"
     },
     {
       "path": "src/context-budget.mjs",
@@ -146,8 +211,8 @@
     },
     {
       "path": "src/database.mjs",
-      "gitBlob": "09851dde1474c718b0da7b453a79cebc1348dc31",
-      "sha256": "c91fa5214266711161530638bd67272371a4142fa0bf6001e441bbea017a0a84"
+      "gitBlob": "d0f1882d4bd26cd193cdc69eaddc1853c1fe6edf",
+      "sha256": "ba8cffb133bed2d9473ee65cf3ad39c181e8459531955d0eb62004a9399f6e11"
     },
     {
       "path": "src/file-import.mjs",
@@ -201,8 +266,8 @@
     },
     {
       "path": "src/updater.mjs",
-      "gitBlob": "3edf052a15e9d2079f1363faf6fe4b31394e3ee1",
-      "sha256": "27d2b901a59d77de7f25c8fec5661404d5d49d430a9276a2ef24f0e804eeff53"
+      "gitBlob": "7076cdd0c5fb3a78e93f76d8f80c13b0b16b24be",
+      "sha256": "739e5ab76d06aadb24c8a4a405a25fb097bfbb093f3ed83a6380534c74041248"
     },
     {
       "path": "src/utils.mjs",
@@ -225,9 +290,14 @@
       "sha256": "d4d998aae02fe4950be7d20f5ed8d9fea1dfe57eaee939e95c4cf71a3258dcb0"
     },
     {
+      "path": "tests/installer-core.test.mjs",
+      "gitBlob": "d27fa8a8be74b99ce1469008f5c0ab59a971bcd2",
+      "sha256": "10b33d312a01be7c350f851135b0b20cdef9494e97f6922720c6d8d65c4f9b25"
+    },
+    {
       "path": "THIRD_PARTY_NOTICES.md",
-      "gitBlob": "1291a9e19868ed299f446cfc9087863e476fe671",
-      "sha256": "8065c5d1ba19620c410e7e8e025ce4a0146485506b4a2048904d0d99cad80074"
+      "gitBlob": "f209f4d1dae70c2658509a4889a9911b8a55ae50",
+      "sha256": "4d7fc7ca1bcba7898b9e628768d5a70c3fa5641fce479a25f4f6ffb82b47d2d3"
     },
     {
       "path": "tools/backup.mjs",
@@ -236,8 +306,8 @@
     },
     {
       "path": "tools/build-installer.ps1",
-      "gitBlob": "d6e1c035347d2cff55a0f757b3f36a817fef6d6a",
-      "sha256": "eefac1c09751f8f33f0e0d36ac9d5d7a69f75ac526a542774c769d11acc1b099"
+      "gitBlob": "00ebe981ca5d3417a8e558bf4720e5a0bee00130",
+      "sha256": "cccc555cbc660e282cbc8e3f04487c388fb99f9a8eca4a20e0e4eaf3925b110f"
     },
     {
       "path": "tools/build-launcher-wrapper.ps1",
@@ -246,8 +316,13 @@
     },
     {
       "path": "tools/doctor.mjs",
-      "gitBlob": "80d82891e8df86b91d6aeece2483d4d16e3e2b64",
-      "sha256": "6afca21ef119b3394d42615c90fcb3220c1dbee497d0faf38971af3b034743d1"
+      "gitBlob": "f75b7d89f3603112f2ebb0079b0803b560723021",
+      "sha256": "6988c664b49bcfa68f8175ec9c7070e7e01b18ab78e39bff40ae4993bf964a54"
+    },
+    {
+      "path": "tools/download-inno-setup.mjs",
+      "gitBlob": "3bae776f4b242389504b70b51074e5a8d867b896",
+      "sha256": "84759e3fbef36b9fb7cf8f2f9ee1025c7bc6bf54684bc40a7330bd2cc3356312"
     },
     {
       "path": "tools/download-node-runtime.mjs",
@@ -261,8 +336,23 @@
     },
     {
       "path": "tools/feapp.mjs",
-      "gitBlob": "205ef218a06b71244ce8dfc67197ca00593c397d",
-      "sha256": "bf3f8738b8c27f3dbdebe19d42996b9b1b600011d42cc18693f28e91953532d1"
+      "gitBlob": "78ac5b81c46e6db3b25b5c07b449832174bd910a",
+      "sha256": "2b80973458c210b5c52bc5605eef3de1f4c3837a71de2315370719e008a4cda9"
+    },
+    {
+      "path": "tools/generate-runtime-manifest.mjs",
+      "gitBlob": "7c3b8404ebfb55b1d3ad43d6ab7d69cfc4a508fb",
+      "sha256": "b4470f1a4985b2517e631d228a44d3b68958980109033875c2619fb3573644c4"
+    },
+    {
+      "path": "tools/git-hook-guard.mjs",
+      "gitBlob": "07dcf7861a9c591ac16ef1ec9243d62dab2ca67f",
+      "sha256": "73b30eef91d323d377622c60bc33e473e75e146449112d5616baa09690bcbf69"
+    },
+    {
+      "path": "tools/governance-check.mjs",
+      "gitBlob": "5cf0f6dbebd78f6190591adfeca1dd1d298f1040",
+      "sha256": "dd28ac00c2729c76988938c9ac011142c93b7016cba9ac434cc1cbbca723be93"
     },
     {
       "path": "tools/history.mjs",
@@ -276,18 +366,38 @@
     },
     {
       "path": "tools/install.ps1",
-      "gitBlob": "45d5d188b9b861dc044677fd3c6d40f240e5a60a",
-      "sha256": "cdad1caac4a9e4a2c5bcee5718e723c3a0a6466a368ce4c08d55c18ae662a28d"
+      "gitBlob": "e58932ed63d7f757dd59f67896f157c0bc93fb24",
+      "sha256": "6c7d2f7330426abfc03adde921855c702758ebfc81e90ad513e7dc89da9cf721"
+    },
+    {
+      "path": "tools/installer-core.mjs",
+      "gitBlob": "eeac585e1f74f6d3eb777231a5d5cfed3302b5e2",
+      "sha256": "9eaac383dcd322cb60faf70831af85ccb4125d3e14fa73a63dec663462ba78ff"
     },
     {
       "path": "tools/release.mjs",
-      "gitBlob": "2d5256dda33510dc76d853f0c5c57eb1603f7cff",
-      "sha256": "134de44c7af7786cd751e8a9ea50d6d1eec238e16ed468e27ae05ae94433db30"
+      "gitBlob": "0875f0477a6ef7546cd93520066c20309d3eff60",
+      "sha256": "c47c7acfe9068e9b079f327221378ac199449a2aa25725b295dbd553ada196ca"
+    },
+    {
+      "path": "tools/repo-guard.mjs",
+      "gitBlob": "ab8da91dea829d681442c2d1bdcb870084d56f48",
+      "sha256": "cffa976ca63f9e7dd342a947108e5c40fc17472bb9199eb6fa7a3406843f562e"
     },
     {
       "path": "tools/restore-launcher.ps1",
       "gitBlob": "a8829e811ac2af6ab2b7a5656e7ba6392f9d94c4",
       "sha256": "0aa910cf7d0fd8196a6c5f65c803d4702c86fa98a5f0ad72334746fbbb79d5a6"
+    },
+    {
+      "path": "tools/setup-repository.ps1",
+      "gitBlob": "87c94ed6c15340a8adf27fca83f478506f94b643",
+      "sha256": "eb9c1aa21f62715a9bb067da994c21236e34897fe67e11f09483e2804548dd9b"
+    },
+    {
+      "path": "tools/sign-inno-file.ps1",
+      "gitBlob": "ca9a3848b970ced8be30dd9f01a34de6ed8dbce8",
+      "sha256": "59e12b312024f63dd861197c7378c2d8afc506df2bba5511febaba99eaab80bc"
     }
   ]
 }

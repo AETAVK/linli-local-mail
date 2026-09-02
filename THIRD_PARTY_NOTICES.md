@@ -17,7 +17,15 @@
 
 上游项目：https://github.com/mtrojnar/osslsigncode
 
+## Inno Setup
+
+Windows 一键安装程序与卸载程序由 Inno Setup 7 构建。构建脚本只从上游固定版本地址下载编译器并校验
+SHA-256；安装包中包含 Inno Setup 生成的安装、事务调用和卸载运行代码，不会把 Inno Setup 开发环境
+安装到玩家电脑。
+
+官方网站与许可：https://jrsoftware.org/isinfo.php 、https://jrsoftware.org/files/is/license.txt
+
 ## Rust 与 Windows 系统组件
 
-安装器和启动包装器由 Rust 编译，并调用 Windows 提供的进程、证书和 DPAPI 能力。
+启动包装器由 Rust 编译。本地服务、安装器和包装器会调用 Windows 提供的进程、证书和 DPAPI 能力。
 相应组件仍受各自许可或系统条款约束。

@@ -63,14 +63,18 @@ if (-not [Environment]::Is64BitOperatingSystem) {
 # ---- 步骤 1：游戏目录检查 ----
 Write-Step "检查游戏目录"
 $officialPack = Join-Path -Path $gameRoot -ChildPath "0.0.9.627\resources\feapp.dat"
+$officialWebplayerPack = Join-Path -Path $gameRoot -ChildPath "0.0.9.627\resources\webplayer.dat"
 $launcher = Join-Path -Path $gameRoot -ChildPath "launcher.exe"
 if (-not (Test-PathLiteral $officialPack -pathType Leaf)) {
   Die "未找到 $officialPack。请确认 linli-local-mail 文件夹放在 0.0.9.627 版本的游戏根目录内（与 0.0.9.627、launcher.exe 平级）。"
 }
+if (-not (Test-PathLiteral $officialWebplayerPack -pathType Leaf)) {
+  Die "未找到 $officialWebplayerPack。请确认 0.0.9.627 的 webplayer.dat 完整存在；不要在缺少第二个前端包时继续安装。"
+}
 if (-not (Test-PathLiteral $launcher -pathType Leaf)) {
   Die "未找到 $launcher。请确认这是 BSide Olivia Lin 的游戏根目录。"
 }
-Write-Ok "游戏目录结构正确（0.0.9.627 本体 + launcher.exe）"
+Write-Ok "游戏目录结构正确（0.0.9.627 feapp.dat + webplayer.dat + launcher.exe）"
 
 # ---- 步骤 2：验证内置或系统 Node.js（>= 24）----
 Write-Step "检查 Node.js（需要 >= $requiredNodeMajor）"
@@ -194,23 +198,27 @@ try {
 
     # 基线缺失时先从官方包导入（幂等；官方包已被打补丁且基线仍在时会跳过导入直接安装）
     $baselinePath = Join-Path -Path $serviceRoot -ChildPath "backups\required\official-compatible-0.0.9.627\feapp.dat"
+    $webplayerBaselinePath = Join-Path -Path $serviceRoot -ChildPath "backups\required\official-compatible-0.0.9.627\webplayer.dat"
     $baselineOverride = $null
-    $reportedPath = $null
-    if (-not (Test-PathLiteral $baselinePath -pathType Leaf)) {
+    $webplayerBaselineOverride = $null
+    $baselineReady = (Test-PathLiteral $baselinePath -pathType Leaf) -and (Test-PathLiteral $webplayerBaselinePath -pathType Leaf)
+    if (-not $baselineReady) {
       Write-Host "    从官方包导入兼容基线（按 SHA-256 校验）……"
       $importResult = Invoke-NodeCommand @("tools\feapp.mjs", "import-baseline")
       $importResult.Output | Out-Host
-      if ($importResult.ExitCode -ne 0 -and -not (Test-PathLiteral $baselinePath -pathType Leaf)) {
-        Die "导入兼容基线失败。安装目录里的 feapp.dat 既不是未修改的官方包，也无法证明出自本项目的补丁；请用 Steam 验证文件完整性恢复原始 0.0.9.627 官方文件后重试。"
+      $baselineReady = (Test-PathLiteral $baselinePath -pathType Leaf) -and (Test-PathLiteral $webplayerBaselinePath -pathType Leaf)
+      if ($importResult.ExitCode -ne 0 -and -not $baselineReady) {
+        Die "导入兼容基线失败。安装目录里的 feapp.dat 与 webplayer.dat 必须都是未修改的官方包，或都能证明出自本项目的补丁；请用 Steam 验证文件完整性恢复原始 0.0.9.627 文件后重试。"
       }
-      # import-baseline 逆向重建的非官方基线（source=rebuilt-by-unpatching）只生成
-      # 临时文件，需要用 --baseline 传给 install；返回文本是 JSON，逐行找 baselinePath。
-      foreach ($line in $importResult.Output) {
-        if ($line -match '"baselinePath":\s*"(.*)"') { $reportedPath = $Matches[1] -replace '\\\\', '\' }
-      }
-      if ($reportedPath -and -not (Test-PathLiteral $baselinePath -pathType Leaf)) {
-        $candidate = Join-Path -Path $serviceRoot -ChildPath $reportedPath
+      $importJson = $null
+      try { $importJson = (($importResult.Output -join [Environment]::NewLine) | ConvertFrom-Json) } catch { $importJson = $null }
+      if ($importJson -and $importJson.source -eq "rebuilt-by-unpatching" -and $importJson.baselinePath) {
+        $candidate = Join-Path -Path $gameRoot -ChildPath ([string]$importJson.baselinePath -replace '/', '\')
         if (Test-PathLiteral $candidate -pathType Leaf) { $baselineOverride = $candidate }
+      }
+      if ($importJson -and $importJson.webplayer -and $importJson.webplayer.source -eq "rebuilt-by-unpatching" -and $importJson.webplayer.baselinePath) {
+        $candidate = Join-Path -Path $gameRoot -ChildPath ([string]$importJson.webplayer.baselinePath -replace '/', '\')
+        if (Test-PathLiteral $candidate -pathType Leaf) { $webplayerBaselineOverride = $candidate }
       }
     }
 
@@ -219,10 +227,18 @@ try {
       Write-Warn2 "使用逆向重建的临时基线安装（原始基线已不可考，补丁功能不受影响）"
       $installArguments += @("--baseline", $baselineOverride)
     }
+    if ($webplayerBaselineOverride) {
+      $installArguments += @("--webplayer-baseline", $webplayerBaselineOverride)
+    }
     $installResult = Invoke-NodeCommand $installArguments
     $installResult.Output | Out-Host
     if ($installResult.ExitCode -ne 0) { Die "前端补丁安装失败，请把上方错误信息反馈给维护者。" }
-    Write-Ok "前端补丁安装完成（安装前的包已自动备份）"
+    $installJson = $null
+    try { $installJson = (($installResult.Output -join [Environment]::NewLine) | ConvertFrom-Json) } catch { $installJson = $null }
+    if (-not $installJson -or -not $installJson.webplayer) {
+      Die "前端补丁输出未包含 webplayer.dat 校验结果，拒绝把单包安装视为完成。"
+    }
+    Write-Ok "前端补丁安装完成（feapp.dat + webplayer.dat；安装前的包已自动备份）"
   }
 } finally {
   Pop-Location

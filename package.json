@@ -1,6 +1,6 @@
 {
   "name": "linli-local-mail-bridge",
-  "version": "0.9.8",
+  "version": "0.10.9",
   "private": true,
   "license": "MPL-2.0",
   "repository": {
@@ -14,6 +14,9 @@
   },
   "scripts": {
     "start": "node server.mjs",
+    "test": "npm run governance:check && npm run installer:test",
+    "governance:check": "node tools/governance-check.mjs",
+    "repository:setup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/setup-repository.ps1",
     "doctor": "node tools/doctor.mjs",
     "backup": "node tools/backup.mjs create",
     "patch:install": "node tools/feapp.mjs install",
@@ -24,6 +27,7 @@
     "history:validate": "node tools/history.mjs validate",
     "history:import": "node tools/history.mjs import",
     "installer:build": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-installer.ps1",
+    "installer:test": "node --test --test-isolation=none tests/installer-core.test.mjs",
     "launcher:build": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-launcher-wrapper.ps1",
     "launcher:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/install-launcher-wrapper.ps1",
     "launcher:restore": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/restore-launcher.ps1"

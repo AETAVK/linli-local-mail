@@ -8,12 +8,16 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const GAME_ROOT = path.resolve(ROOT, "..");
 const BASELINE_PATH = path.join(ROOT, "backups", "required", "official-compatible-0.0.9.627", "feapp.dat");
 const TARGET_PATH = path.join(GAME_ROOT, "0.0.9.627", "resources", "feapp.dat");
+const WEBPLAYER_BASELINE_PATH = path.join(ROOT, "backups", "required", "official-compatible-0.0.9.627", "webplayer.dat");
+const WEBPLAYER_TARGET_PATH = path.join(GAME_ROOT, "0.0.9.627", "resources", "webplayer.dat");
 const FRONTEND_SCRIPT_PATH = path.join(ROOT, "frontend", "local-mail-poc.js");
 const LOG_PATH = path.join(ROOT, "logs", "last-patch.json");
 const EXPECTED_BASELINE_SHA256 = "c88f1dd4cb7c95e4902d74dd0c247962ffd65559e3907497b416078d3a6698b5";
+const EXPECTED_WEBPLAYER_BASELINE_SHA256 = "565b5e3e113c2a9dfb90d5fa4f2a0ccda9b0151c118ae3365e6ee0c8624a451d";
 const INDEX_ENTRY = "index.html";
 const MAIN_ENTRY = "assets/main-31595bd3.js";
 const LOCAL_SCRIPT_ENTRY = "assets/local-mail-poc.js";
+const WEBPLAYER_MAIN_ENTRY = "assets/main-95684bf7.js";
 
 const PATCH_RULES = [
   ["Te.post(\"/letter/send\"", "window.__LOCAL_MAIL_HTTP__.post(\"/letter/send\""],
@@ -22,23 +26,128 @@ const PATCH_RULES = [
   ["Te.get(\"/letter/unread_count\"", "window.__LOCAL_MAIL_HTTP__.get(\"/letter/unread_count\""],
   ["Te.post(\"/letter/share\"", "window.__LOCAL_MAIL_HTTP__.post(\"/letter/share\""],
   ["Te.post(\"/letter/resend\"", "window.__LOCAL_MAIL_HTTP__.post(\"/letter/resend\""],
+  // 官方 .627 使用 hash history；在挂载 Vue 应用前暴露同一个 Router，
+  // 让 body 外的本地页签走官方路由而不是与 Vue 的 URL 协调竞争。
+  [
+    "const t=jo(nf);t.use(Rl()),t.use(Ea),t.mount(\"#app\")",
+    "const t=jo(nf);t.use(Rl()),t.use(Ea),window.__LINLI_VUE_ROUTER__=Ea,t.mount(\"#app\")"
+  ],
   // .627 客户端在停止在线服务后把写信入口绑定到恒为 false 的 N3。
   // 本地回信服务仍提供完整的 /letter/send 链路，因此永不隐藏原生写信入口。
   [
     "\"hide-write\":o(p)||!o(N3)",
     "\"hide-write\":!1"
   ],
+  // 右下角 UID 来自独立 UserInfo 组件，不属于 watermark-overlay。
+  // 只隐藏该组件的唯一静态根节点，避免误伤其他 fixed 浮层。
+  [
+    "const n0={class:\"fixed bottom-0 right-0 z-[60]\"},a0={class:\"px-4 py-2 text-text-secondary text-body-s\"},l0={key:0},i0=le({name:\"UserInfo\"",
+    "const n0={class:\"fixed bottom-0 right-0 z-[60]\",style:{display:\"none\"}},a0={class:\"px-4 py-2 text-text-secondary text-body-s\"},l0={key:0},i0=le({name:\"UserInfo\""
+  ],
+  // 水印由独立 renderer 中的组件定义生成，CSS 隐藏无法覆盖组件重建。
+  // 在定义层保留同名组件但返回空节点，所有加载该 bundle 的 renderer 都一致禁用。
+  [
+    "const S1=le({__name:\"WatermarkOverlay\",props:{uid:{}},setup(e){const t=e,s=j(()=>{if(!t.uid)return\"none\";const i=document.createElement(\"canvas\"),l=i.getContext(\"2d\"),a=t.uid,c=14,m=200;l.font=`${c}px sans-serif`;const d=l.measureText(a).width+m,h=c+m;i.width=d*2,i.height=h*2,l.font=`${c}px sans-serif`,l.fillStyle=\"rgba(255, 255, 255, 0.05)\",l.translate(i.width/2,i.height/2),l.rotate(-30*Math.PI/180),l.translate(-i.width/2,-i.height/2);for(let f=-h;f<i.height+h;f+=h)for(let y=-d;y<i.width+d;y+=d)l.fillText(a,y,f);return`url(${i.toDataURL()})`});return(i,l)=>(r(),_(\"div\",{class:\"watermark-overlay\",style:Ae({backgroundImage:o(s)})},null,4))}});",
+    "const S1=le({__name:\"WatermarkOverlay\",props:{uid:{}},setup(){return()=>null}});"
+  ],
+  [
+    "const m=()=>{e.isOfflineMode&&(l.value.mailWidget!==!1&&(l.value.mailWidget=!1),l.value.musicWidget!==!1&&(l.value.musicWidget=!1))};",
+    "const m=()=>{e.isOfflineMode&&!(window.__LINLI_LOCAL_CAPABILITIES__&&window.__LINLI_LOCAL_CAPABILITIES__.widgets)&&(l.value.mailWidget!==!1&&(l.value.mailWidget=!1),l.value.musicWidget!==!1&&(l.value.musicWidget=!1))};"
+  ],
+  [
+    "l.value={...l.value,...p}};let c={...l.value};",
+    "l.value={...l.value,...p};if(e.isOfflineMode&&window.__LINLI_LOCAL_CAPABILITIES__&&window.__LINLI_LOCAL_CAPABILITIES__.widgets&&window.localStorage&&window.localStorage.getItem(\"linli-local-offline-widgets-v1\")!==\"1\"){l.value.mailWidget=!0,l.value.musicWidget=!0,Fm({mailWidget:!0,musicWidget:!0}),window.localStorage.setItem(\"linli-local-offline-widgets-v1\",\"1\")}};let c={...l.value};"
+  ],
+  [
+    "$e=[\"feedback\",\"help-agreement\"],X=[\"mail-widget\",\"music-widget\"],",
+    "$e=[\"feedback\",\"help-agreement\"],X=window.__LINLI_LOCAL_CAPABILITIES__&&window.__LINLI_LOCAL_CAPABILITIES__.widgets?[]:[\"mail-widget\",\"music-widget\"],"
+  ],
+  [
+    "He(()=>{p.value||d.fetchMailList(!0)})",
+    "He(()=>{(!p.value||window.__LINLI_LOCAL_CAPABILITIES__.mail)&&d.fetchMailList(!0)})"
+  ],
+  [
+    "s.isOfflineMode||(s.appMode===Se.PRO?Lt().proRestoreFromApi():s.appMode===Se.LITE&&(Lt().liteStartPoll(),uo().startPolling()))",
+    "(s.isOfflineMode?s.appMode===Se.LITE&&uo().startPolling():s.appMode===Se.PRO?Lt().proRestoreFromApi():s.appMode===Se.LITE&&(Lt().liteStartPoll(),uo().startPolling()))"
+  ],
+  [
+    "async function An(e,t){return Te.post(\"/addToPlaylist\",{itemType:e.itemType,itemId:e.itemId},t).then(s=>{const i=s.data;return{...i,itemId:i.itemId,performanceId:i.performanceId??\"\",songId:i.songId??\"\",id:i.itemId}})}",
+    "async function An(e,t){return window.__LOCAL_MUSIC_API__.addToPlaylist(e,t)}"
+  ],
+  [
+    "async function Nn(e,t){return Te.post(\"/delFromPlaylist\",{itemType:e.itemType,itemId:e.itemId},t)}",
+    "async function Nn(e,t){return window.__LOCAL_MUSIC_API__.removeFromPlaylist(e,t)}"
+  ],
+  [
+    "async function Us(e,t){return Te.get(\"/searchPlaylist\",{params:e,...t}).then(s=>({...s.data,list:s.data.list.map(i=>({...i,itemId:i.itemId,performanceId:i.performanceId??\"\",songId:i.songId??\"\",id:i.itemId}))}))}",
+    "async function Us(e,t){return window.__LOCAL_MUSIC_API__.searchPlaylist(e,t)}"
+  ],
+  [
+    "Pa=async(q,me)=>{const Be=await An({itemType:me,itemId:q.id});",
+    "Pa=async(q,me)=>{const Be=await An({itemType:me,itemId:q.id,song:q});"
+  ],
+  [
+    "He(async()=>{if(w.value){a.value=!1;return}await Ua(),await W().finally(()=>{a.value=!1}),Po()});",
+    "He(async()=>{if(w.value){await W().finally(()=>{a.value=!1}),Po();return}await Ua(),await W().finally(()=>{a.value=!1}),Po()});"
+  ],
+  // StudioLite 离线列表只包含 downloadState=completed 的曲目，因此解除这一处
+  // hide-actions 会恢复试听区而不会进入 idle/failed/cancelled 的下载按钮分支。
+  [
+    "F(Qx,{key:at.id,song:at,index:Na,\"type-mode\":\"short\",compact:o(g),\"hide-actions\":o(w),class:\"song-item\"",
+    "F(Qx,{key:at.id,song:at,index:Na,\"type-mode\":\"short\",compact:o(g),\"hide-actions\":!1,class:\"song-item\""
+  ],
+  // 离线时仅渲染本地 addPlaylist；官方 share 仍只在非离线模式出现。
+  [
+    "$e=[{id:\"share\",icon:\"share\",label:i(\"common_share\"),onClick:R},{id:\"addPlaylist\",icon:\"addplaylist\",label:i(\"common_add_to_playlist\"),onClick:O,disabled:()=>z.value,tooltip:()=>z.value?i(\"common_add_to_playlist_desc\"):\"\"}];",
+    "$e=Ie().isOfflineMode?[{id:\"addPlaylist\",icon:\"addplaylist\",label:i(\"common_add_to_playlist\"),onClick:O,disabled:()=>z.value,tooltip:()=>z.value?i(\"common_add_to_playlist_desc\"):\"\"}]:[{id:\"share\",icon:\"share\",label:i(\"common_share\"),onClick:R},{id:\"addPlaylist\",icon:\"addplaylist\",label:i(\"common_add_to_playlist\"),onClick:O,disabled:()=>z.value,tooltip:()=>z.value?i(\"common_add_to_playlist_desc\"):\"\"}];"
+  ],
+  [
+    "o(w)?Y(\"\",!0):(r(),_(se,{key:0},",
+    "!1?Y(\"\",!0):(r(),_(se,{key:0},"
+  ],
+  [
+    "o(t)?Y(\"\",!0):(r(),_(\"div\",{key:0,class:\"w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-grey-1 rounded-1\",onClick:g},",
+    "!1?Y(\"\",!0):(r(),_(\"div\",{key:0,class:\"w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-grey-1 rounded-1\",onClick:g},"
+  ],
+  [
+    "o(t)?Y(\"\",!0):(r(),_(\"div\",{key:1,class:\"w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-grey-1 rounded-1\",onClick:y},",
+    "!1?Y(\"\",!0):(r(),_(\"div\",{key:1,class:\"w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-grey-1 rounded-1\",onClick:y},"
+  ],
+  [
+    "o(t)?Y(\"\",!0):(r(),_(\"div\",{key:2,class:\"w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-grey-1 rounded-1\",onClick:f},",
+    "!1?Y(\"\",!0):(r(),_(\"div\",{key:2,class:\"w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-grey-1 rounded-1\",onClick:f},"
+  ],
+  [
+    "o(t)?Y(\"\",!0):(r(),F(A,{key:0,type:\"pip\",class:\"text-body-l text-grey-6 hover:text-grey-8 active:text-grey-9 cursor-pointer\",onClick:o(s).handleOpenWidget},",
+    "!1?Y(\"\",!0):(r(),F(A,{key:0,type:\"pip\",class:\"text-body-l text-grey-6 hover:text-grey-8 active:text-grey-9 cursor-pointer\",onClick:o(s).handleOpenWidget},"
+  ],
+  ["J=async()=>{Q(),await C(),await H(),L=setInterval(H,U)}", "J=async()=>{if(Ie().isOfflineMode)return;Q(),await C(),await H(),L=setInterval(H,U)}"]
+];
+
+// .627 webplayer.dat 的 WatermarkOverlay 会把 query uid 绘制到全屏 canvas。
+// 组件定义是归档内唯一稳定锚点；保留 props 形状但让 setup 返回空渲染函数，
+// 这样不会依赖 CSS，也不会误伤 webplayer 的其他浮层。该规则必须独立于
+// feapp 的 PATCH_RULES，因为两个归档使用不同的主脚本与变量作用域。
+const WEBPLAYER_PATCH_RULES = [
+  [
+    "const De=U({__name:\"WatermarkOverlay\",props:{uid:{}},setup(o){const n=o,s=D(()=>{if(!n.uid)return\"none\";const r=document.createElement(\"canvas\"),a=r.getContext(\"2d\"),l=n.uid,i=14,v=200;a.font=`${i}px sans-serif`;const f=a.measureText(l).width+v,y=i+v;r.width=f*2,r.height=y*2,a.font=`${i}px sans-serif`,a.fillStyle=\"rgba(255, 255, 255, 0.05)\",a.translate(r.width/2,r.height/2),a.rotate(-30*Math.PI/180),a.translate(-r.width/2,-r.height/2);for(let u=-y;u<r.height+y;u+=y)for(let h=-f;h<r.width+f;h+=f)a.fillText(l,h,u);return`url(${r.toDataURL()})`});return(r,a)=>(k(),I(\"div\",{class:\"watermark-overlay\",style:he({backgroundImage:S(s)})},null,4))}});",
+    "const De=U({__name:\"WatermarkOverlay\",props:{uid:{}},setup(){return()=>null}});"
+  ]
+];
+
+// 兼容上一版已经安装过的补丁：旧补丁注入了假本地音乐 API、强行显示 MIDI
+// 上传入口并在离线点击时弹出警告。这些规则已从当前补丁集合退休，但逆向旧
+// 产物时必须剥离它们；当前新增规则若仍是官方基线形态则保持不动。
+const RETIRED_PATCH_RULES = [
   [
     "async function Us(e,t){return Te.get(\"/searchPlaylist\",{params:e,...t}).then(s=>({...s.data,list:s.data.list.map(i=>({...i,itemId:i.itemId,performanceId:i.performanceId??\"\",songId:i.songId??\"\",id:i.itemId}))}))}async function Xp",
     "async function Us(e,t){return Te.get(\"/searchPlaylist\",{params:e,...t}).then(s=>({...s.data,list:s.data.list.map(i=>({...i,itemId:i.itemId,performanceId:i.performanceId??\"\",songId:i.songId??\"\",id:i.itemId}))}))}window.__LOCAL_MUSIC_API__=Object.freeze({addToPlaylist:An,removeFromPlaylist:Nn,searchPlaylist:Us});async function Xp"
   ],
   ["!o(w)&&o(Ss)?(r(),F(Be,", "!0?(r(),F(Be,"],
-  ["J=async()=>{Q(),await C(),await H(),L=setInterval(H,U)}", "J=async()=>{if(Ie().isOfflineMode)return;Q(),await C(),await H(),L=setInterval(H,U)}"],
   ["w=()=>{l.value=!0}", "w=()=>{Ie().isOfflineMode?ze.warning(\"离线版尚未接入 MIDI 定制演奏服务\"):l.value=!0}"]
 ];
 
-// 兼容上一版已经安装过的补丁：旧补丁把 hide-write 改成了 o(p)，
-// 在缺少 required 基线、需要从现有安装包逆向恢复时也应能正常还原。
+// 兼容更早版本只登记过的 hide-write 变体。
 const LEGACY_PATCH_AFTERS = new Map([
   ["\"hide-write\":o(p)||!o(N3)", ["\"hide-write\":o(p)"]]
 ]);
@@ -170,6 +279,17 @@ function exactReplace(text, before, after) {
   return parts.join(after);
 }
 
+function countOccurrences(text, needle) {
+  let count = 0;
+  let offset = 0;
+  while (true) {
+    const found = text.indexOf(needle, offset);
+    if (found < 0) return count;
+    count += 1;
+    offset = found + Math.max(needle.length, 1);
+  }
+}
+
 function patchEntries(baselineEntries, localScript) {
   const entries = baselineEntries.map((entry) => ({ ...entry, data: Buffer.from(entry.data) }));
   const byName = new Map(entries.map((entry) => [entry.name, entry]));
@@ -199,6 +319,23 @@ function patchEntries(baselineEntries, localScript) {
     dosDate: 0x0021,
     externalAttributes: 0
   });
+  return entries;
+}
+
+function patchWebplayerEntries(baselineEntries) {
+  const entries = baselineEntries.map((entry) => ({ ...entry, data: Buffer.from(entry.data) }));
+  const byName = entryMap(entries);
+  const main = byName.get(WEBPLAYER_MAIN_ENTRY);
+  if (!main) throw new Error("Expected .627 webplayer frontend entry was not found");
+
+  let mainText = main.data.toString("utf8");
+  for (const [before, after] of WEBPLAYER_PATCH_RULES) {
+    if (countOccurrences(mainText, before) !== 1 || countOccurrences(mainText, after) !== 0) {
+      throw new Error(`Webplayer baseline rule is missing or non-unique: ${before}`);
+    }
+    mainText = exactReplace(mainText, before, after);
+  }
+  main.data = Buffer.from(mainText, "utf8");
   return entries;
 }
 
@@ -234,17 +371,52 @@ function unpatchEntries(patchedEntries) {
 
   let mainText = main.data.toString("utf8");
   for (const [before, after] of PATCH_RULES) {
-    if (mainText.includes(after)) {
+    const afterCount = countOccurrences(mainText, after);
+    if (afterCount === 1) {
       mainText = exactReplace(mainText, after, before);
       continue;
     }
+    if (afterCount > 1) throw new Error(`Expected at most one patched frontend rule: ${after}`);
+    const baselineCount = countOccurrences(mainText, before);
+    if (baselineCount === 1) continue;
+    if (baselineCount > 1) throw new Error(`Expected at most one baseline frontend rule: ${before}`);
     const legacyAfter = (LEGACY_PATCH_AFTERS.get(before) || [])
-      .find((candidate) => mainText.includes(candidate));
+      .find((candidate) => countOccurrences(mainText, candidate) === 1);
     if (legacyAfter) {
       mainText = exactReplace(mainText, legacyAfter, before);
       continue;
     }
     throw new Error(`Expected patched frontend rule was not found: ${after}`);
+  }
+  for (const [before, after] of RETIRED_PATCH_RULES) {
+    const retiredCount = countOccurrences(mainText, after);
+    if (retiredCount === 1) mainText = exactReplace(mainText, after, before);
+    else if (retiredCount > 1) throw new Error(`Expected at most one retired frontend rule: ${after}`);
+  }
+  main.data = Buffer.from(mainText, "utf8");
+  return entries;
+}
+
+function unpatchWebplayerEntries(patchedEntries) {
+  const entries = patchedEntries.map((entry) => ({ ...entry, data: Buffer.from(entry.data) }));
+  const byName = entryMap(entries);
+  const main = byName.get(WEBPLAYER_MAIN_ENTRY);
+  if (!main) throw new Error("Expected .627 webplayer frontend entry was not found");
+
+  let mainText = main.data.toString("utf8");
+  for (const [before, after] of WEBPLAYER_PATCH_RULES) {
+    const afterCount = countOccurrences(mainText, after);
+    if (afterCount === 1) {
+      const baselineCount = countOccurrences(mainText, before);
+      if (baselineCount !== 0) throw new Error(`Webplayer patch contains both baseline and patched rule: ${after}`);
+      mainText = exactReplace(mainText, after, before);
+      continue;
+    }
+    if (afterCount > 1) throw new Error(`Expected at most one patched webplayer rule: ${after}`);
+    const baselineCount = countOccurrences(mainText, before);
+    if (baselineCount === 1) continue;
+    if (baselineCount > 1) throw new Error(`Expected at most one baseline webplayer rule: ${before}`);
+    throw new Error(`Expected patched webplayer rule was not found: ${after}`);
   }
   main.data = Buffer.from(mainText, "utf8");
   return entries;
@@ -280,7 +452,9 @@ function verifyPatchedArchive(buffer, baselineBuffer, localScript) {
   }
   const mainText = currentMap.get(MAIN_ENTRY).data.toString("utf8");
   for (const [before, after] of PATCH_RULES) {
-    if (mainText.includes(before) || !mainText.includes(after)) throw new Error(`Frontend API wrapper patch is missing: ${after}`);
+    if (countOccurrences(mainText, before) !== 0 || countOccurrences(mainText, after) !== 1) {
+      throw new Error(`Frontend API wrapper patch is missing or non-unique: ${after}`);
+    }
   }
   return {
     entries: current.length,
@@ -290,13 +464,39 @@ function verifyPatchedArchive(buffer, baselineBuffer, localScript) {
   };
 }
 
-function backupCurrentTarget(targetBuffer) {
-  const digest = sha256Sync(targetBuffer);
-  const directory = path.join(ROOT, "backups", "patch-snapshots", "pre-formal-install");
-  const backupPath = path.join(directory, `feapp-${digest.slice(0, 16)}.dat`);
-  fs.mkdirSync(directory, { recursive: true });
-  if (!fs.existsSync(backupPath)) fs.writeFileSync(backupPath, targetBuffer);
-  return backupPath;
+function verifyWebplayerArchive(buffer, baselineBuffer) {
+  const current = readArchive(buffer);
+  const baseline = readArchive(baselineBuffer);
+  const currentMap = entryMap(current);
+  const baselineMap = entryMap(baseline);
+  const expectedNames = new Set(baselineMap.keys());
+  const unexpected = [...currentMap.keys()].filter((name) => !expectedNames.has(name));
+  const missing = [...expectedNames].filter((name) => !currentMap.has(name));
+  if (unexpected.length || missing.length) {
+    throw new Error(`Webplayer archive entry mismatch; unexpected=${unexpected.join(",")} missing=${missing.join(",")}`);
+  }
+
+  const allowedChanged = new Set([WEBPLAYER_MAIN_ENTRY]);
+  const changed = [];
+  for (const [name, baselineEntry] of baselineMap) {
+    const currentEntry = currentMap.get(name);
+    if (!currentEntry.data.equals(baselineEntry.data)) changed.push(name);
+    if (!allowedChanged.has(name) && !currentEntry.data.equals(baselineEntry.data)) {
+      throw new Error(`Unrelated webplayer entry changed: ${name}`);
+    }
+  }
+  const mainText = currentMap.get(WEBPLAYER_MAIN_ENTRY)?.data.toString("utf8") || "";
+  for (const [before, after] of WEBPLAYER_PATCH_RULES) {
+    if (countOccurrences(mainText, before) !== 0 || countOccurrences(mainText, after) !== 1) {
+      throw new Error(`Webplayer frontend patch is missing or non-unique: ${after}`);
+    }
+  }
+  return {
+    entries: current.length,
+    baselineEntries: baseline.length,
+    changedEntries: changed,
+    addedEntries: []
+  };
 }
 
 // 当安装目录里的 feapp.dat 不是官方基线（通常已被本补丁打过）且本地没有基线时，
@@ -306,27 +506,25 @@ function backupCurrentTarget(targetBuffer) {
 //     可以从任何"本项目补丁产物"逐字节重建基线，因此旧版本安装器打过补丁、
 //     且备份已丢失的机器也能恢复。每个候选都必须通过"重打补丁与当前安装包
 //     逐字节一致"的验证，无法证明来源的内容一律拒绝。
-function restoreBaselineFromBackup() {
+function restoreBaselineFromBackup(spec, localScript) {
   const candidates = [];
   const directory = path.join(ROOT, "backups", "patch-snapshots", "pre-formal-install");
   try {
     for (const name of fs.readdirSync(directory)) {
-      if (/^feapp-.*\.dat$/.test(name)) candidates.push(path.join(directory, name));
+      if (name.startsWith(`${spec.name}-`) && name.endsWith(".dat")) candidates.push(path.join(directory, name));
     }
   } catch {
     // 备份目录不存在或不可读；下方还会尝试当前安装包本身
   }
-  candidates.push(TARGET_PATH);
-
-  const localScript = fs.readFileSync(FRONTEND_SCRIPT_PATH);
+  candidates.push(spec.targetPath);
   for (const candidatePath of candidates) {
     let candidate;
     try {
-      candidate = fs.readFileSync(candidatePath);
+      candidate = readRegularFile(candidatePath, `${spec.name} candidate`);
     } catch {
       continue;
     }
-    const candidateIsBaseline = sha256Sync(candidate) === EXPECTED_BASELINE_SHA256;
+    const candidateIsBaseline = sha256Sync(candidate) === spec.expectedBaselineSha256;
     try {
       let baselineCandidate;
       if (candidateIsBaseline) {
@@ -336,22 +534,20 @@ function restoreBaselineFromBackup() {
         // 注意不要求剥离产物与官方基线逐字节一致——writeArchive 会把 zip 元数据
         //（versionMade、DOS 时间戳、本地头风格）规范化为本项目打包器的形态，与
         // 官方打包器（流式、本地头置零）必然不同；判断依据是内容与可重建性。
-        baselineCandidate = writeArchive(unpatchEntries(readArchive(candidate)));
+        baselineCandidate = writeArchive(unpatchPackage(spec, candidate));
       }
       // 自洽性闸门：剥离出的基线 + 当前前端脚本必须能重打出一份结构合法的补丁包
       //（exactReplace 找不到注入点/条目集合异常都会抛错）。第三方乱改通常无法通过
       // 这一步：改在补丁区域会让 exactReplace 失败；改在条目集合会触发结构不匹配。
       // 注意不能要求"重打结果与当前安装包逐字节一致"：当前安装包可能是旧脚本打的
       //（旧版安装器残留），重打用的是新脚本，注入的 local-mail-poc.js 内容不同。
-      const rebuilt = writeArchive(patchEntries(readArchive(baselineCandidate), localScript));
-      verifyPatchedArchive(rebuilt, baselineCandidate, localScript);
-      if (sha256Sync(baselineCandidate) !== EXPECTED_BASELINE_SHA256) {
+      const rebuilt = buildPatchedPackage(spec, baselineCandidate, localScript);
+      verifyPackage(spec, rebuilt, baselineCandidate, localScript);
+      if (sha256Sync(baselineCandidate) !== spec.expectedBaselineSha256) {
         // 逆向产物不等于官方基线（zip 元数据规范化、或旧版补丁还有已废弃的改动）：
         // 不写入 required 基线，仅作为临时基线供本次安装使用。
         return { buffer: baselineCandidate, source: candidatePath, rebuilt: true };
       }
-      fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
-      atomicWrite(BASELINE_PATH, baselineCandidate);
       return { buffer: baselineCandidate, source: candidatePath, rebuilt: false };
     } catch {
       continue;
@@ -361,13 +557,254 @@ function restoreBaselineFromBackup() {
 }
 
 function atomicWrite(targetPath, data) {
-  const temporary = `${targetPath}.tmp-${process.pid}`;
+  const temporary = `${targetPath}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(temporary, data);
   try {
     fs.renameSync(temporary, targetPath);
   } catch (error) {
     try { fs.unlinkSync(temporary); } catch {}
     throw error;
+  }
+}
+
+const PACKAGE_SPECS = [
+  {
+    name: "feapp",
+    baselinePath: BASELINE_PATH,
+    targetPath: TARGET_PATH,
+    expectedBaselineSha256: EXPECTED_BASELINE_SHA256
+  },
+  {
+    name: "webplayer",
+    baselinePath: WEBPLAYER_BASELINE_PATH,
+    targetPath: WEBPLAYER_TARGET_PATH,
+    expectedBaselineSha256: EXPECTED_WEBPLAYER_BASELINE_SHA256
+  }
+];
+
+function packageSpecs(selection = "all") {
+  if (!selection || selection === "all") return PACKAGE_SPECS;
+  const spec = PACKAGE_SPECS.find((candidate) => candidate.name === selection);
+  if (!spec) throw new Error(`Unknown frontend package: ${selection}`);
+  return [spec];
+}
+
+function argumentValue(name) {
+  const exact = `--${name}`;
+  const inlinePrefix = `${exact}=`;
+  for (let index = 2; index < process.argv.length; index += 1) {
+    const argument = process.argv[index];
+    if (argument.startsWith(inlinePrefix)) return argument.slice(inlinePrefix.length);
+    if (argument === exact) {
+      const value = process.argv[index + 1];
+      if (value === undefined || value.startsWith("--")) throw new Error(`Missing value for ${exact}`);
+      return value;
+    }
+  }
+  return null;
+}
+
+function readRegularFile(filePath, description) {
+  let stat;
+  try {
+    stat = fs.lstatSync(filePath);
+  } catch (error) {
+    throw new Error(`${description} cannot be read: ${filePath} (${error.message})`);
+  }
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`${description} is not a regular file: ${filePath}`);
+  return fs.readFileSync(filePath);
+}
+
+function verifyPackage(spec, currentBuffer, baselineBuffer, localScript) {
+  const archiveVerification = spec.name === "feapp"
+    ? verifyPatchedArchive(currentBuffer, baselineBuffer, localScript)
+    : verifyWebplayerArchive(currentBuffer, baselineBuffer);
+  return {
+    ...archiveVerification,
+    baselineSha256: sha256Sync(baselineBuffer),
+    installedSha256: sha256Sync(currentBuffer),
+    ...(spec.name === "feapp" ? { sourceScriptSha256: sha256Sync(localScript) } : {})
+  };
+}
+
+function buildPatchedPackage(spec, baselineBuffer, localScript) {
+  const entries = spec.name === "feapp"
+    ? patchEntries(readArchive(baselineBuffer), localScript)
+    : patchWebplayerEntries(readArchive(baselineBuffer));
+  return writeArchive(entries);
+}
+
+function unpatchPackage(spec, candidateBuffer) {
+  return spec.name === "feapp"
+    ? unpatchEntries(readArchive(candidateBuffer))
+    : unpatchWebplayerEntries(readArchive(candidateBuffer));
+}
+
+function backupCurrentTarget(targetBuffer, packageName = "feapp") {
+  const digest = sha256Sync(targetBuffer);
+  const directory = path.join(ROOT, "backups", "patch-snapshots", "pre-formal-install");
+  const backupPath = path.join(directory, `${packageName}-${digest.slice(0, 16)}.dat`);
+  fs.mkdirSync(directory, { recursive: true });
+  if (!fs.existsSync(backupPath)) fs.writeFileSync(backupPath, targetBuffer);
+  return backupPath;
+}
+
+function existingBaseline(spec) {
+  try {
+    const buffer = readRegularFile(spec.baselinePath, `${spec.name} compatible baseline`);
+    return sha256Sync(buffer) === spec.expectedBaselineSha256 ? buffer : null;
+  } catch {
+    return null;
+  }
+}
+
+function planBaselineImport(spec, localScript) {
+  const sourceBuffer = readRegularFile(spec.targetPath, `${spec.name} target archive`);
+  const sourceHash = sha256Sync(sourceBuffer);
+  if (sourceHash === spec.expectedBaselineSha256) {
+    if (existingBaseline(spec)) {
+      return {
+        buffer: sourceBuffer,
+        writes: [],
+        result: { imported: false, reason: "baseline already present", sha256: sourceHash }
+      };
+    }
+    return {
+      buffer: sourceBuffer,
+      writes: [{ target: spec.baselinePath, data: sourceBuffer, label: `${spec.name} compatible baseline` }],
+      result: {
+        imported: true,
+        sha256: sourceHash,
+        baselinePath: path.relative(GAME_ROOT, spec.baselinePath)
+      }
+    };
+  }
+
+  const restored = restoreBaselineFromBackup(spec, localScript);
+  if (!restored) {
+    throw new Error(
+      `Official ${spec.name}.dat hash mismatch: ${sourceHash}. Expected the untouched .627 baseline `
+      + `(${spec.expectedBaselineSha256}), a locally patched archive with its pre-install backup, `
+      + `or a ${spec.name} archive whose baseline can be rebuilt.`
+    );
+  }
+  if (!restored.rebuilt && existingBaseline(spec)) {
+    return {
+      buffer: restored.buffer,
+      writes: [],
+      result: {
+        imported: true,
+        sha256: spec.expectedBaselineSha256,
+        baselinePath: path.relative(GAME_ROOT, spec.baselinePath),
+        source: "restored-from-pre-install-backup",
+        backupPath: path.relative(GAME_ROOT, restored.source)
+      }
+    };
+  }
+  const outputPath = restored.rebuilt
+    ? path.join(ROOT, "logs", `baseline-rebuilt-${spec.name}-${process.pid}.dat`)
+    : spec.baselinePath;
+  return {
+    buffer: restored.buffer,
+    writes: [{ target: outputPath, data: restored.buffer, label: `${spec.name} rebuilt baseline` }],
+    result: {
+      imported: true,
+      sha256: sha256Sync(restored.buffer),
+      baselinePath: path.relative(GAME_ROOT, outputPath),
+      ...(restored.rebuilt
+        ? { source: "rebuilt-by-unpatching", sourceArchive: path.relative(GAME_ROOT, restored.source) }
+        : { source: "restored-from-pre-install-backup", backupPath: path.relative(GAME_ROOT, restored.source) })
+    }
+  };
+}
+
+function captureFile(filePath, description) {
+  let stat;
+  try {
+    stat = fs.lstatSync(filePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return { existed: false, data: null };
+    throw new Error(`${description} cannot be read: ${filePath} (${error.message})`);
+  }
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`${description} is not a regular file: ${filePath}`);
+  return { existed: true, data: fs.readFileSync(filePath) };
+}
+
+function removeFileIfExists(filePath) {
+  try {
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`not a regular file: ${filePath}`);
+    fs.unlinkSync(filePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+}
+
+function restoreCapturedFile(filePath, snapshot) {
+  if (snapshot.existed) atomicWrite(filePath, snapshot.data);
+  else removeFileIfExists(filePath);
+}
+
+// 先在各自目录准备并校验临时文件，再按顺序替换目标。替换中途若失败，
+// 所有目标都会用提交前快照恢复；调用方不会把一个包留在新状态而另一个包留在旧状态。
+function atomicWriteBatch(items) {
+  const seen = new Set();
+  const operations = items.map((item) => {
+    const target = path.resolve(item.target);
+    const key = target.toLowerCase();
+    if (seen.has(key)) throw new Error(`Duplicate atomic target: ${target}`);
+    seen.add(key);
+    return {
+      ...item,
+      target,
+      original: captureFile(target, item.label || "atomic target"),
+      temporary: `${target}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`,
+      committed: false
+    };
+  });
+  const rollbackFailures = [];
+  try {
+    for (const operation of operations) {
+      fs.mkdirSync(path.dirname(operation.target), { recursive: true });
+      fs.writeFileSync(operation.temporary, operation.data);
+      const staged = readRegularFile(operation.temporary, `${operation.label || "atomic"} temporary file`);
+      if (!staged.equals(Buffer.from(operation.data))) throw new Error(`staged file verification failed: ${operation.target}`);
+    }
+    for (const operation of operations) {
+      const current = captureFile(operation.target, operation.label || "atomic target");
+      if (current.existed !== operation.original.existed
+          || (current.existed && !current.data.equals(operation.original.data))) {
+        throw new Error(`target changed during atomic preparation: ${operation.target}`);
+      }
+    }
+    for (const operation of operations) {
+      fs.renameSync(operation.temporary, operation.target);
+      operation.committed = true;
+    }
+  } catch (error) {
+    if (operations.some((operation) => operation.committed)) {
+      for (const operation of [...operations].reverse()) {
+        try {
+          const current = captureFile(operation.target, operation.label || "atomic target");
+          const matchesOriginal = current.existed === operation.original.existed
+            && (!current.existed || current.data.equals(operation.original.data));
+          if (matchesOriginal) continue;
+          const matchesStaged = current.existed && current.data.equals(Buffer.from(operation.data));
+          if (!matchesStaged) throw new Error("target changed during atomic rollback");
+          restoreCapturedFile(operation.target, operation.original);
+        } catch (rollbackError) { rollbackFailures.push(`${operation.target}: ${rollbackError.message}`); }
+      }
+    }
+    if (rollbackFailures.length) {
+      throw new Error(`${error.message}; atomic rollback failed: ${rollbackFailures.join("; ")}`);
+    }
+    throw error;
+  } finally {
+    for (const operation of operations) {
+      try { removeFileIfExists(operation.temporary); } catch {}
+    }
   }
 }
 
@@ -378,131 +815,178 @@ function writeLog(command, result) {
 
 async function main() {
   const command = process.argv[2] || "verify";
+  const selection = argumentValue("package") || "all";
+  const localScript = readRegularFile(FRONTEND_SCRIPT_PATH, "local-mail-poc.js");
 
-  // import-baseline：新环境引导。从接收者自己的官方 0.627 包提取兼容基线并按哈希校验，
-  // 使分发时无需携带官方文件；哈希不匹配时依次尝试 pre-install 备份与逆向剥离重建
-  // （见 restoreBaselineFromBackup），仅当所有本机来源都无法证明时才报错。
   if (command === "import-baseline") {
-    const sourceBuffer = fs.readFileSync(TARGET_PATH);
-    const sourceHash = sha256Sync(sourceBuffer);
-    if (sourceHash !== EXPECTED_BASELINE_SHA256) {
-      // 官方包已被打补丁（重装、旧版安装器残留等）时，尝试从本机已有文件恢复基线
-      // 而不是报错中止；恢复逻辑与安全闸门见 restoreBaselineFromBackup。
-      const restored = restoreBaselineFromBackup();
-      if (restored) {
-        if (!restored.rebuilt) {
-          // 备份就是官方基线：落盘为 required 基线并报告。
-          const result = {
-            imported: true,
-            sha256: EXPECTED_BASELINE_SHA256,
-            baselinePath: path.relative(GAME_ROOT, BASELINE_PATH),
-            source: "restored-from-pre-install-backup",
-            backupPath: path.relative(GAME_ROOT, restored.source)
-          };
-          writeLog(command, result);
-          console.log(JSON.stringify(result, null, 2));
-          return;
-        }
-        // 逆向重建的基线哈希不等于官方基线（例如旧版补丁还带有已废弃的改动）：
-        // 不写入 required 基线，只生成临时文件供本次 install/verify 使用。
-        const transientPath = path.join(LOG_PATH, "..", `baseline-rebuilt-${process.pid}.dat`);
-        atomicWrite(transientPath, restored.buffer);
-        const result = {
-          imported: true,
-          sha256: sha256Sync(restored.buffer),
-          baselinePath: path.relative(GAME_ROOT, transientPath),
-          source: "rebuilt-by-unpatching",
-          sourceArchive: path.relative(GAME_ROOT, restored.source)
-        };
-        writeLog(command, result);
-        console.log(JSON.stringify(result, null, 2));
-        return transientPath;
-      }
-      throw new Error(
-        `Official feapp.dat hash mismatch: ${sourceHash}. Expected the untouched .627 baseline `
-        + `(${EXPECTED_BASELINE_SHA256}), a locally patched archive with its pre-install backup, `
-        + "or a local-mail patched archive whose baseline can be rebuilt. Make sure the game client "
-        + "is version 0.0.9.627 and has only been modified by this project."
-      );
-    }
-    if (fs.existsSync(BASELINE_PATH)) {
-      const existingHash = sha256Sync(fs.readFileSync(BASELINE_PATH));
-      if (existingHash === EXPECTED_BASELINE_SHA256) {
-        const result = { imported: false, reason: "baseline already present", sha256: existingHash };
-        console.log(JSON.stringify(result, null, 2));
-        return;
-      }
-    }
-    fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
-    atomicWrite(BASELINE_PATH, sourceBuffer);
-    const result = { imported: true, sha256: sourceHash, baselinePath: path.relative(GAME_ROOT, BASELINE_PATH) };
+    if (selection !== "all") throw new Error("import-baseline requires both frontend packages");
+    const plans = PACKAGE_SPECS.map((spec) => planBaselineImport(spec, localScript));
+    const writes = plans.flatMap((plan) => plan.writes);
+    atomicWriteBatch(writes);
+    const result = { ...plans[0].result, webplayer: plans[1].result };
     writeLog(command, result);
     console.log(JSON.stringify(result, null, 2));
     return;
   }
 
-  // install/verify/restore 的基线：默认 required 基线；import-baseline 逆向重建的
-  // 非官方基线通过 --baseline <path> 临时传入（不落盘为 required 基线）。
-  // 非官方哈希只允许出现在显式 override 的场景；required 基线仍必须等于官方哈希。
-  const baselineFlagIndex = process.argv.indexOf("--baseline");
-  const baselineOverride = baselineFlagIndex >= 0 ? process.argv[baselineFlagIndex + 1] : null;
-  const baselinePath = baselineOverride ?? BASELINE_PATH;
-  const baselineBuffer = fs.readFileSync(baselinePath);
-  const baselineHash = sha256Sync(baselineBuffer);
-  if (baselineHash !== EXPECTED_BASELINE_SHA256 && !baselineOverride) {
-    throw new Error(`Compatible baseline hash mismatch: ${baselineHash}`);
+  const specs = packageSpecs(selection);
+  const baselineOverride = argumentValue("baseline");
+  const webplayerBaselineOverride = argumentValue("webplayer-baseline");
+  if (baselineOverride && !specs.some((spec) => spec.name === "feapp")) {
+    throw new Error("--baseline can only be used with the feapp package");
+  }
+  if (webplayerBaselineOverride && !specs.some((spec) => spec.name === "webplayer")) {
+    throw new Error("--webplayer-baseline can only be used with the webplayer package");
+  }
+  const overrides = new Map([
+    ["feapp", baselineOverride],
+    ["webplayer", webplayerBaselineOverride]
+  ]);
+  const baselines = new Map();
+  for (const spec of specs) {
+    const baselinePath = overrides.get(spec.name) || spec.baselinePath;
+    const baselineBuffer = readRegularFile(baselinePath, `${spec.name} compatible baseline`);
+    const baselineHash = sha256Sync(baselineBuffer);
+    if (baselineHash !== spec.expectedBaselineSha256 && !overrides.get(spec.name)) {
+      throw new Error(`${spec.name} compatible baseline hash mismatch: ${baselineHash}`);
+    }
+    baselines.set(spec.name, { buffer: baselineBuffer, hash: baselineHash, path: baselinePath });
   }
 
   if (command === "install") {
-    const localScript = fs.readFileSync(FRONTEND_SCRIPT_PATH);
-    const targetBefore = fs.readFileSync(TARGET_PATH);
-    const backupPath = backupCurrentTarget(targetBefore);
-    const patched = writeArchive(patchEntries(readArchive(baselineBuffer), localScript));
-    const verification = verifyPatchedArchive(patched, baselineBuffer, localScript);
-    atomicWrite(TARGET_PATH, patched);
-    const result = {
-      ...verification,
-      baselineSha256: baselineHash,
-      installedSha256: sha256Sync(patched),
-      sourceScriptSha256: sha256Sync(localScript),
-      backupPath: path.relative(GAME_ROOT, backupPath),
-      ...(baselineOverride ? { baselineOverride: path.relative(GAME_ROOT, baselineOverride) } : {})
-    };
+    const before = new Map(specs.map((spec) => [spec.name, readRegularFile(spec.targetPath, `${spec.name} target archive`)]));
+    const patched = new Map();
+    for (const spec of specs) {
+      const baseline = baselines.get(spec.name);
+      const patchedBuffer = buildPatchedPackage(spec, baseline.buffer, localScript);
+      verifyPackage(spec, patchedBuffer, baseline.buffer, localScript);
+      patched.set(spec.name, patchedBuffer);
+    }
+    const backups = new Map();
+    for (const spec of specs) backups.set(spec.name, backupCurrentTarget(before.get(spec.name), spec.name));
+    try {
+      atomicWriteBatch(specs.map((spec) => ({
+        target: spec.targetPath,
+        data: patched.get(spec.name),
+        label: `${spec.name} target archive`
+      })));
+      for (const spec of specs) {
+        const actual = readRegularFile(spec.targetPath, `${spec.name} target archive`);
+        verifyPackage(spec, actual, baselines.get(spec.name).buffer, localScript);
+      }
+    } catch (error) {
+      try {
+        atomicWriteBatch(specs.map((spec) => ({
+          target: spec.targetPath,
+          data: before.get(spec.name),
+          label: `${spec.name} target rollback`
+        })));
+      } catch (rollbackError) {
+        throw new Error(`${error.message}; package rollback failed: ${rollbackError.message}`);
+      }
+      throw error;
+    }
+    const results = specs.map((spec) => {
+      const baseline = baselines.get(spec.name);
+      const verification = verifyPackage(spec, patched.get(spec.name), baseline.buffer, localScript);
+      return {
+        ...verification,
+        backupPath: path.relative(GAME_ROOT, backups.get(spec.name)),
+        ...(overrides.get(spec.name) ? { baselineOverride: path.relative(GAME_ROOT, baseline.path) } : {})
+      };
+    });
+    const result = specs.length === 2 ? { ...results[0], webplayer: results[1] } : results[0];
     writeLog(command, result);
     console.log(JSON.stringify(result, null, 2));
     return;
   }
 
   if (command === "verify") {
-    const localScript = fs.readFileSync(FRONTEND_SCRIPT_PATH);
-    const target = fs.readFileSync(TARGET_PATH);
-    const result = {
-      ...verifyPatchedArchive(target, baselineBuffer, localScript),
-      baselineSha256: baselineHash,
-      installedSha256: sha256Sync(target),
-      sourceScriptSha256: sha256Sync(localScript)
-    };
+    const results = specs.map((spec) => {
+      const target = readRegularFile(spec.targetPath, `${spec.name} target archive`);
+      return verifyPackage(spec, target, baselines.get(spec.name).buffer, localScript);
+    });
+    const result = specs.length === 2 ? { ...results[0], webplayer: results[1] } : results[0];
     writeLog(command, result);
     console.log(JSON.stringify(result, null, 2));
     return;
   }
 
   if (command === "restore") {
-    const targetBefore = fs.readFileSync(TARGET_PATH);
-    const backupPath = backupCurrentTarget(targetBefore);
-    atomicWrite(TARGET_PATH, baselineBuffer);
-    const restoredHash = sha256Sync(fs.readFileSync(TARGET_PATH));
-    if (restoredHash !== baselineHash) throw new Error("Restored archive did not match the compatible baseline");
-    const result = { restoredSha256: restoredHash, backupPath: path.relative(GAME_ROOT, backupPath) };
+    const before = new Map(specs.map((spec) => [spec.name, readRegularFile(spec.targetPath, `${spec.name} target archive`)]));
+    for (const spec of specs) {
+      const baseline = baselines.get(spec.name);
+      verifyPackage(spec, buildPatchedPackage(spec, baseline.buffer, localScript), baseline.buffer, localScript);
+    }
+    const backups = new Map();
+    for (const spec of specs) backups.set(spec.name, backupCurrentTarget(before.get(spec.name), spec.name));
+    try {
+      atomicWriteBatch(specs.map((spec) => ({
+        target: spec.targetPath,
+        data: baselines.get(spec.name).buffer,
+        label: `${spec.name} target restore`
+      })));
+      for (const spec of specs) {
+        const actual = readRegularFile(spec.targetPath, `${spec.name} target archive`);
+        if (sha256Sync(actual) !== baselines.get(spec.name).hash) {
+          throw new Error(`${spec.name} restored archive did not match the compatible baseline`);
+        }
+      }
+    } catch (error) {
+      try {
+        atomicWriteBatch(specs.map((spec) => ({
+          target: spec.targetPath,
+          data: before.get(spec.name),
+          label: `${spec.name} target rollback`
+        })));
+      } catch (rollbackError) {
+        throw new Error(`${error.message}; package rollback failed: ${rollbackError.message}`);
+      }
+      throw error;
+    }
+    const results = specs.map((spec) => ({
+      restoredSha256: baselines.get(spec.name).hash,
+      backupPath: path.relative(GAME_ROOT, backups.get(spec.name))
+    }));
+    const result = specs.length === 2 ? { ...results[0], webplayer: results[1] } : results[0];
     writeLog(command, result);
     console.log(JSON.stringify(result, null, 2));
     return;
   }
 
-  throw new Error("Usage: node tools/feapp.mjs <import-baseline|install|verify|restore>");
+  throw new Error("Usage: node tools/feapp.mjs <import-baseline|install|verify|restore> [--package feapp|webplayer] [--baseline <path>] [--webplayer-baseline <path>]");
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.stack : String(error));
-  process.exitCode = 1;
-});
+export {
+  BASELINE_PATH,
+  EXPECTED_BASELINE_SHA256,
+  EXPECTED_WEBPLAYER_BASELINE_SHA256,
+  LEGACY_PATCH_AFTERS,
+  PATCH_RULES,
+  RETIRED_PATCH_RULES,
+  TARGET_PATH,
+  WEBPLAYER_BASELINE_PATH,
+  WEBPLAYER_MAIN_ENTRY,
+  WEBPLAYER_PATCH_RULES,
+  WEBPLAYER_TARGET_PATH,
+  atomicWriteBatch,
+  countOccurrences,
+  exactReplace,
+  patchEntries,
+  patchWebplayerEntries,
+  readArchive,
+  sha256Sync,
+  unpatchEntries,
+  unpatchWebplayerEntries,
+  verifyPatchedArchive,
+  verifyWebplayerArchive,
+  writeArchive
+};
+
+const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedDirectly) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.stack : String(error));
+    process.exitCode = 1;
+  });
+}

@@ -1,0 +1,49 @@
+name: Verify governed public source
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: governance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  governance:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout complete source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.11.1"
+          package-manager-cache: false
+
+      - name: Verify repository identity, projection allowlist, version, and secrets
+        shell: pwsh
+        run: npm run governance:check -- --expected-role public-projection --require-clean
+
+      - name: Check projected JavaScript syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $files = @(git ls-files "*.js" "*.mjs")
+          foreach ($file in $files) {
+            & node --check $file
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $file" }
+          }
+
+      - name: Run public installer transaction tests
+        shell: pwsh
+        run: npm run installer:test
+
+      - name: Reject whitespace errors
+        shell: pwsh
+        run: git diff --check HEAD^

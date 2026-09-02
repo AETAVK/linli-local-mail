@@ -5,6 +5,10 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { normalizeImportedLetter } from "../src/history.mjs";
+import {
+  EXPECTED_BASELINE_SHA256,
+  EXPECTED_WEBPLAYER_BASELINE_SHA256
+} from "./feapp.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const GAME_ROOT = path.resolve(ROOT, "..");
@@ -17,6 +21,15 @@ function record(name, ok, detail) {
 
 function hash(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
+
+function checkHash(name, filePath, expected) {
+  try {
+    const actual = hash(filePath);
+    record(name, actual === expected, actual);
+  } catch (error) {
+    record(name, false, error.message);
+  }
 }
 
 async function checkService() {
@@ -114,15 +127,32 @@ async function main() {
     historyFiles.length ? `${validHistory}/${historyFiles.length} valid files` : "no local history files (clean install)"
   );
 
-  const baselinePath = path.join(ROOT, "backups", "required", "official-compatible-0.0.9.627", "feapp.dat");
-  record("compatible baseline", hash(baselinePath) === "c88f1dd4cb7c95e4902d74dd0c247962ffd65559e3907497b416078d3a6698b5", hash(baselinePath));
+  const baselineDirectory = path.join(ROOT, "backups", "required", "official-compatible-0.0.9.627");
+  const baselinePath = path.join(baselineDirectory, "feapp.dat");
+  const webplayerBaselinePath = path.join(baselineDirectory, "webplayer.dat");
+  checkHash("compatible baseline", baselinePath, EXPECTED_BASELINE_SHA256);
+  checkHash("compatible webplayer baseline", webplayerBaselinePath, EXPECTED_WEBPLAYER_BASELINE_SHA256);
+
+  const webplayerPath = path.join(GAME_ROOT, "0.0.9.627", "resources", "webplayer.dat");
+  try {
+    record("webplayer archive", fs.lstatSync(webplayerPath).isFile(), hash(webplayerPath));
+  } catch (error) {
+    record("webplayer archive", false, error.message);
+  }
 
   const patchCheck = spawnSync(process.execPath, [path.join(ROOT, "tools", "feapp.mjs"), "verify"], {
     cwd: ROOT,
     encoding: "utf8",
     windowsHide: true
   });
+  let patchJson = null;
+  try { patchJson = JSON.parse(String(patchCheck.stdout || "")); } catch {}
   record("frontend patch", patchCheck.status === 0, patchCheck.status === 0 ? "verified" : (patchCheck.stderr || patchCheck.stdout).trim());
+  record(
+    "webplayer patch",
+    patchCheck.status === 0 && Boolean(patchJson?.webplayer?.installedSha256),
+    patchCheck.status === 0 && patchJson?.webplayer?.installedSha256 ? "verified" : "webplayer result missing"
+  );
 
   checkLauncherWrapper();
   await checkService();
