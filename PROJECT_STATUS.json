@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "statusDate": "2026-09-03",
+  "statusDate": "2026-09-04",
   "project": {
     "id": "linli-local-mail",
     "name": "林离本地回信",
@@ -27,7 +27,7 @@
   },
   "candidate": {
     "version": "0.11.2",
-    "state": "待导入队列全选已实现，等待真实客户端验收"
+    "state": "本地候选安装包已构建并完成静态验证，等待真实客户端验收"
   },
   "acceptance": {
     "environment": "真实的 BSide Olivia Lin Test 0.0.9.627 Windows 客户端",
