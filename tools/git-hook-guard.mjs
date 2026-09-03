@@ -38,6 +38,10 @@ function preCommit() {
     if (forbidden.length) {
       throw new Error(`Private or generated files cannot be committed:\n${forbidden.map((entry) => `${entry.file}: ${entry.reason}`).join("\n")}`);
     }
+    const report = inspectRepository();
+    if (!report.projectStatus?.ok) {
+      throw new Error(`Private project status validation failed:\n${JSON.stringify(report.projectStatus, null, 2)}`);
+    }
   } else if (role.role === PUBLIC_ROLE) {
     if (branch === role.canonicalBranch && !integration) {
       throw new Error(`Direct commits on public ${role.canonicalBranch} are blocked. Merge a verified generated candidate instead.`);

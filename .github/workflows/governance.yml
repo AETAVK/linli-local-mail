@@ -30,6 +30,10 @@ jobs:
         shell: pwsh
         run: npm run governance:check -- --expected-role public-projection --require-clean
 
+      - name: Verify generated project status
+        shell: pwsh
+        run: npm run status:check
+
       - name: Check projected JavaScript syntax
         shell: pwsh
         run: |

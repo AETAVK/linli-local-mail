@@ -32,6 +32,15 @@ const MEDIA_ROOT = process.env.LINLI_MAIL_MEDIA_PATH || path.join(path.dirname(D
 const UPDATE_ROOT = process.env.LINLI_MAIL_UPDATE_PATH || path.join(path.dirname(DB_PATH), "updates");
 const SESSION_TOKEN = crypto.randomBytes(32).toString("base64url");
 
+async function readImportDraftBody(req, maximumBytes) {
+  try {
+    return await readJsonBody(req, { maximumBytes });
+  } catch (error) {
+    if (/^Request body exceeds \d+ bytes$/.test(safeErrorMessage(error))) error.status = 413;
+    throw error;
+  }
+}
+
 const database = new MailDatabase(DB_PATH, LEGACY_JSON_PATH);
 const secretStore = new SecretStore(SECRETS_PATH);
 const worker = new GenerationWorker({ database, configRoot: CONFIG_ROOT, secretStore });
@@ -543,6 +552,32 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/import") {
       ok(req, res, database.importLetters(await readJsonBody(req, { maximumBytes: 16 * 1024 * 1024 })));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/import-drafts") {
+      ok(req, res, { drafts: database.listImportDrafts() });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/import-drafts/create") {
+      ok(req, res, database.createImportDraft(
+        await readImportDraftBody(req, 1024 * 1024)
+      ));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/import-drafts/update") {
+      ok(req, res, database.updateImportDraft(
+        await readImportDraftBody(req, 1024 * 1024)
+      ));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/import-drafts/delete") {
+      const body = await readImportDraftBody(req, 64 * 1024);
+      ok(req, res, database.deleteImportDrafts(body.draftIds ?? body.draft_ids));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/import-drafts/commit") {
+      const body = await readImportDraftBody(req, 64 * 1024);
+      ok(req, res, database.commitImportDrafts(body.draftIds ?? body.draft_ids));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/import/files") {
