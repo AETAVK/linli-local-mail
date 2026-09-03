@@ -22,8 +22,13 @@
     diagnostics: null,
     debugMode: false,
     mounting: false,
-    importMode: "file",
+    importMode: "manual",
     importFiles: [],
+    importDrafts: [],
+    importDraftBusy: false,
+    importEditingDraftId: null,
+    importDraftRevision: null,
+    importManualBaseline: "",
     importBusy: false,
     modal: { providerId: null, draft: null, suggestions: [], addModelOpen: false, editingModelId: null },
     lettersModal: { mode: "export", items: [], selected: {}, busy: false },
@@ -471,6 +476,7 @@
       ".lm-import-description{margin-bottom:16px;color:var(--tp-text-secondary,#a1a5ad);font-size:13px;line-height:1.55}",
       ".lm-import-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}",
       ".lm-import-methods-three{grid-template-columns:repeat(3,minmax(0,1fr))}",
+      ".lm-import-methods-four{grid-template-columns:repeat(2,minmax(0,1fr))}",
       ".lm-import-methods-two{grid-template-columns:repeat(2,minmax(0,1fr))}",
       ".lm-import-method{display:flex;align-items:flex-start;gap:12px;min-height:92px;padding:14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(0,0,0,.12);text-align:left;cursor:pointer}",
       ".lm-import-method:hover{border-color:rgba(255,255,255,.24);background:rgba(255,255,255,.04)}",
@@ -500,6 +506,25 @@
       ".lm-file-import-status[data-kind='partial']{color:#d8b98f}",
       ".lm-file-import-status[data-kind='error']{color:#e5aaa5}",
       ".lm-file-import-status[data-kind='unsupported']{color:#d8b98f}",
+      ".lm-manual-import-side{padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(0,0,0,.12)}",
+      ".lm-manual-import-side-head{display:flex;align-items:center;gap:8px;margin-bottom:9px;color:var(--tp-text-title,#e8e9eb);font-size:13px;font-weight:600}",
+      ".lm-manual-import-side-head input{width:16px;height:16px;accent-color:#d8d1c5}",
+      ".lm-manual-import-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}",
+      ".lm-manual-import-grid .lm-textarea{grid-column:1/-1}",
+      ".lm-draft-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px}",
+      ".lm-draft-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;max-height:250px;overflow:auto}",
+      ".lm-draft-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:10px;padding:10px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(0,0,0,.12)}",
+      ".lm-draft-card input{width:16px;height:16px;margin-top:3px;accent-color:#d8d1c5}",
+      ".lm-draft-main{min-width:0}",
+      ".lm-draft-head{display:flex;align-items:center;gap:7px;color:var(--tp-text-title,#e8e9eb);font-size:12px;font-weight:600}",
+      ".lm-draft-state{padding:1px 6px;border-radius:999px;background:rgba(169,217,192,.1);color:#a9d9c0;font-size:10px;font-weight:400}",
+      ".lm-draft-state[data-kind='error']{background:rgba(229,170,165,.1);color:#e5aaa5}",
+      ".lm-draft-meta{margin-top:3px;color:var(--tp-text-tertiary,#7d818c);font-size:11px}",
+      ".lm-draft-preview{margin-top:5px;overflow:hidden;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}",
+      ".lm-draft-error{margin-top:5px;color:#e5aaa5;font-size:11px;line-height:1.4}",
+      ".lm-draft-actions{display:flex;gap:4px}",
+      ".lm-import-dialog .lm-modal-actions{flex-wrap:wrap}",
+      ".lm-import-dialog .lm-modal-status{flex:1 1 100%;margin-right:0}",
       ".local-mail-remote-import-toast{position:fixed;right:18px;bottom:18px;z-index:999999;width:min(360px,calc(100vw - 36px));padding:14px 16px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(30,31,35,.97);color:var(--tp-text-body,#ced2d4);box-shadow:0 12px 32px rgba(0,0,0,.5);font-size:13px;line-height:1.55;color-scheme:dark}",
       ".local-mail-remote-import-toast[hidden]{display:none}",
       ".local-mail-remote-import-title{font-size:14px;font-weight:600;color:var(--tp-text-title,#e8e9eb);margin-bottom:6px;padding-right:18px}",
@@ -847,7 +872,10 @@
       '<div class="lm-import-title-row"><div class="lm-modal-title" id="lm-import-title">导入信件</div>' +
       '<button class="lm-import-close" type="button" aria-label="关闭" data-import-action="close">×</button></div>' +
       '<div class="lm-import-description">选择导入方式。导入后的信件会保存在本机，并显示在原信箱列表中。</div>' +
-      '<div class="lm-import-methods lm-import-methods-three">' +
+      '<div class="lm-import-methods lm-import-methods-four">' +
+      '<button class="lm-import-method" type="button" data-import-mode="manual"><span class="lm-import-method-icon">文字</span>' +
+      '<span class="lm-import-method-copy"><span class="lm-import-method-title">文字录入</span>' +
+      '<span class="lm-import-method-desc">手动填写去信或回信，并保存为待导入草稿</span><span class="lm-import-method-note">默认方式，可稍后批量导入</span></span></button>' +
       '<button class="lm-import-method" type="button" data-import-mode="official"><span class="lm-import-method-icon">官方</span>' +
       '<span class="lm-import-method-copy"><span class="lm-import-method-title">一键导入官方历史</span>' +
       '<span class="lm-import-method-desc">直接读取官方服务器的全部信箱记录并导入</span><span class="lm-import-method-note">官方关服前可用；需本机官方客户端登录过</span></span></button>' +
@@ -867,9 +895,25 @@
        '<label class="lm-field"><span>选择文件（JSON / PNG / JPG / WEBP，可多选混合）</span><input class="lm-file" type="file" accept=".json,application/json,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" multiple data-role="file-import-files"></label>' +
        '<div class="lm-file-import-list" data-role="file-import-list"></div>' +
        '<div class="lm-note">JSON 支持单封、数组或 { "letters": [...] }；重复导入同一封信会更新原记录。图片识别尚未实现：选择图片会在结果中明确标注“未导入”，不会影响同批 JSON 的导入。</div></div>' +
+       '<div class="lm-import-panel" data-import-panel="manual">' +
+       '<div class="lm-manual-import-grid">' +
+       '<section class="lm-manual-import-side"><label class="lm-manual-import-side-head"><input type="checkbox" data-role="manual-sent-enabled">去信</label>' +
+       '<label class="lm-field"><span>正文</span><textarea class="lm-textarea" data-role="manual-sent-text" rows="5" placeholder="可选：填写去信内容"></textarea></label>' +
+       '<div class="lm-manual-import-grid"><label class="lm-field"><span>日期</span><input class="lm-input" type="date" data-role="manual-sent-date"></label>' +
+       '<label class="lm-field"><span>时间（可选）</span><input class="lm-input" type="time" data-role="manual-sent-time"></label></div></section>' +
+       '<section class="lm-manual-import-side"><label class="lm-manual-import-side-head"><input type="checkbox" data-role="manual-reply-enabled">来信</label>' +
+       '<label class="lm-field"><span>正文</span><textarea class="lm-textarea" data-role="manual-reply-text" rows="5" placeholder="可选：填写来信内容"></textarea></label>' +
+       '<div class="lm-manual-import-grid"><label class="lm-field"><span>日期</span><input class="lm-input" type="date" data-role="manual-reply-date"></label>' +
+       '<label class="lm-field"><span>时间（可选）</span><input class="lm-input" type="time" data-role="manual-reply-time"></label></div></section>' +
+       '</div><div class="lm-note">至少启用一侧并填写非空正文。去信启用时必须填写去信日期；仅录入来信时必须填写来信日期。同时录入去信和来信时，来信日期可留空表示未知。</div>' +
+       '</div>' +
+       '<div class="lm-draft-toolbar"><span class="lm-card-title" style="margin:0">待导入队列</span><span class="lm-status" data-role="draft-queue-status">正在读取…</span></div>' +
+       '<div class="lm-draft-list" data-role="draft-list"></div>' +
        '<div class="lm-modal-actions"><span class="lm-modal-status" data-role="share-import-status">等待导入</span>' +
       '<button class="lm-button" type="button" data-import-action="close">取消</button>' +
-      '<button class="lm-button lm-button-primary" type="button" data-import-action="submit">导入</button></div>' +
+      '<button class="lm-button" type="button" data-import-action="delete-drafts" disabled>删除所选</button>' +
+      '<button class="lm-button lm-button-primary" type="button" data-import-action="commit-drafts" disabled>导入所选（0）</button>' +
+      '<button class="lm-button lm-button-primary" type="button" data-import-action="submit">加入待导入</button></div>' +
       '</div>';
   }
 
@@ -879,6 +923,324 @@
     if (!status) return;
     status.textContent = message;
     status.dataset.kind = kind || "";
+  }
+
+  function manualImportField(modal, role) {
+    return modal && modal.querySelector('[data-role="' + role + '"]');
+  }
+
+  function manualImportSnapshot(modal) {
+    if (!modal) return "";
+    return JSON.stringify({
+      sentEnabled: Boolean(manualImportField(modal, "manual-sent-enabled") && manualImportField(modal, "manual-sent-enabled").checked),
+      sentText: String((manualImportField(modal, "manual-sent-text") || {}).value || ""),
+      sentDate: String((manualImportField(modal, "manual-sent-date") || {}).value || ""),
+      sentTime: String((manualImportField(modal, "manual-sent-time") || {}).value || ""),
+      replyEnabled: Boolean(manualImportField(modal, "manual-reply-enabled") && manualImportField(modal, "manual-reply-enabled").checked),
+      replyText: String((manualImportField(modal, "manual-reply-text") || {}).value || ""),
+      replyDate: String((manualImportField(modal, "manual-reply-date") || {}).value || ""),
+      replyTime: String((manualImportField(modal, "manual-reply-time") || {}).value || "")
+    });
+  }
+
+  function manualImportHasUnsavedData(modal) {
+    var snapshot = manualImportSnapshot(modal);
+    if (!snapshot) return false;
+    if (snapshot === state.importManualBaseline) return false;
+    if (state.importEditingDraftId) return true;
+    var values = JSON.parse(snapshot);
+    return values.sentEnabled || values.sentText.trim() || values.sentDate || values.sentTime ||
+      values.replyEnabled || values.replyText.trim() || values.replyDate || values.replyTime;
+  }
+
+  function manualImportSection(modal, side) {
+    var enabled = manualImportField(modal, "manual-" + side + "-enabled");
+    var text = manualImportField(modal, "manual-" + side + "-text");
+    var date = manualImportField(modal, "manual-" + side + "-date");
+    var time = manualImportField(modal, "manual-" + side + "-time");
+    var available = Boolean(enabled && enabled.checked);
+    var dateValue = available && date && date.value ? String(date.value) : null;
+    var timeValue = available && time && time.value ? String(time.value) : null;
+    return {
+      available: available,
+      text: available ? String(text && text.value || "").trim() : "",
+      date: dateValue,
+      time: timeValue,
+      precision: dateValue ? (timeValue ? "minute" : "date") : null
+    };
+  }
+
+  function readManualImportDraft(modal) {
+    return { sent: manualImportSection(modal, "sent"), reply: manualImportSection(modal, "reply") };
+  }
+
+  function validateManualImportDraft(draft) {
+    var sent = draft.sent;
+    var reply = draft.reply;
+    if ((!sent.available || !sent.text.trim()) && (!reply.available || !reply.text.trim())) return "请至少启用去信或回信，并填写非空正文";
+    if (sent.available && !sent.text.trim()) return "去信已启用，请填写去信正文";
+    if (reply.available && !reply.text.trim()) return "来信已启用，请填写来信正文";
+    if (sent.available && !/^\d{4}-\d{2}-\d{2}$/.test(sent.date)) return "去信启用时必须填写去信日期";
+    if (!sent.available && reply.available && !/^\d{4}-\d{2}-\d{2}$/.test(reply.date)) return "仅录入来信时必须填写来信日期";
+    if (sent.available && sent.time && !sent.date || reply.available && reply.time && !reply.date) return "填写时间前必须先填写对应日期";
+    if (sent.available && reply.available && sent.date && reply.date) {
+      if (reply.date < sent.date) return "来信日期不能早于去信日期";
+      if (reply.date === sent.date && sent.time && reply.time && reply.time < sent.time) return "同一天的来信时间不能早于去信时间";
+    }
+    return "";
+  }
+
+  function syncManualImportSideControls(modal) {
+    ["sent", "reply"].forEach(function (side) {
+      var enabled = manualImportField(modal, "manual-" + side + "-enabled");
+      ["text", "date", "time"].forEach(function (kind) {
+        var field = manualImportField(modal, "manual-" + side + "-" + kind);
+        if (field) field.disabled = !enabled || !enabled.checked || state.importBusy;
+      });
+    });
+  }
+
+  function setManualImportForm(modal, draft) {
+    var value = draft || { sent: {}, reply: {} };
+    ["sent", "reply"].forEach(function (side) {
+      var section = value[side] || {};
+      var enabled = manualImportField(modal, "manual-" + side + "-enabled");
+      var text = manualImportField(modal, "manual-" + side + "-text");
+      var date = manualImportField(modal, "manual-" + side + "-date");
+      var time = manualImportField(modal, "manual-" + side + "-time");
+      if (enabled) enabled.checked = Boolean(section.available);
+      if (text) text.value = String(section.text || "");
+      if (date) date.value = String(section.date || "");
+      if (time) time.value = String(section.time || "");
+    });
+    syncManualImportSideControls(modal);
+    state.importManualBaseline = manualImportSnapshot(modal);
+  }
+
+  function setImportModalBusy(modal, busy) {
+    if (!modal) return;
+    Array.prototype.forEach.call(modal.querySelectorAll("button, input, textarea"), function (node) {
+      node.disabled = Boolean(busy) || (node.dataset.role && /manual-(sent|reply)-(text|date|time)/.test(node.dataset.role) && !(manualImportField(modal, node.dataset.role.replace(/-(text|date|time)$/, "-enabled")) || {}).checked);
+    });
+    if (!busy) syncManualImportSideControls(modal);
+  }
+
+  function draftSelectedIds(modal) {
+    return Array.prototype.map.call(modal.querySelectorAll('[data-role="draft-select"]'), function (input) {
+      return input.checked ? input.dataset.draftId : null;
+    }).filter(Boolean);
+  }
+
+  function draftSectionDate(draft) {
+    var sent = draft && draft.sent || {};
+    var reply = draft && draft.reply || {};
+    var parts = [];
+    if (sent.available) parts.push("去信 " + (sent.date || "日期未知") + (sent.time ? " " + sent.time : ""));
+    if (reply.available) parts.push("来信 " + (reply.date || "时间未知") + (reply.time ? " " + reply.time : ""));
+    return parts.join(" · ") || "日期未填写";
+  }
+
+  function draftPreview(draft) {
+    var parts = [];
+    if (draft && draft.sent && draft.sent.available && draft.sent.text) parts.push("去信：" + draft.sent.text);
+    if (draft && draft.reply && draft.reply.available && draft.reply.text) parts.push("来信：" + draft.reply.text);
+    return parts.join(" · ") || "暂无正文";
+  }
+
+  function draftSourceLabel(draft) {
+    var sourceType = String(draft && (draft.sourceType || draft.source) || "manual-entry");
+    return sourceType === "manual-entry" || sourceType === "manual" || sourceType === "手动" ? "文字录入" : sourceType;
+  }
+
+  function draftStatusLabel(draft) {
+    return String(draft && draft.status || "ready") === "error" ? "需修正" : "待导入";
+  }
+
+  function renderImportDraftQueue() {
+    var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
+    var list = modal && modal.querySelector('[data-role="draft-list"]');
+    var status = modal && modal.querySelector('[data-role="draft-queue-status"]');
+    if (!list) return;
+    var drafts = Array.isArray(state.importDrafts) ? state.importDrafts : [];
+    if (status) status.textContent = drafts.length ? drafts.length + " 条草稿" : "暂无草稿";
+    list.innerHTML = drafts.length ? drafts.map(function (draft) {
+      var error = draft.lastError || draft.error || draft.errorMessage || draft.message;
+      return '<article class="lm-draft-card"><input type="checkbox" data-role="draft-select" data-draft-id="' + escapeHtml(draft.draftId || draft.id || "") + '">' +
+        '<div class="lm-draft-main"><div class="lm-draft-head"><span>' + escapeHtml(draftSourceLabel(draft)) + '</span><span class="lm-draft-state" data-kind="' + (draft.status === "error" ? "error" : "ready") + '">' + escapeHtml(draftStatusLabel(draft)) + '</span></div>' +
+        '<div class="lm-draft-meta">' + escapeHtml(draftSectionDate(draft)) + '</div>' +
+        '<div class="lm-draft-meta">草稿编号：' + escapeHtml(draft.draftId || draft.id || "未知") + '</div>' +
+        '<div class="lm-draft-preview">' + escapeHtml(draftPreview(draft)) + '</div>' +
+        (error ? '<div class="lm-draft-error">' + escapeHtml(error) + '</div>' : "") + '</div>' +
+        '<div class="lm-draft-actions"><button class="lm-button lm-button-small" type="button" data-import-action="edit-draft" data-draft-id="' + escapeHtml(draft.draftId || draft.id || "") + '">编辑</button></div></article>';
+    }).join("") : '<div class="lm-empty">待导入队列为空</div>';
+    updateDraftQueueActions(modal);
+  }
+
+  function updateDraftQueueActions(modal) {
+    if (!modal) return;
+    var ids = draftSelectedIds(modal);
+    var commit = modal.querySelector('[data-import-action="commit-drafts"]');
+    var remove = modal.querySelector('[data-import-action="delete-drafts"]');
+    if (commit) { commit.disabled = state.importDraftBusy || !ids.length; commit.textContent = "导入所选（" + ids.length + "）"; }
+    if (remove) remove.disabled = state.importDraftBusy || !ids.length;
+  }
+
+  async function loadImportDrafts() {
+    var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
+    var status = modal && modal.querySelector('[data-role="draft-queue-status"]');
+    if (status) status.textContent = "正在读取…";
+    try {
+      var data = await callApi("/api/import-drafts");
+      state.importDrafts = Array.isArray(data && data.drafts) ? data.drafts : [];
+      renderImportDraftQueue();
+    } catch (error) {
+      state.importDrafts = [];
+      renderImportDraftQueue();
+      if (status) status.textContent = "读取失败：" + (error && error.message ? error.message : "未知错误");
+    }
+  }
+
+  async function submitManualImport() {
+    var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
+    if (!modal || state.importBusy || state.importMode !== "manual") return;
+    var draft = readManualImportDraft(modal);
+    var validation = validateManualImportDraft(draft);
+    if (validation) { setMailboxImportStatus(validation, "error"); return; }
+    var editing = state.importEditingDraftId;
+    state.importBusy = true;
+    setImportModalBusy(modal, true);
+    setMailboxImportStatus(editing ? "正在保存修改…" : "正在加入待导入队列…", "");
+    try {
+      var result = await callApi(editing ? "/api/import-drafts/update" : "/api/import-drafts/create", {
+        method: "POST",
+        body: editing ? { draftId: editing, revision: state.importDraftRevision, sent: draft.sent, reply: draft.reply } : { sent: draft.sent, reply: draft.reply }
+      });
+      state.importEditingDraftId = null;
+      state.importDraftRevision = null;
+      setManualImportForm(modal, null);
+      setMailboxImportStatus(editing ? "修改已保存" : "已加入待导入队列", "success");
+      await loadImportDrafts();
+      return result;
+    } catch (error) {
+      setMailboxImportStatus((editing ? "保存失败：" : "加入失败：") + error.message, "error");
+    } finally {
+      state.importBusy = false;
+      setImportModalBusy(modal, false);
+      renderManualImportControls(modal);
+    }
+  }
+
+  async function deleteSelectedImportDrafts() {
+    var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
+    var ids = draftSelectedIds(modal);
+    if (!modal || !ids.length || state.importDraftBusy) return;
+    if (!window.confirm("确定删除选中的 " + ids.length + " 条待导入草稿？")) return;
+    state.importDraftBusy = true;
+    setImportModalBusy(modal, true);
+    try {
+      await callApi("/api/import-drafts/delete", { method: "POST", body: { draftIds: ids } });
+      if (ids.indexOf(String(state.importEditingDraftId || "")) !== -1) {
+        state.importEditingDraftId = null;
+        state.importDraftRevision = null;
+        setManualImportForm(modal, null);
+      }
+      await loadImportDrafts();
+      setMailboxImportStatus("已删除选中的草稿", "success");
+    } catch (error) {
+      setMailboxImportStatus("删除失败：" + error.message, "error");
+    } finally {
+      state.importDraftBusy = false;
+      setImportModalBusy(modal, false);
+      updateDraftQueueActions(modal);
+    }
+  }
+
+  function commitSuccessCount(result, requested) {
+    var failed = Number(result && (result.failed != null ? result.failed : result.failedCount));
+    if (result && Array.isArray(result.results)) {
+      failed = result.results.filter(function (item) { return !item.ok; }).length;
+      return result.results.filter(function (item) { return item.ok; }).length;
+    }
+    if (result && Array.isArray(result.items)) {
+      failed = result.items.filter(function (item) { return !item.ok; }).length;
+      return result.items.filter(function (item) { return item.ok; }).length;
+    }
+    if (!Number.isFinite(failed)) failed = 0;
+    var count = Number(result && (result.committed != null ? result.committed : result.imported != null ? result.imported : result.successful));
+    return Number.isFinite(count) ? count : failed ? 0 : requested;
+  }
+
+  async function commitSelectedImportDrafts() {
+    var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
+    var ids = draftSelectedIds(modal);
+    if (!modal || !ids.length || state.importDraftBusy) return;
+    if (state.importMode === "manual" && manualImportHasUnsavedData(modal)) {
+      setMailboxImportStatus("请先保存或清空当前文字录入内容，再导入队列中的草稿。", "error");
+      return;
+    }
+    state.importDraftBusy = true;
+    setImportModalBusy(modal, true);
+    setMailboxImportStatus("正在导入所选草稿…", "");
+    try {
+      var result = await callApi("/api/import-drafts/commit", { method: "POST", body: { draftIds: ids } });
+      var successCount = commitSuccessCount(result, ids.length);
+      var successfulIds = result && Array.isArray(result.results)
+        ? result.results.filter(function (item) { return item.ok; }).map(function (item) { return String(item.draftId || ""); })
+        : successCount === ids.length ? ids : [];
+      if (successfulIds.indexOf(String(state.importEditingDraftId || "")) !== -1) {
+        state.importEditingDraftId = null;
+        state.importDraftRevision = null;
+        setManualImportForm(modal, null);
+      }
+      await loadImportDrafts();
+      if (successCount > 0) {
+        setMailboxImportStatus("导入完成：成功 " + successCount + " 条" + (successCount < ids.length ? "，失败项仍保留在队列中" : "") + "。", successCount < ids.length ? "error" : "success");
+        await refreshDiagnostics();
+        if (mailboxHeader()) {
+          try { window.location.reload(); } catch (error) { /* 刷新失败不阻塞 */ }
+        }
+      } else {
+        setMailboxImportStatus("导入失败：失败项仍保留在队列中，请编辑后重试。", "error");
+      }
+    } catch (error) {
+      setMailboxImportStatus("导入失败：" + error.message + "。草稿仍保留在队列中。", "error");
+      await loadImportDrafts();
+    } finally {
+      state.importDraftBusy = false;
+      setImportModalBusy(modal, false);
+      updateDraftQueueActions(modal);
+    }
+  }
+
+  function editImportDraft(draftId) {
+    var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
+    var draft = (state.importDrafts || []).find(function (item) { return String(item.draftId || item.id) === String(draftId); });
+    if (!modal || !draft || state.importBusy || state.importDraftBusy) return;
+    if (state.importMode === "manual" && manualImportHasUnsavedData(modal) &&
+      !window.confirm("当前文字录入内容尚未保存，切换编辑会丢失这些修改，确定继续吗？")) return;
+    state.importEditingDraftId = draft.draftId || draft.id;
+    state.importDraftRevision = draft.revision;
+    setManualImportForm(modal, draft);
+    setMailboxImportMode("manual");
+    setMailboxImportStatus("正在编辑草稿，可保存修改或取消编辑。", "");
+    renderManualImportControls(modal);
+  }
+
+  function renderManualImportControls(modal) {
+    if (!modal) return;
+    var submit = modal.querySelector('[data-import-action="submit"]');
+    var draftActions = modal.querySelectorAll('[data-import-action="delete-drafts"], [data-import-action="commit-drafts"]');
+    var isManual = state.importMode === "manual";
+    if (submit) {
+      submit.textContent = isManual
+        ? (state.importEditingDraftId ? "保存修改" : "加入待导入")
+        : state.importMode === "official" ? "一键导入" : "导入";
+      submit.hidden = false;
+      submit.disabled = state.importBusy;
+    }
+    Array.prototype.forEach.call(draftActions, function (button) { button.hidden = !isManual; });
+    syncManualImportSideControls(modal);
+    updateDraftQueueActions(modal);
   }
 
   function fileImportKind(file) {
@@ -909,9 +1271,16 @@
   }
 
   function setMailboxImportMode(mode) {
-    state.importMode = mode === "file" ? "file" : mode === "official" ? "official" : "share";
     var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
     if (!modal) return;
+    var requestedMode = mode === "manual" ? "manual" : mode === "file" ? "file" : mode === "official" ? "official" : "share";
+    if (state.importMode === "manual" && requestedMode !== "manual" && manualImportHasUnsavedData(modal)) {
+      if (!window.confirm("切换导入方式会丢失尚未保存的文字录入内容，确定继续吗？")) return;
+      setManualImportForm(modal, null);
+      state.importEditingDraftId = null;
+      state.importDraftRevision = null;
+    }
+    state.importMode = requestedMode;
     Array.prototype.forEach.call(modal.querySelectorAll("[data-import-mode]"), function (button) {
       button.dataset.active = String(button.dataset.importMode === state.importMode);
     });
@@ -920,6 +1289,11 @@
     });
     var submit = modal.querySelector('[data-import-action="submit"]');
     var status = modal.querySelector('[data-role="official-import-state"]');
+    renderManualImportControls(modal);
+    if (state.importMode === "manual") {
+      setMailboxImportStatus(state.importEditingDraftId ? "正在编辑草稿" : "填写后加入待导入队列", "");
+      return;
+    }
     if (state.importMode === "official") {
       // 一键导入没有额外输入：按钮文案与状态提示都在此设置，检测不阻塞选择
       submit.textContent = "一键导入";
@@ -1028,7 +1402,14 @@
 
   function closeMailboxImportModal() {
     var modal = document.getElementById(MAILBOX_IMPORT_MODAL_ID);
-    if (modal && !state.importBusy) modal.hidden = true;
+    if (!modal || state.importBusy || state.importDraftBusy) return;
+    if (state.importMode === "manual" && manualImportHasUnsavedData(modal) && !window.confirm("尚未保存的文字录入内容会丢失，确定关闭吗？")) return;
+    if (state.importMode === "manual") {
+      state.importEditingDraftId = null;
+      state.importDraftRevision = null;
+      setManualImportForm(modal, null);
+    }
+    modal.hidden = true;
   }
 
   async function submitShareLinkImport() {
@@ -1169,13 +1550,28 @@
       var actionButton = event.target.closest("[data-import-action]");
       if (!actionButton) return;
       if (actionButton.dataset.importAction === "close") closeMailboxImportModal();
+       else if (actionButton.dataset.importAction === "delete-drafts") deleteSelectedImportDrafts();
+       else if (actionButton.dataset.importAction === "commit-drafts") commitSelectedImportDrafts();
+       else if (actionButton.dataset.importAction === "edit-draft") editImportDraft(actionButton.dataset.draftId);
        else if (actionButton.dataset.importAction === "submit") {
          if (state.importMode === "file") submitFileImport();
          else if (state.importMode === "official") startOfficialOneClickImport();
-         else submitShareLinkImport();
+         else if (state.importMode === "share") submitShareLinkImport();
+         else submitManualImport();
        }
      });
+    modal.addEventListener("input", function (event) {
+      if (event.target.dataset && /^manual-(sent|reply)-/.test(event.target.dataset.role || "")) {
+        if (event.target.dataset.role.indexOf("enabled") !== -1) syncManualImportSideControls(modal);
+        if (state.importMode === "manual") renderManualImportControls(modal);
+      }
+    });
     modal.addEventListener("change", function (event) {
+      if (event.target.dataset.role === "draft-select") { updateDraftQueueActions(modal); return; }
+      if (/^manual-(sent|reply)-enabled$/.test(event.target.dataset.role || "")) {
+        syncManualImportSideControls(modal);
+        return;
+      }
       if (event.target.dataset.role !== "file-import-files") return;
       state.importFiles = Array.prototype.slice.call(event.target.files || []).map(function (file) {
         var kind = fileImportKind(file);
@@ -1204,7 +1600,7 @@
     modal.innerHTML = mailboxImportModalHtml();
     document.body.appendChild(modal);
     bindMailboxImportModal(modal);
-    setMailboxImportMode("file");
+    setMailboxImportMode("manual");
     return modal;
   }
 
@@ -1212,7 +1608,8 @@
     installStyles();
     var modal = ensureMailboxImportModal();
     modal.hidden = false;
-    setMailboxImportMode("file");
+    setMailboxImportMode("manual");
+    loadImportDrafts();
   }
 
   var REMOTE_TOAST_ID = "local-mail-remote-import-toast";

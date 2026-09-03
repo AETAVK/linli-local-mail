@@ -10,6 +10,7 @@ import {
   assertRepositoryRole,
   normalizeRemoteUrl
 } from "./repo-guard.mjs";
+import { checkProjectStatus } from "./project-status.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PROJECTION_FILE = "PUBLIC_PROJECTION.json";
@@ -172,14 +173,24 @@ export function inspectRepository({ requireClean = false, requireHooks = false, 
     clean: !status,
     requireClean,
     hooksConfigured,
-    requireHooks
+    requireHooks,
+    projectStatus: null
   };
+
+  try {
+    result.projectStatus = checkProjectStatus(ROOT);
+  } catch (error) {
+    result.projectStatus = { ok: false, error: error.message };
+  }
 
   if (role.role === PRIVATE_ROLE) {
     result.forbidden = tracked
       .map((file) => ({ file, reason: forbiddenTrackedPath(file) }))
       .filter((entry) => entry.reason);
-    result.ok = result.forbidden.length === 0 && (!requireClean || result.clean) && (!requireHooks || hooksConfigured);
+    result.ok = result.forbidden.length === 0
+      && result.projectStatus.ok
+      && (!requireClean || result.clean)
+      && (!requireHooks || hooksConfigured);
   } else {
     const projection = inspectPublicProjection(role, tracked, { ignoreWorkingChanges });
     Object.assign(result, {
@@ -199,6 +210,7 @@ export function inspectRepository({ requireClean = false, requireHooks = false, 
       && projection.versionErrors.length === 0
       && projection.originMatches
       && projection.secrets.length === 0
+      && result.projectStatus.ok
       && (!requireClean || result.clean)
       && (!requireHooks || hooksConfigured);
   }
