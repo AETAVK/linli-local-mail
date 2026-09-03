@@ -237,7 +237,8 @@
   }
 
   function mailboxImportModalHtml() {
-    return '<div class="lm-modal lm-import-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-import-title">' +
+    return '<div class="lm-import-workspace">' +
+      '<div class="lm-modal lm-import-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-import-title">' +
       '<div class="lm-import-title-row"><div class="lm-modal-title" id="lm-import-title">导入信件</div>' +
       '<button class="lm-import-close" type="button" aria-label="关闭" data-import-action="close">×</button></div>' +
       '<div class="lm-import-description">选择导入方式。导入后的信件会保存在本机，并显示在原信箱列表中。</div>' +
@@ -276,14 +277,20 @@
        '<label class="lm-field"><span>时间（可选）</span><input class="lm-input" type="time" data-role="manual-reply-time"></label></div></section>' +
        '</div><div class="lm-note">至少启用一侧并填写非空正文。去信启用时必须填写去信日期；仅录入来信时必须填写来信日期。同时录入去信和来信时，来信日期可留空表示未知。</div>' +
        '</div>' +
-       '<div class="lm-draft-toolbar"><span class="lm-card-title" style="margin:0">待导入队列</span><span class="lm-status" data-role="draft-queue-status">正在读取…</span></div>' +
-       '<div class="lm-draft-list" data-role="draft-list"></div>' +
        '<div class="lm-modal-actions"><span class="lm-modal-status" data-role="share-import-status">等待导入</span>' +
-      '<button class="lm-button" type="button" data-import-action="close">取消</button>' +
-      '<button class="lm-button" type="button" data-import-action="delete-drafts" disabled>删除所选</button>' +
-      '<button class="lm-button lm-button-primary" type="button" data-import-action="commit-drafts" disabled>导入所选（0）</button>' +
-      '<button class="lm-button lm-button-primary" type="button" data-import-action="submit">加入待导入</button></div>' +
-      '</div>';
+       '<button class="lm-button" type="button" data-import-action="close">取消</button>' +
+       '<button class="lm-button lm-button-primary" type="button" data-import-action="submit">加入待导入</button></div>' +
+       '</div>' +
+       '<section class="lm-modal lm-import-queue-dialog" role="region" aria-labelledby="lm-import-queue-title">' +
+       '<div class="lm-import-queue-header"><div class="lm-import-queue-heading">' +
+       '<div class="lm-modal-title" id="lm-import-queue-title">待导入队列</div>' +
+       '<div class="lm-import-queue-description">选择草稿后可批量导入或删除</div></div>' +
+       '<span class="lm-status" data-role="draft-queue-status">正在读取…</span></div>' +
+       '<div class="lm-draft-list" data-role="draft-list"></div>' +
+       '<div class="lm-import-queue-actions">' +
+       '<button class="lm-button" type="button" data-import-action="delete-drafts" disabled>删除所选</button>' +
+       '<button class="lm-button lm-button-primary" type="button" data-import-action="commit-drafts" disabled>导入所选（0）</button>' +
+       '</div></section></div>';
   }
 
   function setMailboxImportStatus(message, kind) {
@@ -913,7 +920,7 @@
 
   function bindMailboxImportModal(modal) {
     modal.addEventListener("click", function (event) {
-      if (event.target === modal) { closeMailboxImportModal(); return; }
+      if (event.target === modal || event.target === modal.querySelector(".lm-import-workspace")) { closeMailboxImportModal(); return; }
       var modeButton = event.target.closest("[data-import-mode]");
       if (modeButton) { setMailboxImportMode(modeButton.dataset.importMode); return; }
       var actionButton = event.target.closest("[data-import-action]");
@@ -964,7 +971,7 @@
     if (modal) return modal;
     modal = document.createElement("div");
     modal.id = MAILBOX_IMPORT_MODAL_ID;
-    modal.className = "lm-modal-backdrop";
+    modal.className = "lm-modal-backdrop lm-import-backdrop";
     modal.hidden = true;
     modal.innerHTML = mailboxImportModalHtml();
     document.body.appendChild(modal);

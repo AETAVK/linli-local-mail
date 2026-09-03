@@ -468,7 +468,10 @@
       ".lm-mailbox-import-button{height:24px;padding:0 11px;border:1px solid var(--tp-grey-5,rgba(255,255,255,.22));border-radius:999px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;line-height:22px;cursor:pointer;transition:background-color .15s,color .15s,border-color .15s}",
       ".lm-mailbox-import-button:hover{border-color:var(--tp-grey-7,rgba(255,255,255,.42));background:var(--tp-surface-1,rgba(255,255,255,.07));color:var(--tp-text-title,#e8e9eb)}",
       ".lm-mailbox-import-button[hidden]{display:none}",
-      ".lm-import-dialog{width:min(620px,92vw);padding:24px}",
+      ".lm-import-backdrop{overflow:auto}",
+      ".lm-import-workspace{display:grid;grid-template-columns:minmax(0,620px) minmax(320px,390px);align-items:stretch;gap:14px;width:min(1024px,calc(100vw - 48px));max-height:86vh}",
+      ".lm-import-workspace>.lm-modal{box-sizing:border-box;margin:0}",
+      ".lm-import-dialog{width:auto;max-height:86vh;padding:24px}",
       ".lm-import-title-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:6px}",
       ".lm-import-title-row .lm-modal-title{margin:0;font-size:18px}",
       ".lm-import-close{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;color:var(--tp-text-secondary,#a1a5ad);font-size:20px;line-height:1;cursor:pointer}",
@@ -525,6 +528,14 @@
       ".lm-draft-actions{display:flex;gap:4px}",
       ".lm-import-dialog .lm-modal-actions{flex-wrap:wrap}",
       ".lm-import-dialog .lm-modal-status{flex:1 1 100%;margin-right:0}",
+      ".lm-import-queue-dialog{width:auto;max-height:86vh;min-height:0;overflow:hidden;padding:0;display:flex;flex-direction:column}",
+      ".lm-import-queue-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 18px 14px;border-bottom:1px solid rgba(255,255,255,.08)}",
+      ".lm-import-queue-heading{min-width:0}",
+      ".lm-import-queue-header .lm-modal-title{margin:0;font-size:18px}",
+      ".lm-import-queue-description{margin-top:5px;color:var(--tp-text-tertiary,#7d818c);font-size:11px;line-height:1.45}",
+      ".lm-import-queue-header .lm-status{flex:0 0 auto;padding-top:3px;white-space:nowrap}",
+      ".lm-import-queue-dialog .lm-draft-list{flex:1;min-height:0;max-height:none;margin:0;padding:14px 16px;overflow:auto}",
+      ".lm-import-queue-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding:14px 16px;border-top:1px solid rgba(255,255,255,.08)}",
       ".local-mail-remote-import-toast{position:fixed;right:18px;bottom:18px;z-index:999999;width:min(360px,calc(100vw - 36px));padding:14px 16px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(30,31,35,.97);color:var(--tp-text-body,#ced2d4);box-shadow:0 12px 32px rgba(0,0,0,.5);font-size:13px;line-height:1.55;color-scheme:dark}",
       ".local-mail-remote-import-toast[hidden]{display:none}",
       ".local-mail-remote-import-title{font-size:14px;font-weight:600;color:var(--tp-text-title,#e8e9eb);margin-bottom:6px;padding-right:18px}",
@@ -624,6 +635,7 @@
       ".lm-music-switch input:checked{border-color:#e7e1d7;background:#d8d1c5}",
       ".lm-music-switch input:checked::after{transform:translateX(18px);background:#2b2926}",
       ".lm-desktop-preference-status{margin-left:8px;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;font-weight:400;white-space:nowrap}",
+      "@media(max-width:1100px){.lm-import-backdrop{align-items:flex-start}.lm-import-workspace{grid-template-columns:1fr;width:min(680px,calc(100vw - 48px));max-height:none}.lm-import-dialog,.lm-import-queue-dialog{width:100%;max-height:none}.lm-import-queue-dialog{min-height:280px}.lm-import-queue-dialog .lm-draft-list{max-height:40vh}}",
       "@media(max-width:900px){.lm-grid,.lm-provider-grid,.lm-parameter-grid{grid-template-columns:1fr}.lm-provider-grid .lm-wide,.lm-parameter-wide{grid-column:auto}.lm-toolbar{align-items:flex-start;flex-direction:column}.lm-config-item{flex-direction:column;align-items:flex-start}.lm-import-methods{grid-template-columns:1fr}.lm-model-manager-body{grid-template-columns:210px minmax(0,1fr)}.lm-provider-detail-scroll{padding:18px}.lm-model-edit-grid{grid-template-columns:1fr}}",
       "@media(max-width:680px){#local-mail-local-navigation{top:10px}.lm-modal.lm-model-manager{height:90vh}.lm-model-manager-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.lm-provider-nav{max-height:190px;border-right:0;border-bottom:1px solid rgba(255,255,255,.09)}.lm-provider-detail-head{flex-direction:column}.lm-provider-detail-actions{justify-content:flex-start}}"
     ].join("");
@@ -868,7 +880,8 @@
   }
 
   function mailboxImportModalHtml() {
-    return '<div class="lm-modal lm-import-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-import-title">' +
+    return '<div class="lm-import-workspace">' +
+      '<div class="lm-modal lm-import-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-import-title">' +
       '<div class="lm-import-title-row"><div class="lm-modal-title" id="lm-import-title">导入信件</div>' +
       '<button class="lm-import-close" type="button" aria-label="关闭" data-import-action="close">×</button></div>' +
       '<div class="lm-import-description">选择导入方式。导入后的信件会保存在本机，并显示在原信箱列表中。</div>' +
@@ -907,14 +920,20 @@
        '<label class="lm-field"><span>时间（可选）</span><input class="lm-input" type="time" data-role="manual-reply-time"></label></div></section>' +
        '</div><div class="lm-note">至少启用一侧并填写非空正文。去信启用时必须填写去信日期；仅录入来信时必须填写来信日期。同时录入去信和来信时，来信日期可留空表示未知。</div>' +
        '</div>' +
-       '<div class="lm-draft-toolbar"><span class="lm-card-title" style="margin:0">待导入队列</span><span class="lm-status" data-role="draft-queue-status">正在读取…</span></div>' +
-       '<div class="lm-draft-list" data-role="draft-list"></div>' +
        '<div class="lm-modal-actions"><span class="lm-modal-status" data-role="share-import-status">等待导入</span>' +
-      '<button class="lm-button" type="button" data-import-action="close">取消</button>' +
-      '<button class="lm-button" type="button" data-import-action="delete-drafts" disabled>删除所选</button>' +
-      '<button class="lm-button lm-button-primary" type="button" data-import-action="commit-drafts" disabled>导入所选（0）</button>' +
-      '<button class="lm-button lm-button-primary" type="button" data-import-action="submit">加入待导入</button></div>' +
-      '</div>';
+       '<button class="lm-button" type="button" data-import-action="close">取消</button>' +
+       '<button class="lm-button lm-button-primary" type="button" data-import-action="submit">加入待导入</button></div>' +
+       '</div>' +
+       '<section class="lm-modal lm-import-queue-dialog" role="region" aria-labelledby="lm-import-queue-title">' +
+       '<div class="lm-import-queue-header"><div class="lm-import-queue-heading">' +
+       '<div class="lm-modal-title" id="lm-import-queue-title">待导入队列</div>' +
+       '<div class="lm-import-queue-description">选择草稿后可批量导入或删除</div></div>' +
+       '<span class="lm-status" data-role="draft-queue-status">正在读取…</span></div>' +
+       '<div class="lm-draft-list" data-role="draft-list"></div>' +
+       '<div class="lm-import-queue-actions">' +
+       '<button class="lm-button" type="button" data-import-action="delete-drafts" disabled>删除所选</button>' +
+       '<button class="lm-button lm-button-primary" type="button" data-import-action="commit-drafts" disabled>导入所选（0）</button>' +
+       '</div></section></div>';
   }
 
   function setMailboxImportStatus(message, kind) {
@@ -1544,7 +1563,7 @@
 
   function bindMailboxImportModal(modal) {
     modal.addEventListener("click", function (event) {
-      if (event.target === modal) { closeMailboxImportModal(); return; }
+      if (event.target === modal || event.target === modal.querySelector(".lm-import-workspace")) { closeMailboxImportModal(); return; }
       var modeButton = event.target.closest("[data-import-mode]");
       if (modeButton) { setMailboxImportMode(modeButton.dataset.importMode); return; }
       var actionButton = event.target.closest("[data-import-action]");
@@ -1595,7 +1614,7 @@
     if (modal) return modal;
     modal = document.createElement("div");
     modal.id = MAILBOX_IMPORT_MODAL_ID;
-    modal.className = "lm-modal-backdrop";
+    modal.className = "lm-modal-backdrop lm-import-backdrop";
     modal.hidden = true;
     modal.innerHTML = mailboxImportModalHtml();
     document.body.appendChild(modal);
