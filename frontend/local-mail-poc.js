@@ -536,6 +536,7 @@
       ".lm-import-queue-header .lm-status{flex:0 0 auto;padding-top:3px;white-space:nowrap}",
       ".lm-import-queue-dialog .lm-draft-list{flex:1;min-height:0;max-height:none;margin:0;padding:14px 16px;overflow:auto}",
       ".lm-import-queue-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding:14px 16px;border-top:1px solid rgba(255,255,255,.08)}",
+      ".lm-import-queue-select-all{margin:0 auto 0 0}",
       ".local-mail-remote-import-toast{position:fixed;right:18px;bottom:18px;z-index:999999;width:min(360px,calc(100vw - 36px));padding:14px 16px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(30,31,35,.97);color:var(--tp-text-body,#ced2d4);box-shadow:0 12px 32px rgba(0,0,0,.5);font-size:13px;line-height:1.55;color-scheme:dark}",
       ".local-mail-remote-import-toast[hidden]{display:none}",
       ".local-mail-remote-import-title{font-size:14px;font-weight:600;color:var(--tp-text-title,#e8e9eb);margin-bottom:6px;padding-right:18px}",
@@ -931,6 +932,7 @@
        '<span class="lm-status" data-role="draft-queue-status">正在读取…</span></div>' +
        '<div class="lm-draft-list" data-role="draft-list"></div>' +
        '<div class="lm-import-queue-actions">' +
+       '<label class="lm-check lm-import-queue-select-all"><input type="checkbox" data-role="draft-select-all" disabled>全选</label>' +
        '<button class="lm-button" type="button" data-import-action="delete-drafts" disabled>删除所选</button>' +
        '<button class="lm-button lm-button-primary" type="button" data-import-action="commit-drafts" disabled>导入所选（0）</button>' +
        '</div></section></div>';
@@ -1098,8 +1100,15 @@
   function updateDraftQueueActions(modal) {
     if (!modal) return;
     var ids = draftSelectedIds(modal);
+    var selections = modal.querySelectorAll('[data-role="draft-select"]');
+    var selectAll = modal.querySelector('[data-role="draft-select-all"]');
     var commit = modal.querySelector('[data-import-action="commit-drafts"]');
     var remove = modal.querySelector('[data-import-action="delete-drafts"]');
+    if (selectAll) {
+      selectAll.checked = selections.length > 0 && ids.length === selections.length;
+      selectAll.indeterminate = ids.length > 0 && ids.length < selections.length;
+      selectAll.disabled = state.importDraftBusy || selections.length === 0;
+    }
     if (commit) { commit.disabled = state.importDraftBusy || !ids.length; commit.textContent = "导入所选（" + ids.length + "）"; }
     if (remove) remove.disabled = state.importDraftBusy || !ids.length;
   }
@@ -1586,6 +1595,13 @@
       }
     });
     modal.addEventListener("change", function (event) {
+      if (event.target.dataset.role === "draft-select-all") {
+        Array.prototype.forEach.call(modal.querySelectorAll('[data-role="draft-select"]'), function (input) {
+          input.checked = event.target.checked;
+        });
+        updateDraftQueueActions(modal);
+        return;
+      }
       if (event.target.dataset.role === "draft-select") { updateDraftQueueActions(modal); return; }
       if (/^manual-(sent|reply)-enabled$/.test(event.target.dataset.role || "")) {
         syncManualImportSideControls(modal);

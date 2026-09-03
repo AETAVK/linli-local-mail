@@ -536,6 +536,7 @@
       ".lm-import-queue-header .lm-status{flex:0 0 auto;padding-top:3px;white-space:nowrap}",
       ".lm-import-queue-dialog .lm-draft-list{flex:1;min-height:0;max-height:none;margin:0;padding:14px 16px;overflow:auto}",
       ".lm-import-queue-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding:14px 16px;border-top:1px solid rgba(255,255,255,.08)}",
+      ".lm-import-queue-select-all{margin:0 auto 0 0}",
       ".local-mail-remote-import-toast{position:fixed;right:18px;bottom:18px;z-index:999999;width:min(360px,calc(100vw - 36px));padding:14px 16px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(30,31,35,.97);color:var(--tp-text-body,#ced2d4);box-shadow:0 12px 32px rgba(0,0,0,.5);font-size:13px;line-height:1.55;color-scheme:dark}",
       ".local-mail-remote-import-toast[hidden]{display:none}",
       ".local-mail-remote-import-title{font-size:14px;font-weight:600;color:var(--tp-text-title,#e8e9eb);margin-bottom:6px;padding-right:18px}",

@@ -1,8 +1,8 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "5e1834c765ace9d63ad510f907f336cd4f716627",
-  "packageVersion": "0.11.1",
+  "canonicalCommit": "a010efca60df30cb1b3dd2da04904b3ce333f3f5",
+  "packageVersion": "0.11.2",
   "files": [
     {
       "path": ".gitattributes",
@@ -76,8 +76,13 @@
     },
     {
       "path": ".github/release-notes/v0.11.1.md",
-      "gitBlob": "2c2f58825687de266d4d1237976820241e511be8",
-      "sha256": "4484b8e1763b6a4232b1ff8323a59685ec8e2d88f74829e20b7ae0dbc0d16c11"
+      "gitBlob": "5fa3ba44be39f372e8ccf3f6fe2b81144e701f5d",
+      "sha256": "73735fa989a80be903d5072422c9b4150e7fee0d21f745eaad8100e82d5d146f"
+    },
+    {
+      "path": ".github/release-notes/v0.11.2.md",
+      "gitBlob": "968cb96c516629a52ba14d94b5084845b1c9ab9b",
+      "sha256": "7ee26efcd90134ab218e4dd1381fdc3c4c01bfff1c9803006397cf740ccd5457"
     },
     {
       "path": ".github/release-notes/v0.8.1.md",
@@ -151,13 +156,13 @@
     },
     {
       "path": "frontend-src/local-mail-poc/01-core-styles.js",
-      "gitBlob": "e15d57f96d5da23f695ed912b4038d3f3792a2ed",
-      "sha256": "c24970b24899758ef07d4e75b3496cf967090f8d714edef5f865cf48f189deb9"
+      "gitBlob": "18b1f84e7694506e2702e2f4781be67117a38d6e",
+      "sha256": "1fd75e05b3e8a8e4958d568ceaf1a1e6f80a9854f7fb8e5fc93e719e83c7b02f"
     },
     {
       "path": "frontend-src/local-mail-poc/02-mail-import-updater.js",
-      "gitBlob": "42ba6624c1e252ac18f05e030c884d41e373605a",
-      "sha256": "a1d887a63c62732c3796df018bef6b8040094ae690c938a7c42572121a096f2e"
+      "gitBlob": "be3a7a2ceb652ac5302ace77038fa6a834b227a4",
+      "sha256": "0fc49fc9a5aed24d262c5b2643e2d406f6e1a9ffe6cf3cf1ef315bd24cedf53b"
     },
     {
       "path": "frontend-src/local-mail-poc/03-settings.js",
@@ -181,8 +186,8 @@
     },
     {
       "path": "frontend/local-mail-poc.js",
-      "gitBlob": "9931c9daf95ccce788fbdcdce09158ee0ed4543f",
-      "sha256": "353a68be16f0b285d6b3b6e00a691a3e9e771fc58791f169dc848e0415da53fd"
+      "gitBlob": "cf7ae7da4cae7f10da94c7aeb2220244fc50c78a",
+      "sha256": "b422af681d7f5cc5cd644f09f99070d5ea4dedd76fb7db9012d16c8750fa45a2"
     },
     {
       "path": "Install.cmd",
@@ -211,18 +216,18 @@
     },
     {
       "path": "package.json",
-      "gitBlob": "fcf7c178a7ff983b448dd7e52e70ed69d5a9af03",
-      "sha256": "a218c390c64a358de666786e96993ec054f217a0e3de5d78f0cd0e2e347e8dbf"
+      "gitBlob": "5d5f61583f83b74c7bd7a4ca7d7d1ef0b59c82d8",
+      "sha256": "9310613a41f381d11de284c72f0d55de636f41e4f90704305c9cf7cb10fd513c"
     },
     {
       "path": "PROJECT_STATUS.json",
-      "gitBlob": "eaba63d3c1cd8f540fd773276b5fb9a90172d359",
-      "sha256": "a2ec3df7e87a70f3d22d61f9bf9357ce0b91a2f88b029f00e237dd7a2c3fbf4a"
+      "gitBlob": "8c0dc07fcad0c246c936cfe5599cbe85fd375a2c",
+      "sha256": "05f09b83ceb2d3a5ab7e83f66cfdb8b2e987dcd559d85942f23fd567b3b75f87"
     },
     {
       "path": "README.md",
-      "gitBlob": "ef72ae70ff3901e620ea81949734da4f5b8078b3",
-      "sha256": "eb2560fda5c5476f0e18f769d07d470cde07ccb12f4d929ddf850cbc6731798f"
+      "gitBlob": "a5bcdb5be66643436a754e085bd532aad67cc006",
+      "sha256": "a7282fb824e935020a4fbaf35785e76f9936850410c9fd1f87bc0e3eea4f7a1a"
     },
     {
       "path": "repo-role.json",
@@ -236,8 +241,8 @@
     },
     {
       "path": "SOURCE_CODE.md",
-      "gitBlob": "1fc869335101fec61585e44d61fc8fff29dc7cf4",
-      "sha256": "b1210efeaa28be991704be6d5148d35bc250b9a1a0f993bd8da84c8e92006622"
+      "gitBlob": "e9a2602f797c41b12c2ee74faf96c497bb701397",
+      "sha256": "7d97e67f842db8585df25976f691931cb42f5bd60ea8391f7a203cee0bc14e1f"
     },
     {
       "path": "src/character.mjs",
@@ -246,8 +251,8 @@
     },
     {
       "path": "src/constants.mjs",
-      "gitBlob": "6d6db9c7ade5de2fad4d7b6381ca38360281788b",
-      "sha256": "ec4009cd19efd11714e6bb92c73cd430f0cd3291884e9e8ff1c96243f4b83b9c"
+      "gitBlob": "366779068e6d8946f4b963fe646092626b9480a4",
+      "sha256": "46dbee2dbf14dd0c347028b13a815dc9f405b50a2e05ab9a0288d0d058cae036"
     },
     {
       "path": "src/context-budget.mjs",
@@ -351,8 +356,8 @@
     },
     {
       "path": "STATUS.md",
-      "gitBlob": "8fa2fde747062b4273b2ad49ea380adba302242d",
-      "sha256": "c3bbadaa04a9720b2d0edb394eb021cb7ad2d158fb9304148388f503f94e7349"
+      "gitBlob": "04c447ae23f90626d9862a69a446fcc21d053638",
+      "sha256": "8e75bd377bff4b51ce644f535e6477ff2dfe5a251dd9555fea4c304f7f81082b"
     },
     {
       "path": "Stop-LinliLocalMail.ps1",

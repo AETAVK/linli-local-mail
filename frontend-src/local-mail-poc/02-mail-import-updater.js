@@ -288,6 +288,7 @@
        '<span class="lm-status" data-role="draft-queue-status">正在读取…</span></div>' +
        '<div class="lm-draft-list" data-role="draft-list"></div>' +
        '<div class="lm-import-queue-actions">' +
+       '<label class="lm-check lm-import-queue-select-all"><input type="checkbox" data-role="draft-select-all" disabled>全选</label>' +
        '<button class="lm-button" type="button" data-import-action="delete-drafts" disabled>删除所选</button>' +
        '<button class="lm-button lm-button-primary" type="button" data-import-action="commit-drafts" disabled>导入所选（0）</button>' +
        '</div></section></div>';
@@ -455,8 +456,15 @@
   function updateDraftQueueActions(modal) {
     if (!modal) return;
     var ids = draftSelectedIds(modal);
+    var selections = modal.querySelectorAll('[data-role="draft-select"]');
+    var selectAll = modal.querySelector('[data-role="draft-select-all"]');
     var commit = modal.querySelector('[data-import-action="commit-drafts"]');
     var remove = modal.querySelector('[data-import-action="delete-drafts"]');
+    if (selectAll) {
+      selectAll.checked = selections.length > 0 && ids.length === selections.length;
+      selectAll.indeterminate = ids.length > 0 && ids.length < selections.length;
+      selectAll.disabled = state.importDraftBusy || selections.length === 0;
+    }
     if (commit) { commit.disabled = state.importDraftBusy || !ids.length; commit.textContent = "导入所选（" + ids.length + "）"; }
     if (remove) remove.disabled = state.importDraftBusy || !ids.length;
   }
@@ -943,6 +951,13 @@
       }
     });
     modal.addEventListener("change", function (event) {
+      if (event.target.dataset.role === "draft-select-all") {
+        Array.prototype.forEach.call(modal.querySelectorAll('[data-role="draft-select"]'), function (input) {
+          input.checked = event.target.checked;
+        });
+        updateDraftQueueActions(modal);
+        return;
+      }
       if (event.target.dataset.role === "draft-select") { updateDraftQueueActions(modal); return; }
       if (/^manual-(sent|reply)-enabled$/.test(event.target.dataset.role || "")) {
         syncManualImportSideControls(modal);
