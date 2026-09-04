@@ -627,34 +627,67 @@ fn acquire_desktop_runtime_lock() -> Option<StartupLock> {
     }
 }
 
-fn spawn_service(game_root: &Path, script: &Path) -> Result<Child, String> {
-    let arguments = [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-WindowStyle",
-        "Hidden",
-        "-File",
-    ];
-    let shells = ["powershell.exe", "pwsh.exe"];
-    let mut last_error = String::from("未找到 PowerShell");
-    for shell in shells {
-        let attempt = Command::new(shell)
-            .args(arguments)
-            .arg(script)
-            .arg("-NoGame")
-            .current_dir(game_root)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn();
-        match attempt {
-            Ok(child) => return Ok(child),
-            Err(error) => last_error = format!("{shell}: {error}"),
-        }
+fn spawn_service(game_root: &Path) -> Result<Child, String> {
+    let service_root = game_root.join("linli-local-mail");
+    let script = service_root.join("server.mjs");
+    if !script.is_file() {
+        return Err(format!("找不到本地服务入口：{}", script.display()));
     }
-    Err(last_error)
+
+    let log_dir = service_root.join("logs");
+    fs::create_dir_all(&log_dir)
+        .map_err(|error| format!("无法创建本地服务日志目录：{error}"))?;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let stdout_path = log_dir.join(format!("service-{timestamp}.out.log"));
+    let stderr_path = log_dir.join(format!("service-{timestamp}.err.log"));
+    let stdout = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&stdout_path)
+        .map_err(|error| format!("无法打开本地服务 stdout 日志：{error}"))?;
+    let stderr = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&stderr_path)
+        .map_err(|error| format!("无法打开本地服务 stderr 日志：{error}"))?;
+
+    let bundled_node = service_root.join("runtime").join("node.exe");
+    let executable = if bundled_node.is_file() {
+        bundled_node
+    } else {
+        PathBuf::from("node.exe")
+    };
+    let attempt = Command::new(&executable)
+        .arg("server.mjs")
+        .current_dir(&service_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
+        .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
+        .spawn();
+    match attempt {
+        Ok(child) => {
+            log_line(
+                game_root,
+                &format!(
+                    "starting local service with {} (stdout: {}, stderr: {})",
+                    executable.display(),
+                    stdout_path.display(),
+                    stderr_path.display()
+                ),
+            );
+            Ok(child)
+        }
+        Err(error) if executable == PathBuf::from("node.exe") => {
+            Err(format!("无法启动 PATH 中的 node.exe：{error}"))
+        }
+        Err(error) => Err(format!(
+            "无法启动内置 Node.js：{error}；请确认 runtime\\node.exe 或 PATH 中的 node.exe 可用"
+        )),
+    }
 }
 
 fn ensure_service(game_root: &Path) -> Result<(), String> {
@@ -669,14 +702,8 @@ fn ensure_service(game_root: &Path) -> Result<(), String> {
         return Ok(());
     }
 
-    let script = game_root
-        .join("linli-local-mail")
-        .join("Start-LinliLocalMail.ps1");
-    if !script.is_file() {
-        return Err(format!("找不到本地服务启动脚本：{}", script.display()));
-    }
-    log_line(game_root, "service not ready; starting Start-LinliLocalMail.ps1 -NoGame");
-    let mut process = spawn_service(game_root, &script)?;
+    log_line(game_root, "service not ready; starting local Node.js server");
+    let mut process = spawn_service(game_root)?;
     let deadline = Instant::now() + SERVICE_TIMEOUT;
     let mut bootstrap_running = true;
     loop {
@@ -725,6 +752,64 @@ fn ensure_service(game_root: &Path) -> Result<(), String> {
         "本地服务未能在 {} 秒内就绪。请检查 linli-local-mail\\logs\\service-*.err.log。",
         SERVICE_TIMEOUT.as_secs()
     ))
+}
+
+fn stop_service(game_root: &Path) -> Result<(), String> {
+    let response = match http_request("GET", "/api/session", None, None) {
+        Ok(response) => response,
+        Err(_) => {
+            log_line(game_root, "service stop requested while service was not running");
+            return Ok(());
+        }
+    };
+    if !api_response_is_ok(&response) {
+        return Err(format!(
+            "GET /api/session 返回 HTTP {} 或 code 非 0，无法停止本地服务",
+            response.status
+        ));
+    }
+    let token = json_string_field(&response.body, "token")
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "GET /api/session 未返回 token，无法停止本地服务".to_string())?;
+    let shutdown = http_request("POST", "/api/shutdown", Some(&token), Some(b"{}"))?;
+    if !api_response_is_ok(&shutdown) {
+        return Err(format!(
+            "POST /api/shutdown 返回 HTTP {} 或 code 非 0",
+            shutdown.status
+        ));
+    }
+
+    let deadline = Instant::now() + SERVICE_TIMEOUT;
+    while Instant::now() < deadline {
+        if !service_is_ready() {
+            log_line(game_root, "service stopped and health is no longer available");
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(200));
+    }
+    Err(format!(
+        "本地服务未能在 {} 秒内停止：health 仍然可用",
+        SERVICE_TIMEOUT.as_secs()
+    ))
+}
+
+fn has_argument(arguments: &[std::ffi::OsString], expected: &str) -> bool {
+    arguments
+        .iter()
+        .any(|value| value.to_str() == Some(expected))
+}
+
+fn forwarded_arguments(arguments: &[std::ffi::OsString]) -> Vec<std::ffi::OsString> {
+    arguments
+        .iter()
+        .filter(|value| {
+            !matches!(
+                value.to_str(),
+                Some("--linli-service-only") | Some("--linli-service-stop")
+            )
+        })
+        .cloned()
+        .collect()
 }
 
 struct WidgetSettings {
@@ -1531,7 +1616,7 @@ fn launch_original(game_root: &Path, arguments: &[std::ffi::OsString]) -> Result
     let original = game_root.join("launcher.original.exe");
     if !original.is_file() {
         return Err(format!(
-            "找不到官方启动器备份：{}。请运行 linli-local-mail\\tools\\restore-launcher.ps1 或重新安装包装器。",
+            "找不到官方启动器备份：{}。请重新安装包装器或恢复官方启动器备份。",
             original.display()
         ));
     }
@@ -1565,6 +1650,17 @@ fn run() -> i32 {
         return run_desktop_runtime(&game_root, &arguments);
     }
 
+    if has_argument(&arguments, "--linli-service-stop") {
+        return match stop_service(&game_root) {
+            Ok(()) => 0,
+            Err(error) => {
+                log_line(&game_root, &format!("service stop failed: {error}"));
+                show_error(&error);
+                1
+            }
+        };
+    }
+
     if arguments
         .first()
         .and_then(|value| value.to_str())
@@ -1586,11 +1682,17 @@ fn run() -> i32 {
         return 1;
     }
 
+    if has_argument(&arguments, "--linli-service-only") {
+        log_line(&game_root, "service-only mode completed");
+        return 0;
+    }
+
     if let Err(error) = spawn_desktop_runtime(&game_root) {
         log_line(&game_root, &format!("desktop runtime launch failed: {error}"));
     }
 
-    match launch_original(&game_root, &arguments) {
+    let launch_arguments = forwarded_arguments(&arguments);
+    match launch_original(&game_root, &launch_arguments) {
         Ok(code) => code,
         Err(error) => {
             log_line(&game_root, &format!("official launcher failed: {error}"));

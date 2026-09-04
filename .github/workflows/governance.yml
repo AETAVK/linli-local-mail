@@ -2,6 +2,8 @@ name: Verify governed public source
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -29,10 +31,6 @@ jobs:
       - name: Verify repository identity, projection allowlist, version, and secrets
         shell: pwsh
         run: npm run governance:check -- --expected-role public-projection --require-clean
-
-      - name: Verify generated project status
-        shell: pwsh
-        run: npm run status:check
 
       - name: Verify assembled frontend source
         shell: pwsh

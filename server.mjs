@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,7 +31,54 @@ const CONFIG_ROOT = path.join(ROOT, "config");
 const SECRETS_PATH = path.join(ROOT, "data", "secrets.dpapi.json");
 const MEDIA_ROOT = process.env.LINLI_MAIL_MEDIA_PATH || path.join(path.dirname(DB_PATH), "media");
 const UPDATE_ROOT = process.env.LINLI_MAIL_UPDATE_PATH || path.join(path.dirname(DB_PATH), "updates");
+const PID_PATH = process.env.LINLI_MAIL_PID_PATH || path.join(ROOT, "data", "service.pid.json");
 const SESSION_TOKEN = crypto.randomBytes(32).toString("base64url");
+const SERVICE_INSTANCE_ID = crypto.randomUUID();
+const SERVICE_PID_RECORD = Object.freeze({
+  schemaVersion: 1,
+  pid: process.pid,
+  startedAt: new Date().toISOString(),
+  serverPath: path.resolve(ROOT, "server.mjs"),
+  executablePath: process.execPath,
+  instanceId: SERVICE_INSTANCE_ID
+});
+
+function writeServicePidRecord() {
+  const directory = path.dirname(PID_PATH);
+  fs.mkdirSync(directory, { recursive: true });
+  const temporaryPath = path.join(
+    directory,
+    `.service.pid.${process.pid}.${SERVICE_INSTANCE_ID}.tmp`
+  );
+  try {
+    fs.writeFileSync(temporaryPath, `${JSON.stringify(SERVICE_PID_RECORD)}\n`, {
+      encoding: "utf8",
+      flag: "wx"
+    });
+    fs.renameSync(temporaryPath, PID_PATH);
+  } catch (error) {
+    try { fs.unlinkSync(temporaryPath); } catch (cleanupError) {
+      if (cleanupError?.code !== "ENOENT") console.error(`Failed to clean temporary PID record: ${cleanupError.message}`);
+    }
+    throw error;
+  }
+}
+
+function removeServicePidRecordIfOwned() {
+  let record;
+  try {
+    record = JSON.parse(fs.readFileSync(PID_PATH, "utf8").replace(/^\uFEFF/u, ""));
+  } catch (error) {
+    if (error?.code !== "ENOENT") console.error(`Failed to inspect service PID record: ${error.message}`);
+    return;
+  }
+  if (record?.instanceId !== SERVICE_INSTANCE_ID || Number(record?.pid) !== process.pid) return;
+  try {
+    fs.unlinkSync(PID_PATH);
+  } catch (error) {
+    if (error?.code !== "ENOENT") console.error(`Failed to remove service PID record: ${error.message}`);
+  }
+}
 
 async function readImportDraftBody(req, maximumBytes) {
   try {
@@ -386,7 +434,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/session") {
-      ok(req, res, { token: SESSION_TOKEN, serviceVersion: SERVICE_VERSION });
+      ok(req, res, {
+        token: SESSION_TOKEN,
+        serviceVersion: SERVICE_VERSION,
+        servicePid: process.pid,
+        serviceInstanceId: SERVICE_INSTANCE_ID
+      });
       return;
     }
     // HTMLVideoElement 的请求不能稳定携带自定义 X-Local-Mail-Session；该路由只
@@ -781,15 +834,19 @@ const server = http.createServer(async (req, res) => {
 });
 
 let shuttingDown = false;
-function closeAndExit() {
+function closeAndExit(exitCode = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
   worker.stop();
   server.close(() => {
+    removeServicePidRecordIfOwned();
     database.close();
-    process.exit(0);
+    process.exit(exitCode);
   });
-  setTimeout(() => process.exit(1), 5000).unref();
+  setTimeout(() => {
+    removeServicePidRecordIfOwned();
+    process.exit(exitCode || 1);
+  }, 5000).unref();
 }
 
 process.on("SIGINT", closeAndExit);
@@ -800,6 +857,13 @@ server.on("clientError", (_error, socket) => {
 });
 
 server.listen(PORT, HOST, () => {
+  try {
+    writeServicePidRecord();
+  } catch (error) {
+    console.error(`Failed to write service PID record ${PID_PATH}: ${error.message}`);
+    closeAndExit(1);
+    return;
+  }
   worker.start();
   console.log(`Linli local mail service ${SERVICE_VERSION} listening on http://${HOST}:${PORT}`);
   console.log(`Settings and diagnostics: http://${HOST}:${PORT}/settings`);

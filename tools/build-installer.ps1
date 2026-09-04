@@ -17,7 +17,19 @@ $serviceRoot = Split-Path -Parent $PSScriptRoot
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $distRoot = Join-Path $serviceRoot "dist"
 $version = (Get-Content -Raw -LiteralPath (Join-Path $serviceRoot "package.json") | ConvertFrom-Json).version
-if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "package.json 版本必须符合 major.minor.patch：$version" }
+$versionMatch = [regex]::Match(
+  $version,
+  '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:-(?<stage>alpha|beta|rc)\.(?<sequence>0|[1-9]\d*))?$'
+)
+if (-not $versionMatch.Success) {
+  throw "package.json 版本必须符合 major.minor.patch 或 major.minor.patch-(alpha|beta|rc).number：$version"
+}
+$versionInfoVersion = $version
+if ($versionMatch.Groups["stage"].Success) {
+  $sequence = [uint32]::Parse($versionMatch.Groups["sequence"].Value)
+  if ($sequence -gt 65535) { throw "预发布序号超出 Windows 文件版本范围（0..65535）：$sequence" }
+  $versionInfoVersion = "$($versionMatch.Groups['major'].Value).$($versionMatch.Groups['minor'].Value).$($versionMatch.Groups['patch'].Value).$sequence"
+}
 $installerName = "LinliLocalMail-$version-Setup.exe"
 $installerPath = Join-Path $distRoot $installerName
 $certificatePath = Join-Path $distRoot "LinliLocalMail-SelfSigned.cer"
@@ -264,7 +276,11 @@ try {
 
   $signHelper = Join-Path $serviceRoot "tools\sign-inno-file.ps1"
   $payloadWrapper = Join-Path $servicePayloadRoot "native\linli-launcher-wrapper.exe"
+  $payloadWindowsHelper = Join-Path $servicePayloadRoot "native\linli-windows-helper.exe"
+  if (-not (Test-Path -LiteralPath $payloadWrapper -PathType Leaf)) { throw "运行时包缺少启动器包装器：$payloadWrapper" }
+  if (-not (Test-Path -LiteralPath $payloadWindowsHelper -PathType Leaf)) { throw "运行时包缺少 Windows 原生 helper：$payloadWindowsHelper" }
   Invoke-Checked "powershell.exe" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $signHelper, "-Path", $payloadWrapper)
+  Invoke-Checked "powershell.exe" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $signHelper, "-Path", $payloadWindowsHelper)
 
   $runtimeManifestPath = Join-Path $servicePayloadRoot "runtime-manifest.json"
   Invoke-Checked "node.exe" @("tools/generate-runtime-manifest.mjs", "--root", $servicePayloadRoot, "--version", $version, "--output", $runtimeManifestPath)
@@ -279,6 +295,7 @@ try {
     "--quiet-progress",
     "--no-ide-signtools",
     "--define=MyAppVersion=$version",
+    "--define=MyVersionInfoVersion=$versionInfoVersion",
     "--define=PayloadRoot=$payloadRoot",
     "--define=OutputDir=$distRoot",
     "--signtool=linli=$signCommand",
@@ -291,8 +308,11 @@ try {
   $installerSha256 = Get-Sha256 $installerPath
   Set-Content -LiteralPath "$installerPath.sha256" -Value "$installerSha256  $installerName" -Encoding ascii
   $manifest = [ordered]@{
+    version = $version
+    versionInfoVersion = $versionInfoVersion
     installer = $installerName
     installerSha256 = $installerSha256
+    installerSize = (Get-Item -LiteralPath $installerPath).Length
     installerEngine = "Inno Setup $InnoVersion x64"
     runtimeManifestSha256 = $runtimeManifestSha256
     nodeVersion = $NodeVersion
@@ -300,7 +320,12 @@ try {
     nodeArchiveSource = [string]$nodeInfo.sourceUrl
     signingSubject = [string]$certificate.subject
     signingThumbprint = [string]$thumbprint
-    signedFiles = @($installerName, "linli-local-mail/native/linli-launcher-wrapper.exe", "uninstaller")
+    signedFiles = @(
+      $installerName,
+      "linli-local-mail/native/linli-launcher-wrapper.exe",
+      "linli-local-mail/native/linli-windows-helper.exe",
+      "uninstaller"
+    )
     generatedAt = (Get-Date).ToString("o")
   }
   $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath "$installerPath.json" -Encoding utf8

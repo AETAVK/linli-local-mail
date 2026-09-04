@@ -1,51 +1,69 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const PROTECT_SCRIPT = [
-  "Add-Type -AssemblyName System.Security",
-  "$plain = [Console]::In.ReadToEnd()",
-  "$bytes = [Text.Encoding]::UTF8.GetBytes($plain)",
-  "$cipher = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)",
-  "[Console]::Out.Write([Convert]::ToBase64String($cipher))"
-].join("; ");
+const SERVICE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_HELPER_PATH = path.join(SERVICE_ROOT, "native", "linli-windows-helper.exe");
 
-const UNPROTECT_SCRIPT = [
-  "Add-Type -AssemblyName System.Security",
-  "$encoded = [Console]::In.ReadToEnd()",
-  "$cipher = [Convert]::FromBase64String($encoded)",
-  "$plain = [System.Security.Cryptography.ProtectedData]::Unprotect($cipher, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)",
-  "[Console]::Out.Write([Text.Encoding]::UTF8.GetString($plain))"
-].join("; ");
-
-function runPowerShell(script, stdinText) {
+function runNativeHelper({ helperPath, args, input }) {
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", script],
-      { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] }
-    );
+    const child = spawn(helperPath, args, {
+      shell: false,
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"]
+    });
     const stdout = [];
     const stderr = [];
     child.stdout.on("data", (chunk) => stdout.push(chunk));
     child.stderr.on("data", (chunk) => stderr.push(chunk));
-    child.on("error", reject);
+    child.on("error", (error) => {
+      reject(new Error(`Windows secret protection helper could not start: ${error.message}`));
+    });
     child.on("close", (code) => {
       if (code !== 0) {
-        reject(new Error(`Windows secret protection failed (${code}): ${Buffer.concat(stderr).toString("utf8").trim()}`));
+        const details = Buffer.concat(stderr).toString("utf8").trim();
+        reject(new Error(`Windows secret protection failed (${code}): ${details}`));
         return;
       }
-      resolve(Buffer.concat(stdout).toString("utf8"));
+      resolve(Buffer.concat(stdout));
     });
-    child.stdin.end(String(stdinText));
+    child.stdin.end(input);
   });
 }
 
 export class SecretStore {
-  constructor(filePath) {
+  constructor(filePath, options = {}) {
+    const { helperPath = DEFAULT_HELPER_PATH, runner = runNativeHelper } = options || {};
+    if (typeof helperPath !== "string" || !helperPath) {
+      throw new TypeError("SecretStore helperPath must be a non-empty string");
+    }
+    if (typeof runner !== "function") {
+      throw new TypeError("SecretStore runner must be a function");
+    }
     this.filePath = filePath;
+    this.helperPath = helperPath;
+    this.runner = runner;
     this.entries = {};
     this.load();
+  }
+
+  async run(command, input) {
+    const output = await this.runner({
+      helperPath: this.helperPath,
+      args: [command],
+      input: Buffer.from(input)
+    });
+    if (!Buffer.isBuffer(output) && !(output instanceof Uint8Array)) {
+      throw new TypeError("Secret protection runner must return bytes");
+    }
+    return Buffer.from(output);
+  }
+
+  assertSupportedPlatform() {
+    if (process.platform !== "win32" && this.runner === runNativeHelper) {
+      throw new Error("This build only stores API keys through Windows DPAPI");
+    }
   }
 
   load() {
@@ -77,23 +95,24 @@ export class SecretStore {
       this.save();
       return;
     }
-    if (process.platform !== "win32") {
-      throw new Error("This build only stores API keys through Windows DPAPI");
-    }
-    this.entries[key] = await runPowerShell(PROTECT_SCRIPT, value);
+    this.assertSupportedPlatform();
+    const protectedValue = await this.run("dpapi-protect", Buffer.from(value, "utf8"));
+    this.entries[key] = protectedValue.toString("utf8");
     this.save();
   }
 
   async get(id) {
     const encrypted = this.entries[String(id || "")];
     if (!encrypted) return "";
-    if (process.platform !== "win32") {
+    if (process.platform !== "win32" && this.runner === runNativeHelper) {
       throw new Error("This API key was protected with Windows DPAPI and cannot be opened on this platform");
     }
     try {
-      return await runPowerShell(UNPROTECT_SCRIPT, encrypted);
+      const plain = await this.run("dpapi-unprotect", Buffer.from(String(encrypted), "utf8"));
+      return plain.toString("utf8");
     } catch (error) {
-      console.warn(`Secret ${id} cannot be decrypted on this Windows account; treat as unconfigured: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`Secret ${id} cannot be decrypted on this Windows account; treat as unconfigured: ${message}`);
       return "";
     }
   }

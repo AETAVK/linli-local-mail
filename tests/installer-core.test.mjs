@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { installerLaunchArguments } from "../src/updater.mjs";
 
@@ -13,19 +14,24 @@ import {
   installRootShortcuts,
   loadRuntimeManifest,
   parseWindowsProcessIdentityJson,
+  parseWindowsProcessListJson,
   prepareInstallTransaction,
   prepareTransaction,
   preflight,
-  processIdentityQueryCommand,
-  protectedProcessNamesFromTasklist,
+  processInfoArguments,
+  processListArguments,
   protectedProcessNamesForGameRoot,
+  queryWindowsProcessIdentity,
+  readWindowsProtectedProcessNames,
   removeTreeSafe,
   requestAuthenticatedShutdown,
   resolveLayout,
   restoreLauncher,
   rollbackTransaction,
   sha256File,
-  uninstall
+  uninstall,
+  resolveWindowsHelperPath,
+  windowsHelperCandidatePaths
 } from "../tools/installer-core.mjs";
 
 function fixture() {
@@ -295,16 +301,17 @@ test("recursive deletion handles nested Unicode paths without fs.rmSync", () => 
   fs.rmdirSync(root);
 });
 
-test("protected process parsing includes Olivia and both launcher identities", () => {
+test("helper process-list arguments request every protected executable", () => {
   assert.deepEqual(
-    protectedProcessNamesFromTasklist([
-      '"Olivia.exe","100","Console","1","10,000 K"',
-      '"launcher.exe","101","Console","1","10,000 K"',
-      '"launcher.original.exe","102","Console","1","10,000 K"',
-      '"node.exe","103","Console","1","10,000 K"'
-    ].join("\r\n")),
-    ["olivia.exe", "launcher.exe", "launcher.original.exe"]
+    processListArguments(),
+    [
+      "process-list",
+      "--name", "olivia.exe",
+      "--name", "launcher.exe",
+      "--name", "launcher.original.exe"
+    ]
   );
+  assert.deepEqual(processInfoArguments(4321), ["process-info", "--pid", "4321"]);
 });
 
 test("game process protection scopes executable paths to the selected game root", () => {
@@ -319,34 +326,147 @@ test("game process protection scopes executable paths to the selected game root"
   );
 });
 
-test("PowerShell identity output preserves Chinese and space paths with explicit no-BOM UTF-8", () => {
+test("helper JSON parsing accepts one BOM and rejects trailing garbage", () => {
   const gameRoot = path.join(os.tmpdir(), "用户 数据", "BSide Olivia Lin Test");
   const nodePath = path.join(gameRoot, "linli-local-mail", "runtime", "node.exe");
-  const launcherPath = path.join(gameRoot, "launcher.exe");
-  const command = processIdentityQueryCommand(4321);
 
-  assert.match(command, /\[Console\]::OutputEncoding/);
-  assert.match(command, /\$OutputEncoding/);
-  assert.match(command, /UTF8Encoding/);
-  assert.match(command, /\$false/);
-
-  const identity = parseWindowsProcessIdentityJson(JSON.stringify({
-    ProcessId: 4321,
-    Name: "node.exe",
-    ExecutablePath: nodePath,
-    CommandLine: `"${nodePath}" server.mjs`,
-    CreationDate: "20260829010203.123456+480",
-  }));
+  const identity = parseWindowsProcessIdentityJson(`\uFEFF${JSON.stringify({
+    pid: 4321,
+    name: "node.exe",
+    executablePath: nodePath,
+    commandLine: `"${nodePath}" server.mjs`,
+    creationDate: "20260829010203.123456+480"
+  })}`);
 
   assert.equal(identity.pid, 4321);
   assert.equal(identity.executablePath, nodePath);
   assert.equal(identity.commandLine, `"${nodePath}" server.mjs`);
   assert.deepEqual(
-    protectedProcessNamesForGameRoot(
-      [{ name: "launcher.exe", pid: 4322, executablePath: launcherPath }],
-      gameRoot,
-    ),
-    ["launcher.exe"],
+    parseWindowsProcessListJson(`\uFEFF${JSON.stringify([{
+      pid: 4322,
+      name: "launcher.exe",
+      executablePath: path.join(gameRoot, "launcher.exe"),
+      commandLine: "launcher.exe",
+      creationDate: "20260829010203.123456+480"
+    }])}`),
+    [{
+      pid: 4322,
+      name: "launcher.exe",
+      executablePath: path.join(gameRoot, "launcher.exe"),
+      commandLine: "launcher.exe",
+      creationDate: "20260829010203.123456+480"
+    }]
+  );
+  assert.throws(
+    () => parseWindowsProcessIdentityJson(`${JSON.stringify(identity)} trailing`),
+    (error) => error?.code === "service_identity_unavailable"
+  );
+  assert.throws(
+    () => parseWindowsProcessListJson(`${JSON.stringify([])} trailing`),
+    (error) => error?.code === "process_list_failed"
+  );
+});
+
+test("helper candidates prefer explicit, env, installer bootstrap, then service native", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "linli-helper-candidates-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const explicit = path.join(root, "explicit", "linli-windows-helper.exe");
+  const environment = path.join(root, "env", "linli-windows-helper.exe");
+  const serviceRoot = path.join(root, "service");
+  assert.deepEqual(
+    windowsHelperCandidatePaths({ helperPath: explicit, serviceRoot, environment: { LINLI_WINDOWS_HELPER_PATH: environment } }),
+    [
+      path.resolve(explicit),
+      path.resolve(environment),
+      path.resolve(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "tools", "linli-windows-helper.exe")),
+      path.resolve(path.join(serviceRoot, "native", "linli-windows-helper.exe"))
+    ]
+  );
+});
+
+test("helper process queries use structured argv, hidden windows, timeout, and maxBuffer", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "linli-helper-query-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const helperPath = path.join(root, "linli-windows-helper.exe");
+  fs.writeFileSync(helperPath, "placeholder");
+  const calls = [];
+  const identity = {
+    pid: 4321,
+    name: "node.exe",
+    executablePath: path.join(root, "linli-local-mail", "runtime", "node.exe"),
+    commandLine: `"${path.join(root, "linli-local-mail", "runtime", "node.exe")}" server.mjs`,
+    creationDate: "20260902130000.000000+000"
+  };
+  const spawnSyncImpl = (...args) => {
+    calls.push(args);
+    return { status: 0, stdout: JSON.stringify(identity), stderr: "" };
+  };
+  assert.deepEqual(queryWindowsProcessIdentity(4321, { helperPath, environment: {}, spawnSyncImpl }), identity);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], path.resolve(helperPath));
+  assert.deepEqual(calls[0][1], ["process-info", "--pid", "4321"]);
+  assert.equal(calls[0][2].windowsHide, true);
+  assert.equal(calls[0][2].timeout, 5000);
+  assert.equal(calls[0][2].maxBuffer, 4 * 1024 * 1024);
+});
+
+test("helper missing and nonzero exits fail closed, while process-info exit 3 means absent", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "linli-helper-errors-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  assert.throws(
+    () => resolveWindowsHelperPath({ helperPath: path.join(root, "linli-windows-helper.exe"), serviceRoot: path.join(root, "service"), environment: {} }),
+    (error) => error?.code === "process_helper_missing"
+  );
+  const helperPath = path.join(root, "linli-windows-helper.exe");
+  fs.writeFileSync(helperPath, "placeholder");
+  assert.equal(
+    queryWindowsProcessIdentity(4321, {
+      helperPath,
+      environment: {},
+      spawnSyncImpl: () => ({ status: 3, stdout: "", stderr: "PID not found" })
+    }),
+    null
+  );
+  assert.throws(
+    () => queryWindowsProcessIdentity(4321, {
+      helperPath,
+      environment: {},
+      spawnSyncImpl: () => ({ status: 7, stdout: "", stderr: "helper failed" })
+    }),
+    (error) => error?.code === "service_identity_unavailable" && /helper failed/u.test(error.message)
+  );
+  assert.throws(
+    () => readWindowsProtectedProcessNames(root, {
+      helperPath,
+      environment: {},
+      spawnSyncImpl: () => ({ status: 3, stdout: "[]", stderr: "list failed" })
+    }),
+    (error) => error?.code === "process_list_failed"
+  );
+});
+
+test("helper process-list path omissions refuse installation", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "linli-helper-path-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const helperPath = path.join(root, "linli-windows-helper.exe");
+  fs.writeFileSync(helperPath, "placeholder");
+  assert.throws(
+    () => readWindowsProtectedProcessNames(root, {
+      helperPath,
+      environment: {},
+      spawnSyncImpl: () => ({
+        status: 0,
+        stdout: JSON.stringify([{
+          pid: 4322,
+          name: "launcher.exe",
+          executablePath: "",
+          commandLine: "launcher.exe",
+          creationDate: "20260902130000.000000+000"
+        }]),
+        stderr: ""
+      })
+    }),
+    (error) => error?.code === "process_path_unavailable"
   );
 });
 
@@ -578,7 +698,7 @@ test("handoff logs a process-list failure and fails closed without stopping the 
       platform: "win32",
       queryProcessImpl: () => identity,
       shutdownImpl: async () => ({ ok: true }),
-      processListImpl: () => { throw new Error("tasklist unavailable"); },
+      processListImpl: () => { throw new Error("process helper unavailable"); },
       spawnImpl: () => { spawnCalls += 1; return { unref() {} }; },
       logPath
     }),

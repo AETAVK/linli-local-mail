@@ -18,9 +18,6 @@ const RUNTIME_SOURCE_ALLOWLIST = [
   "NOTICE.md",
   "SOURCE_CODE.md",
   "THIRD_PARTY_NOTICES.md",
-  "Install.cmd",
-  "Start-LinliLocalMail.ps1",
-  "Stop-LinliLocalMail.ps1",
   "server.mjs",
   "src",
   "frontend",
@@ -29,13 +26,13 @@ const RUNTIME_SOURCE_ALLOWLIST = [
   "tools/doctor.mjs",
   "tools/feapp.mjs",
   "tools/history.mjs",
-  "tools/installer-core.mjs",
-  "tools/install.ps1",
-  "tools/install-launcher-wrapper.ps1",
-  "tools/restore-launcher.ps1"
+  "tools/installer-core.mjs"
 ];
 
-const GENERATED_RUNTIME_FILES = ["native/linli-launcher-wrapper.exe"];
+const GENERATED_RUNTIME_FILES = [
+  "native/linli-launcher-wrapper.exe",
+  "native/linli-windows-helper.exe"
+];
 const RUNTIME_ALLOWLIST = [...RUNTIME_SOURCE_ALLOWLIST, ...GENERATED_RUNTIME_FILES];
 
 const FORBIDDEN = [
@@ -47,14 +44,17 @@ const FORBIDDEN = [
   "backups/",
   "archive/",
   "dist/",
-  "native/linli-launcher-wrapper.pdb"
+  "native/linli-launcher-wrapper.pdb",
+  "native/linli-windows-helper.pdb"
 ];
 
 const ROOT_CMD_FILES = {
-  "Start-LinliLocalMail.cmd": "@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0linli-local-mail\\Start-LinliLocalMail.ps1\"\r\n",
-  "Start-LinliLocalMail-ServiceOnly.cmd": "@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0linli-local-mail\\Start-LinliLocalMail.ps1\" -NoGame\r\n",
-  "Stop-LinliLocalMail.cmd": "@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0linli-local-mail\\Stop-LinliLocalMail.ps1\"\r\n"
+  "Start-LinliLocalMail.cmd": "@echo off\r\n\"%~dp0launcher.exe\"\r\n",
+  "Start-LinliLocalMail-ServiceOnly.cmd": "@echo off\r\n\"%~dp0launcher.exe\" --linli-service-only\r\n",
+  "Stop-LinliLocalMail.cmd": "@echo off\r\n\"%~dp0launcher.exe\" --linli-service-stop\r\n"
 };
+
+const RUNTIME_ENTRY_EXTENSIONS = new Set([".bat", ".cmd", ".js", ".mjs"]);
 
 function git(args, options = {}) {
   return execFileSync("git", args, { cwd: ROOT, encoding: "utf8", windowsHide: true, ...options }).trim();
@@ -156,6 +156,24 @@ function assertRuntimeAllowlist(entries) {
   }
 }
 
+function assertNoRuntimePowerShell(staging, entries) {
+  const stagedScripts = entries.filter((entry) => entry.toLowerCase().endsWith(".ps1"));
+  const runtimeEntries = entries.filter((entry) => {
+    const normalized = entry.replace(/\\/g, "/");
+    return normalized.startsWith("game-root-shortcuts/")
+      || RUNTIME_ENTRY_EXTENSIONS.has(path.extname(normalized).toLowerCase());
+  });
+  const powershellEntries = runtimeEntries.filter((entry) => {
+    const content = fs.readFileSync(path.join(staging, ...entry.split("/")), "utf8");
+    return /(?:powershell|pwsh)/iu.test(content);
+  });
+  if (stagedScripts.length || powershellEntries.length) {
+    throw new Error(
+      `PowerShell runtime dependency detected; staged .ps1=${stagedScripts.join(",")} entries=${powershellEntries.join(",")}`
+    );
+  }
+}
+
 function listArchiveEntries(zipPath) {
   // Windows 10+ 自带 bsdtar，可列出 zip 条目。
   const output = execFileSync("tar", ["-tf", zipPath], { encoding: "utf8", windowsHide: true });
@@ -169,6 +187,10 @@ const zipPath = path.join(DIST, zipName);
 assertCleanTree();
 assertPublishedSourceLocation();
 const builtWrapper = buildLauncherWrapper();
+for (const relative of GENERATED_RUNTIME_FILES) {
+  const generatedPath = path.join(ROOT, ...relative.split("/"));
+  if (!fs.existsSync(generatedPath)) throw new Error(`Generated runtime file is missing: ${generatedPath}`);
+}
 fs.mkdirSync(DIST, { recursive: true });
 
 const staging = fs.mkdtempSync(path.join(os.tmpdir(), "linli-release-"));
@@ -188,9 +210,15 @@ try {
   fs.rmSync(tarPath, { force: true });
   overlayDirtyRuntimeSources(staging);
 
-  const wrapperBinary = path.join(staging, "native", "linli-launcher-wrapper.exe");
-  fs.mkdirSync(path.dirname(wrapperBinary), { recursive: true });
-  fs.copyFileSync(builtWrapper, wrapperBinary);
+  const generatedSources = new Map([
+    ["native/linli-launcher-wrapper.exe", builtWrapper],
+    ["native/linli-windows-helper.exe", path.join(ROOT, "native", "linli-windows-helper.exe")]
+  ]);
+  for (const [relative, source] of generatedSources) {
+    const target = path.join(staging, ...relative.split("/"));
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(source, target);
+  }
 
   // 根目录启动入口模板：接收者复制到游戏根目录即可。
   const shortcuts = path.join(staging, "game-root-shortcuts");
@@ -208,6 +236,7 @@ try {
     }
   };
   walk(staging);
+  assertNoRuntimePowerShell(staging, entries);
   assertNoForbidden(entries);
   assertRuntimeAllowlist(entries);
 

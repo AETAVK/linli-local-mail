@@ -7,11 +7,17 @@ import {
   parseReplyText,
   validateReplyText
 } from "./character.mjs";
+import { evaluateColdStartReference } from "./cold-start-reference.mjs";
 import { calculateInputBudget } from "./context-budget.mjs";
 import { activeSelection, getInternalModelConfig } from "./model-config.mjs";
 import { normalizeHistoryRow, selectHistoryDetailed } from "./memory.mjs";
 import { callProvider } from "./providers.mjs";
 import { safeErrorMessage } from "./utils.mjs";
+
+function coldStartAudit(result) {
+  const { promptSection: _promptSection, ...audit } = result;
+  return audit;
+}
 
 export class GenerationWorker {
   constructor({ database, configRoot, secretStore, intervalMs = 300 }) {
@@ -72,16 +78,32 @@ export class GenerationWorker {
   // 按策略选择后交给 buildConversationMessages 组装多轮消息；
   // 当前尚未回复的来信由构建器追加为最后一条 user，重试时同一封来信不会重复进入历史
   //（它本身不在 historyRows 结果中，且未保存成功的回复也不会进入）。
-  async buildTimeline(letter, config, model = null, generation = config.generation) {
-    const profile = loadCharacterProfile(this.configRoot, config.generation.characterId);
+  async buildTimeline(
+    letter,
+    config,
+    model = null,
+    generation = config.generation,
+    { disableColdStart = false } = {}
+  ) {
+    const profile = loadCharacterProfile(
+      this.configRoot,
+      generation.characterId || config.generation.characterId
+    );
     const historyRows = this.database.historyRows(letter.letterId).map(normalizeHistoryRow);
     const curatedMemories = this.database.activeMemories();
+    const coldStartReference = evaluateColdStartReference(
+      disableColdStart
+        ? { ...(profile.coldStartReference || {}), testDisabled: true }
+        : profile.coldStartReference,
+      historyRows
+    );
     const baseMessages = [
       {
         role: "system",
         content: buildSystemPrompt(profile, {
           relationshipSummary: generation.relationshipSummary,
-          curatedMemories
+          curatedMemories,
+          coldStartReference
         })
       },
       { role: "user", content: String(letter.content ?? "").trim() }
@@ -105,13 +127,15 @@ export class GenerationWorker {
       completedHistory: selectedHistory,
       currentLetter: letter,
       relationshipSummary: generation.relationshipSummary,
-      curatedMemories
+      curatedMemories,
+      coldStartReference
     });
     return {
       profile,
       messages,
       selectedHistory,
       curatedMemories,
+      coldStartReference,
       contextBudget,
       historySelection
     };
@@ -122,7 +146,15 @@ export class GenerationWorker {
     if (!letter) throw new Error(`Letter disappeared before generation: ${job.letter_id}`);
     const config = await getInternalModelConfig(this.database, this.secretStore);
     const { provider, model } = activeSelection(config);
-    const { profile, messages, selectedHistory, curatedMemories, contextBudget, historySelection } =
+    const {
+      profile,
+      messages,
+      selectedHistory,
+      curatedMemories,
+      coldStartReference,
+      contextBudget,
+      historySelection
+    } =
       await this.buildTimeline(letter, config, model);
 
     this.database.attachJobRequest(job.job_id, {
@@ -139,6 +171,7 @@ export class GenerationWorker {
         historyBudgetTokens: config.generation.historyBudgetTokens,
         modelCapacity: model.capacity,
         contextBudget,
+        coldStartReference: coldStartAudit(coldStartReference),
         historySelection: {
           selectionMode: historySelection.selectionMode,
           estimatedTokens: historySelection.estimatedTokens,
@@ -212,8 +245,8 @@ export class GenerationWorker {
       ...config.generation,
       maxOutputTokens: Math.min(800, config.generation.maxOutputTokens)
     };
-    const { profile, messages, contextBudget, historySelection } =
-      await this.buildTimeline(letter, config, model, generation);
+    const { profile, messages, coldStartReference, contextBudget, historySelection } =
+      await this.buildTimeline(letter, config, model, generation, { disableColdStart: true });
     const startedAt = Date.now();
     const result = await callProvider({
       provider,
@@ -234,6 +267,7 @@ export class GenerationWorker {
       warning: result.warning,
       preview: parsed.body.slice(0, 500),
       validation,
+      coldStartReference: coldStartAudit(coldStartReference),
       contextBudget,
       historySelection: {
         selectionMode: historySelection.selectionMode,
