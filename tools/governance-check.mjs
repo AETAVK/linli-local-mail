@@ -10,10 +10,11 @@ import {
   assertRepositoryRole,
   normalizeRemoteUrl
 } from "./repo-guard.mjs";
-import { checkProjectStatus } from "./project-status.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PROJECTION_FILE = "PUBLIC_PROJECTION.json";
+const PROJECT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?$/;
+const STABLE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
 const FORBIDDEN_PREFIXES = Object.freeze([
   ".mimosa/",
@@ -46,9 +47,129 @@ const SECRET_PATTERNS = Object.freeze([
   { name: "OpenAI-style API key", pattern: new RegExp(`\\b${"sk"}-[A-Za-z0-9_-]{20,}\\b`) },
   { name: "AWS access key", pattern: new RegExp("\\bAKIA[0-9A-Z]{16}\\b") }
 ]);
+const RELEASE_NOTE_SECTIONS = Object.freeze([
+  "本版新增和修复",
+  "安装与升级",
+  "已知限制",
+  "下载与校验"
+]);
+const USER_FACING_INTERNAL_PATTERNS = Object.freeze([
+  { name: "candidate history", pattern: /(?:发布前|本地|公开|已验收)?候选(?:安装器|提交|证据)?/i },
+  { name: "private commit", pattern: /私有提交/i },
+  { name: "workflow internals", pattern: /(?:GitHub Actions|流水线(?:编号|运行)?|CI 安装器|标签提交|运行时清单 SHA-256)/i },
+  { name: "unreleased build history", pattern: /未安装、未推送、未打标签、未发布/i }
+]);
+const PUBLIC_INTERNAL_PATHS = new Set([
+  "AGENTS.md",
+  "PROJECT_STATUS.json",
+  "STATUS.md",
+  "tools/git-hook-guard.mjs",
+  "tools/project-status.mjs",
+  "tools/setup-repository.ps1"
+]);
+const PUBLIC_INTERNAL_PREFIXES = Object.freeze([".githooks/"]);
+const PUBLIC_INTERNAL_SCRIPTS = new Set([
+  "public:check",
+  "public:export",
+  "repository:setup",
+  "status:check",
+  "status:generate"
+]);
 
 function normalized(value) {
   return value.replaceAll("\\", "/");
+}
+
+export function validatePublicDocumentation({ version, readme, releaseNotes, sourceCode }) {
+  const errors = [];
+  const expectedTitle = `# v${version} 发布说明`;
+  if (releaseNotes.split(/\r?\n/, 1)[0] !== expectedTitle) {
+    errors.push(`release notes must start with: ${expectedTitle}`);
+  }
+  const firstSection = releaseNotes.search(/^##\s+/m);
+  const preamble = firstSection < 0 ? releaseNotes : releaseNotes.slice(0, firstSection);
+  if (preamble.split(/\r?\n/).slice(1).some((line) => line.trim())) {
+    errors.push("release notes must not place status or audit metadata before the four reader-facing sections");
+  }
+  const headings = [...releaseNotes.matchAll(/^##\s+(.+?)\s*$/gm)].map((match) => match[1]);
+  if (JSON.stringify(headings) !== JSON.stringify(RELEASE_NOTE_SECTIONS)) {
+    errors.push(`release notes must use exactly these sections in order: ${RELEASE_NOTE_SECTIONS.join(", ")}`);
+  }
+  for (const candidate of USER_FACING_INTERNAL_PATTERNS) {
+    if (candidate.pattern.test(releaseNotes)) {
+      errors.push(`release notes contain internal ${candidate.name}`);
+    }
+  }
+
+  if (/^##\s+(?:当前版本|\d+\.\d+\.\d+\s+(?:新增|更新|候选))\s*$/m.test(readme)) {
+    errors.push("README must not add a current-version or version-number section");
+  }
+  for (const candidate of USER_FACING_INTERNAL_PATTERNS.filter(({ name }) => name !== "workflow internals")) {
+    if (candidate.pattern.test(readme)) {
+      errors.push(`README contains internal ${candidate.name}`);
+    }
+  }
+  for (const heading of ["功能范围", "当前限制"]) {
+    if (!readme.includes(`## ${heading}`)) {
+      errors.push(`README is missing the durable ${heading} section`);
+    }
+  }
+  if (!readme.includes(`.github/release-notes/v${version}.md`)) {
+    errors.push("README does not link to the current release notes");
+  }
+  for (const candidate of USER_FACING_INTERNAL_PATTERNS) {
+    if (candidate.pattern.test(sourceCode)) {
+      errors.push(`SOURCE_CODE.md contains internal ${candidate.name}`);
+    }
+  }
+  if (!sourceCode.includes("https://github.com/AETAVK/linli-local-mail")) {
+    errors.push("SOURCE_CODE.md is missing the public source repository URL");
+  }
+  if (!sourceCode.includes(`v${version}`)) {
+    errors.push("SOURCE_CODE.md does not identify the current version tag");
+  }
+  return errors;
+}
+
+function documentationReleaseVersion(packageVersion) {
+  const statusPath = path.join(ROOT, "PROJECT_STATUS.json");
+  if (fs.existsSync(statusPath)) {
+    try {
+      const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
+      if (STABLE_VERSION_PATTERN.test(status?.release?.version ?? "")) return status.release.version;
+    } catch {}
+  }
+  const projectionPath = path.join(ROOT, PROJECTION_FILE);
+  if (fs.existsSync(projectionPath)) {
+    try {
+      const projection = JSON.parse(fs.readFileSync(projectionPath, "utf8"));
+      if (STABLE_VERSION_PATTERN.test(projection?.releaseVersion ?? "")) return projection.releaseVersion;
+    } catch {}
+  }
+  return packageVersion;
+}
+
+function inspectPublicDocumentation() {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  const releaseVersion = documentationReleaseVersion(packageJson.version);
+  const releaseNotesPath = path.join(ROOT, ".github", "release-notes", `v${releaseVersion}.md`);
+  const readmePath = path.join(ROOT, "README.md");
+  const sourceCodePath = path.join(ROOT, "SOURCE_CODE.md");
+  if (!fs.existsSync(readmePath) || !fs.existsSync(releaseNotesPath) || !fs.existsSync(sourceCodePath)) {
+    return {
+      ok: false,
+      version: releaseVersion,
+      sourceVersion: packageJson.version,
+      errors: ["README, SOURCE_CODE.md, or current release notes are missing"]
+    };
+  }
+  const errors = validatePublicDocumentation({
+    version: releaseVersion,
+    readme: fs.readFileSync(readmePath, "utf8"),
+    releaseNotes: fs.readFileSync(releaseNotesPath, "utf8"),
+    sourceCode: fs.readFileSync(sourceCodePath, "utf8")
+  });
+  return { ok: errors.length === 0, version: releaseVersion, sourceVersion: packageJson.version, errors };
 }
 
 function git(args, options = {}) {
@@ -131,11 +252,38 @@ function inspectPublicProjection(role, tracked, { ignoreWorkingChanges = false }
   }
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
-  const releaseNotes = `.github/release-notes/v${packageJson.version}.md`;
+  const releaseVersion = marker.releaseVersion ?? packageJson.version;
+  const releaseNotes = `.github/release-notes/v${releaseVersion}.md`;
   const versionErrors = [];
-  if (!/^\d+\.\d+\.\d+$/.test(packageJson.version ?? "")) versionErrors.push("package.json version is not semantic major.minor.patch");
+  if (!PROJECT_VERSION_PATTERN.test(packageJson.version ?? "")) {
+    versionErrors.push("package.json version is not an approved stable or prerelease version");
+  }
+  if (!STABLE_VERSION_PATTERN.test(releaseVersion)) versionErrors.push("projection releaseVersion is not stable major.minor.patch");
   if (marker.packageVersion !== packageJson.version) versionErrors.push("projection packageVersion does not match package.json");
+  if (marker.releaseVersion !== undefined && marker.releaseVersion !== releaseVersion) {
+    versionErrors.push("projection releaseVersion is inconsistent");
+  }
   if (!fs.existsSync(path.join(ROOT, releaseNotes))) versionErrors.push(`missing release notes: ${releaseNotes}`);
+
+  const publicScopeErrors = [];
+  const internalPaths = tracked.filter((file) =>
+    PUBLIC_INTERNAL_PATHS.has(file) || PUBLIC_INTERNAL_PREFIXES.some((prefix) => file.startsWith(prefix))
+  );
+  if (internalPaths.length) {
+    publicScopeErrors.push(`internal-only paths are tracked: ${internalPaths.join(", ")}`);
+  }
+  const trackedReleaseNotes = tracked.filter((file) => /^\.github\/release-notes\/v\d+\.\d+\.\d+\.md$/.test(file));
+  if (trackedReleaseNotes.length !== 1 || trackedReleaseNotes[0] !== releaseNotes) {
+    publicScopeErrors.push(`only the current release notes may be tracked: ${releaseNotes}`);
+  }
+  const internalScripts = Object.keys(packageJson.scripts ?? {}).filter((name) => PUBLIC_INTERNAL_SCRIPTS.has(name));
+  if (internalScripts.length) {
+    publicScopeErrors.push(`internal-only package scripts are present: ${internalScripts.join(", ")}`);
+  }
+  const attributesPath = path.join(ROOT, ".gitattributes");
+  if (fs.existsSync(attributesPath) && /^\.githooks\//m.test(fs.readFileSync(attributesPath, "utf8"))) {
+    publicScopeErrors.push(".gitattributes still contains a private .githooks rule");
+  }
 
   let origin = "";
   try { origin = git(["remote", "get-url", "origin"]); } catch {}
@@ -153,7 +301,7 @@ function inspectPublicProjection(role, tracked, { ignoreWorkingChanges = false }
     }
   }
 
-  return { marker, unmanaged, missing, changed, versionErrors, origin, originMatches, secrets };
+  return { marker, unmanaged, missing, changed, versionErrors, publicScopeErrors, origin, originMatches, secrets };
 }
 
 export function inspectRepository({ requireClean = false, requireHooks = false, expectedRole = null, ignoreWorkingChanges = false } = {}) {
@@ -173,14 +321,13 @@ export function inspectRepository({ requireClean = false, requireHooks = false, 
     clean: !status,
     requireClean,
     hooksConfigured,
-    requireHooks,
-    projectStatus: null
+    requireHooks
   };
 
   try {
-    result.projectStatus = checkProjectStatus(ROOT);
+    result.publicDocumentation = inspectPublicDocumentation();
   } catch (error) {
-    result.projectStatus = { ok: false, error: error.message };
+    result.publicDocumentation = { ok: false, errors: [error.message] };
   }
 
   if (role.role === PRIVATE_ROLE) {
@@ -188,7 +335,7 @@ export function inspectRepository({ requireClean = false, requireHooks = false, 
       .map((file) => ({ file, reason: forbiddenTrackedPath(file) }))
       .filter((entry) => entry.reason);
     result.ok = result.forbidden.length === 0
-      && result.projectStatus.ok
+      && result.publicDocumentation.ok
       && (!requireClean || result.clean)
       && (!requireHooks || hooksConfigured);
   } else {
@@ -200,6 +347,7 @@ export function inspectRepository({ requireClean = false, requireHooks = false, 
       missingProjected: projection.missing,
       changedProjected: projection.changed,
       versionErrors: projection.versionErrors,
+      publicScopeErrors: projection.publicScopeErrors,
       origin: projection.origin,
       originMatches: projection.originMatches,
       secretFindings: projection.secrets
@@ -208,9 +356,10 @@ export function inspectRepository({ requireClean = false, requireHooks = false, 
       && projection.missing.length === 0
       && projection.changed.length === 0
       && projection.versionErrors.length === 0
+      && projection.publicScopeErrors.length === 0
       && projection.originMatches
       && projection.secrets.length === 0
-      && result.projectStatus.ok
+      && result.publicDocumentation.ok
       && (!requireClean || result.clean)
       && (!requireHooks || hooksConfigured);
   }

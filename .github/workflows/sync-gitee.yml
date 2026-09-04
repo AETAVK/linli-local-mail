@@ -1,36 +1,80 @@
-name: Sync release assets to Gitee
+name: Mirror verified GitHub release to Gitee
+
 on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "已在 GitHub 正式发布的版本标签"
+        required: true
+        type: string
+    secrets:
+      GITEE_TOKEN:
+        required: true
   workflow_dispatch:
     inputs:
       tag:
-        description: "要同步到 Gitee 的 GitHub Release 标签，例如 v0.9.8"
+        description: "要从 GitHub Release 幂等同步到 Gitee 的标签，例如 v0.11.3"
         required: true
         type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitee-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
   sync:
-    # Gitee 的大文件附件上传在 GitHub-hosted Windows runner 的部分出口
-    # 上会长时间无响应；Ubuntu runner 使用另一条网络出口，作为默认同步路径。
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout current mirror tooling
+        uses: actions/checkout@v6
         with:
-          ref: main
-      - name: Fetch published assets from GitHub Release into dist/
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Fetch the exact published GitHub body and assets
         shell: bash
-        run: |
-          mkdir -p dist
-          gh release download "$TAG" --repo AETAVK/linli-local-mail --dir dist --clobber
-          echo "已从 GitHub Release ${TAG} 取回以下产物："
-          ls -l dist
         env:
-          TAG: ${{ github.event.inputs.tag }}
+          TAG: ${{ inputs.tag }}
           GH_TOKEN: ${{ github.token }}
-      - name: Run Gitee publish script
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid stable release tag: $TAG" >&2
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          node --input-type=module -e "import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true }); fs.mkdirSync('dist', { recursive: true });"
+          gh release view "$TAG" --repo AETAVK/linli-local-mail \
+            --json tagName,isDraft,isPrerelease,body,assets,targetCommitish,url > dist/github-release.json
+          for NAME in \
+            "LinliLocalMail-${VERSION}-Setup.exe" \
+            "LinliLocalMail-${VERSION}-Setup.exe.sha256" \
+            "LinliLocalMail-${VERSION}-Setup.exe.json" \
+            "LinliLocalMail-SelfSigned.cer"
+          do
+            gh release download "$TAG" --repo AETAVK/linli-local-mail --dir dist --pattern "$NAME"
+          done
+          git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          SOURCE_COMMIT="$(git rev-list -n 1 "$TAG")"
+          test "${#SOURCE_COMMIT}" -eq 40
+          echo "SOURCE_COMMIT=$SOURCE_COMMIT" >> "$GITHUB_ENV"
+          node .github/scripts/release-contract.mjs extract-github \
+            --metadata dist/github-release.json \
+            --root . \
+            --body-output dist/release-body.md \
+            --receipt-output dist/release-receipt.json \
+            --source-commit "$SOURCE_COMMIT"
+
+      - name: Mirror and re-download-verify Gitee attachments
         shell: pwsh
         run: node .github/scripts/publish-gitee-release.mjs
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_REPOSITORY: sforlife/linli-local-mail
-          GITEE_RELEASE_TAG: ${{ github.event.inputs.tag }}
-          GITEE_TARGET_COMMIT: ${{ github.event.inputs.tag }}
-          GITEE_ALLOW_VERSION_MISMATCH: "1"
+          GITEE_RELEASE_TAG: ${{ inputs.tag }}
+          GITEE_TARGET_COMMIT: ${{ inputs.tag }}
+          GITEE_RELEASE_BODY_FILE: dist/release-body.md
+          GITEE_RELEASE_RECEIPT_FILE: dist/release-receipt.json

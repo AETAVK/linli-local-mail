@@ -19,10 +19,13 @@ const DEFAULT_SHORTCUT_NAMES = [
   "Stop-LinliLocalMail.cmd"
 ];
 const PROTECTED_PROCESS_NAMES = ["olivia.exe", "launcher.exe", "launcher.original.exe"];
+const WINDOWS_HELPER_FILENAME = "linli-windows-helper.exe";
+const WINDOWS_HELPER_ENV_NAMES = ["LINLI_WINDOWS_HELPER_PATH", "LINLI_WINDOWS_HELPER"];
 const HANDOFF_POLL_MILLISECONDS = 1000;
 const HANDOFF_WAIT_TIMEOUT_MILLISECONDS = 24 * 60 * 60 * 1000;
 const SERVICE_STOP_TIMEOUT_MILLISECONDS = 30 * 1000;
 const PROCESS_QUERY_TIMEOUT_MILLISECONDS = 5000;
+const PROCESS_HELPER_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
 
 export class InstallerError extends Error {
   constructor(message, { code = "installer_error", details = null } = {}) {
@@ -270,14 +273,21 @@ function writeProbe(directory) {
   }
 }
 
-function isProcessRunning(pid) {
+function isProcessRunning(pid, {
+  queryProcessImpl = null,
+  serviceRoot = null,
+  helperPath = null,
+  spawnSyncImpl = spawnSync
+} = {}) {
   if (!Number.isSafeInteger(pid) || pid <= 0 || pid === process.pid) return false;
   if (process.platform !== "win32") return false;
   try {
-    return Boolean(queryWindowsProcessIdentity(pid));
+    return Boolean(queryProcessImpl
+      ? queryProcessImpl(pid)
+      : queryWindowsProcessIdentity(pid, { serviceRoot, helperPath, spawnSyncImpl }));
   } catch {
-    // An identity query failure is not proof of exit. Keep waiting and fail
-    // closed at the timeout instead of guessing that the PID is gone.
+    // A query failure is not proof of exit. Keep waiting and fail closed at
+    // the timeout instead of guessing that the PID is gone.
     return true;
   }
 }
@@ -302,24 +312,6 @@ function normalizeProtectedProcessNames(value) {
   return PROTECTED_PROCESS_NAMES.filter((name) => names.has(name));
 }
 
-export function protectedProcessNamesFromTasklist(stdout) {
-  const names = [];
-  for (const line of String(stdout || "").split(/\r?\n/u)) {
-    const match = line.trim().match(/^"([^"]+)"/u);
-    if (match) names.push(match[1]);
-  }
-  return normalizeProtectedProcessNames(names);
-}
-
-function tasklistEntriesFromCsv(stdout) {
-  const entries = [];
-  for (const line of String(stdout || "").split(/\r?\n/u)) {
-    const match = line.trim().match(/^"([^"]+)","(\d+)"/u);
-    if (match) entries.push({ name: match[1], pid: Number(match[2]) });
-  }
-  return entries;
-}
-
 function isPathWithinRoot(filePath, rootPath) {
   const root = normalizeComparablePath(rootPath);
   const file = normalizeComparablePath(filePath);
@@ -330,68 +322,63 @@ export function protectedProcessNamesForGameRoot(entries, gameRoot) {
   const scoped = [];
   for (const entry of Array.isArray(entries) ? entries : []) {
     const name = processEntryName(entry);
-    if (!PROTECTED_PROCESS_NAMES.includes(String(name).trim().toLowerCase())) continue;
-    if (isPathWithinRoot(entry?.executablePath || entry?.ExecutablePath, gameRoot)) scoped.push(name);
+    const normalizedName = String(name).trim().toLowerCase();
+    if (!PROTECTED_PROCESS_NAMES.includes(normalizedName)) continue;
+    const executablePath = String(entry?.executablePath ?? entry?.ExecutablePath ?? "").trim();
+    if (!executablePath) {
+      throw new InstallerError(`无法验证 ${name} 的可执行路径，拒绝继续安装`, {
+        code: "process_path_unavailable",
+        details: { pid: entry?.pid ?? entry?.ProcessId ?? null, name }
+      });
+    }
+    if (isPathWithinRoot(executablePath, gameRoot)) scoped.push(name);
   }
   return normalizeProtectedProcessNames(scoped);
 }
 
-function readWindowsProtectedProcessNames(gameRoot = null) {
-  const result = spawnSync("tasklist.exe", ["/FO", "CSV", "/NH"], {
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: PROCESS_QUERY_TIMEOUT_MILLISECONDS,
-    maxBuffer: 4 * 1024 * 1024
-  });
-  if (result.error || result.status !== 0) {
-    throw new InstallerError(
-      `无法安全检查游戏进程：${result.error?.message || String(result.stderr || "").trim() || `tasklist exit ${result.status}`}`,
-      { code: "process_list_failed", details: { status: result.status, stderr: String(result.stderr || "").trim() } }
-    );
-  }
-  const entries = tasklistEntriesFromCsv(result.stdout);
-  if (!gameRoot) return normalizeProtectedProcessNames(entries);
-  // tasklist is machine-wide. Resolve each protected PID's executable path so
-  // an unrelated launcher.exe elsewhere cannot block this game update.
-  const scoped = [];
-  for (const entry of entries) {
-    if (!PROTECTED_PROCESS_NAMES.includes(String(entry.name).toLowerCase())) continue;
-    const identity = queryWindowsProcessIdentity(entry.pid);
-    if (!identity) continue;
-    if (!identity.executablePath) {
-      throw new InstallerError(`无法验证 ${entry.name} 的可执行路径，拒绝继续安装`, {
-        code: "process_path_unavailable",
-        details: { pid: entry.pid, name: entry.name }
-      });
-    }
-    scoped.push({ name: identity.name || entry.name, executablePath: identity.executablePath });
-  }
-  return protectedProcessNamesForGameRoot(scoped, gameRoot);
-}
-
-function waitForPid(pid, timeoutMilliseconds = 120_000) {
+function waitForPid(pid, timeoutMilliseconds = 120_000, options = {}) {
   if (!pid) return;
   const numericPid = Number(pid);
   if (!Number.isSafeInteger(numericPid) || numericPid <= 0) {
     throw new InstallerError(`无效的等待进程编号：${pid}`, { code: "invalid_wait_pid" });
   }
   const deadline = Date.now() + timeoutMilliseconds;
-  while (isProcessRunning(numericPid) && Date.now() < deadline) {
+  while (isProcessRunning(numericPid, options) && Date.now() < deadline) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
   }
-  if (isProcessRunning(numericPid)) {
+  if (isProcessRunning(numericPid, options)) {
     throw new InstallerError(`等待旧版本地服务退出超时（PID ${numericPid}）`, { code: "wait_pid_timeout" });
   }
 }
 
-function runningLauncherNames({ platform = process.platform, processListImpl = null, gameRoot = null } = {}) {
+function runningLauncherNames({
+  platform = process.platform,
+  processListImpl = null,
+  gameRoot = null,
+  serviceRoot = null,
+  helperPath = null,
+  spawnSyncImpl = spawnSync
+} = {}) {
   if (processListImpl) {
-    return normalizeProtectedProcessNames(processListImpl());
+    const entries = processListImpl();
+    if (Array.isArray(entries) && entries.some((entry) => entry && typeof entry === "object")) {
+      for (const entry of entries) {
+        const name = String(processEntryName(entry)).trim().toLowerCase();
+        if (PROTECTED_PROCESS_NAMES.includes(name) && !String(entry.executablePath ?? entry.ExecutablePath ?? "").trim()) {
+          throw new InstallerError(`无法验证 ${name} 的可执行路径，拒绝继续安装`, {
+            code: "process_path_unavailable",
+            details: { pid: entry.pid ?? entry.ProcessId ?? null, name }
+          });
+        }
+      }
+      return gameRoot ? protectedProcessNamesForGameRoot(entries, gameRoot) : normalizeProtectedProcessNames(entries);
+    }
+    return normalizeProtectedProcessNames(entries);
   }
   if (platform !== "win32") {
     throw new InstallerError("无法在当前平台安全检查游戏进程", { code: "process_check_unsupported" });
   }
-  return readWindowsProtectedProcessNames(gameRoot);
+  return readWindowsProtectedProcessNames(gameRoot, { serviceRoot, helperPath, spawnSyncImpl });
 }
 
 function delay(milliseconds) {
@@ -419,6 +406,9 @@ export async function waitForProtectedProcesses({
   platform = process.platform,
   gameRoot = null,
   processListImpl = null,
+  serviceRoot = null,
+  helperPath = null,
+  spawnSyncImpl = spawnSync,
   sleepImpl = delay,
   now = () => Date.now(),
   pollMilliseconds = HANDOFF_POLL_MILLISECONDS,
@@ -431,7 +421,14 @@ export async function waitForProtectedProcesses({
   for (;;) {
     let running;
     try {
-      running = runningLauncherNames({ platform, processListImpl, gameRoot });
+      running = runningLauncherNames({
+        platform,
+        processListImpl,
+        gameRoot,
+        serviceRoot,
+        helperPath,
+        spawnSyncImpl
+      });
     } catch (error) {
       if (error instanceof InstallerError) throw error;
       throw new InstallerError(`无法安全检查游戏进程：${error.message}`, {
@@ -474,61 +471,159 @@ function normalizeProcessIdentity(value) {
   return identity;
 }
 
-export function processIdentityQueryCommand(pid) {
+function parseHelperJson(value, description, code) {
+  const text = String(value ?? "").replace(/^\uFEFF/u, "").trim();
+  if (!text) {
+    throw new InstallerError(`${description}响应为空`, { code });
+  }
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new InstallerError(`${description}响应无效：${error.message}`, { code });
+  }
+}
+
+export function processInfoArguments(pid) {
   const numericPid = Number(pid);
   if (!Number.isSafeInteger(numericPid) || numericPid <= 0) {
     throw new InstallerError(`无效的服务进程编号：${pid}`, { code: "invalid_service_pid" });
   }
-  return [
-    "$utf8NoBom = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false;",
-    "[Console]::OutputEncoding = $utf8NoBom;",
-    "$OutputEncoding = $utf8NoBom;",
-    "$p = Get-CimInstance -ClassName Win32_Process",
-    `-Filter 'ProcessId = ${numericPid}' -ErrorAction Stop;`,
-    "if ($null -eq $p) { exit 3 };",
-    "$p | Select-Object -First 1 ProcessId,Name,ExecutablePath,CommandLine,CreationDate | ConvertTo-Json -Compress"
-  ].join(" ");
+  return ["process-info", "--pid", String(numericPid)];
 }
 
 export function parseWindowsProcessIdentityJson(value) {
-  let parsed;
-  try { parsed = JSON.parse(String(value || "").trim()); } catch (error) {
-    throw new InstallerError(`服务进程身份响应无效：${error.message}`, {
-      code: "service_identity_unavailable"
-    });
-  }
-  const identity = normalizeProcessIdentity(Array.isArray(parsed) ? parsed[0] : parsed);
+  const parsed = parseHelperJson(value, "服务进程身份", "service_identity_unavailable");
+  const identity = normalizeProcessIdentity(parsed);
   if (!identity) {
     throw new InstallerError("无法读取服务进程身份", { code: "service_identity_unavailable" });
   }
   return identity;
 }
 
-function queryWindowsProcessIdentity(pid) {
-  const numericPid = Number(pid);
-  const command = processIdentityQueryCommand(numericPid);
-  const result = spawnSync("powershell.exe", [
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    command
-  ], {
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: PROCESS_QUERY_TIMEOUT_MILLISECONDS,
-    maxBuffer: 1024 * 1024
+export function processListArguments() {
+  return [
+    "process-list",
+    "--name", "olivia.exe",
+    "--name", "launcher.exe",
+    "--name", "launcher.original.exe"
+  ];
+}
+
+export function parseWindowsProcessListJson(value) {
+  const parsed = parseHelperJson(value, "游戏进程列表", "process_list_failed");
+  if (!Array.isArray(parsed)) {
+    throw new InstallerError("游戏进程列表响应不是 JSON 数组", { code: "process_list_failed" });
+  }
+  const identities = parsed.map((entry) => normalizeProcessIdentity(entry));
+  if (identities.some((identity) => !identity)) {
+    throw new InstallerError("游戏进程列表包含无效进程身份", { code: "process_list_failed" });
+  }
+  return identities;
+}
+
+export function windowsHelperCandidatePaths({
+  helperPath = null,
+  serviceRoot = null,
+  environment = process.env
+} = {}) {
+  const candidates = [
+    helperPath,
+    ...WINDOWS_HELPER_ENV_NAMES.map((name) => environment?.[name]),
+    path.join(path.dirname(MODULE_PATH), WINDOWS_HELPER_FILENAME),
+    serviceRoot ? path.join(path.resolve(String(serviceRoot)), "native", WINDOWS_HELPER_FILENAME) : null
+  ];
+  const seen = new Set();
+  return candidates
+    .map((candidate) => String(candidate ?? "").trim())
+    .filter(Boolean)
+    .map((candidate) => path.resolve(candidate))
+    .filter((candidate) => {
+      const comparable = normalizeComparablePath(candidate);
+      if (seen.has(comparable)) return false;
+      seen.add(comparable);
+      return true;
+    });
+}
+
+export function resolveWindowsHelperPath(options = {}) {
+  const candidates = windowsHelperCandidatePaths(options);
+  for (const candidate of candidates) {
+    let stat;
+    try { stat = fs.lstatSync(candidate); } catch { continue; }
+    if (stat.isFile() && !stat.isSymbolicLink()
+        && path.basename(candidate).toLowerCase() === WINDOWS_HELPER_FILENAME) {
+      return candidate;
+    }
+  }
+  throw new InstallerError(`找不到 ${WINDOWS_HELPER_FILENAME}，拒绝查询 Windows 进程`, {
+    code: "process_helper_missing",
+    details: { candidates }
   });
-  if (result.status === 3 && !result.error) return null;
-  if (result.error || result.status !== 0) {
+}
+
+function runWindowsHelper(argumentsList, {
+  helperPath = null,
+  serviceRoot = null,
+  environment = process.env,
+  spawnSyncImpl = spawnSync
+} = {}) {
+  const executable = resolveWindowsHelperPath({ helperPath, serviceRoot, environment });
+  let result;
+  try {
+    result = spawnSyncImpl(executable, argumentsList, {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: PROCESS_QUERY_TIMEOUT_MILLISECONDS,
+      maxBuffer: PROCESS_HELPER_MAX_BUFFER_BYTES
+    });
+  } catch (error) {
+    throw new InstallerError(`无法启动 Windows 进程 helper：${error.message}`, {
+      code: "process_helper_failed",
+      details: { executable, arguments: argumentsList }
+    });
+  }
+  return { executable, result };
+}
+
+export function readWindowsProtectedProcessNames(gameRoot = null, options = {}) {
+  const { executable, result } = runWindowsHelper(processListArguments(), options);
+  if (result?.error || result?.status !== 0) {
     throw new InstallerError(
-      `无法验证服务进程身份（PID ${numericPid}）：${result.error?.message || String(result.stderr || "").trim() || `PowerShell exit ${result.status}`}`,
-      { code: "service_identity_unavailable", details: { status: result.status, stderr: String(result.stderr || "").trim() } }
+      `无法安全检查游戏进程：${result?.error?.message || String(result?.stderr || "").trim() || `${executable} exit ${result?.status}`}`,
+      {
+        code: "process_list_failed",
+        details: { status: result?.status ?? null, stderr: String(result?.stderr || "").trim(), executable }
+      }
+    );
+  }
+  const entries = parseWindowsProcessListJson(result?.stdout);
+  for (const entry of entries) {
+    const name = String(entry.name).toLowerCase();
+    if (PROTECTED_PROCESS_NAMES.includes(name) && !entry.executablePath) {
+      throw new InstallerError(`无法验证 ${entry.name} 的可执行路径，拒绝继续安装`, {
+        code: "process_path_unavailable",
+        details: { pid: entry.pid, name: entry.name }
+      });
+    }
+  }
+  return gameRoot ? protectedProcessNamesForGameRoot(entries, gameRoot) : normalizeProtectedProcessNames(entries);
+}
+
+export function queryWindowsProcessIdentity(pid, options = {}) {
+  const numericPid = Number(pid);
+  const { executable, result } = runWindowsHelper(processInfoArguments(numericPid), options);
+  if (result?.status === 3 && !result?.error) return null;
+  if (result?.error || result?.status !== 0) {
+    throw new InstallerError(
+      `无法验证服务进程身份（PID ${numericPid}）：${result?.error?.message || String(result?.stderr || "").trim() || `${executable} exit ${result?.status}`}`,
+      {
+        code: "service_identity_unavailable",
+        details: { status: result?.status ?? null, stderr: String(result?.stderr || "").trim(), executable }
+      }
     );
   }
   try {
-    return parseWindowsProcessIdentityJson(result.stdout);
+    return parseWindowsProcessIdentityJson(result?.stdout);
   } catch (error) {
     if (error instanceof InstallerError) {
       error.message = `PID ${numericPid}：${error.message}`;
@@ -672,7 +767,9 @@ export async function stopVerifiedService({
   servicePort = null,
   serviceVersion = null,
   serviceHost = "127.0.0.1",
-  queryProcessImpl = (pid) => queryWindowsProcessIdentity(pid),
+  helperPath = null,
+  spawnSyncImpl = spawnSync,
+  queryProcessImpl = null,
   shutdownImpl = (options) => requestAuthenticatedShutdown(options),
   sleepImpl = delay,
   now = () => Date.now(),
@@ -685,7 +782,12 @@ export async function stopVerifiedService({
   }
   if (!expectedIdentity) return { stopped: false, alreadyStopped: true };
 
-  const current = normalizeProcessIdentity(await queryProcessImpl(numericPid));
+  const query = queryProcessImpl || ((pid) => queryWindowsProcessIdentity(pid, {
+    serviceRoot,
+    helperPath,
+    spawnSyncImpl
+  }));
+  const current = normalizeProcessIdentity(await query(numericPid));
   if (!current) {
     log(`服务 PID ${numericPid} 在停止前已退出`);
     return { stopped: false, alreadyStopped: true };
@@ -728,7 +830,7 @@ export async function stopVerifiedService({
   const startedAt = now();
   const deadline = startedAt + timeoutMilliseconds;
   for (;;) {
-    const observed = normalizeProcessIdentity(await queryProcessImpl(numericPid));
+    const observed = normalizeProcessIdentity(await query(numericPid));
     if (!observed) {
       log(`本地回信服务 PID ${numericPid} 已退出`);
       return { stopped: true, alreadyStopped: false };
@@ -758,6 +860,8 @@ export async function handoffUpdate({
   serviceHost = "127.0.0.1",
   servicePort = null,
   serviceVersion = null,
+  helperPath = null,
+  spawnSyncImpl = spawnSync,
   platform = process.platform,
   handoffPid = process.pid,
   processListImpl = null,
@@ -808,7 +912,11 @@ export async function handoffUpdate({
     if (normalizedPort != null && (!Number.isSafeInteger(normalizedPort) || normalizedPort <= 0 || normalizedPort > 65535)) {
       throw new InstallerError(`无效的服务端口：${servicePort}`, { code: "invalid_service_port" });
     }
-    const query = queryProcessImpl || ((pid) => queryWindowsProcessIdentity(pid));
+    const query = queryProcessImpl || ((pid) => queryWindowsProcessIdentity(pid, {
+      serviceRoot: normalizedServiceRoot,
+      helperPath,
+      spawnSyncImpl
+    }));
     const shutdown = shutdownImpl || ((options) => requestAuthenticatedShutdown(options));
     const identity = await captureServiceIdentity({
       servicePid: normalizedPid,
@@ -820,7 +928,14 @@ export async function handoffUpdate({
     const wait = await waitForProtectedProcesses({
       platform,
       gameRoot: layout.gameRoot,
-      processListImpl: processListImpl || (() => readWindowsProtectedProcessNames(layout.gameRoot)),
+      serviceRoot: normalizedServiceRoot,
+      helperPath,
+      spawnSyncImpl,
+      processListImpl: processListImpl || (() => readWindowsProtectedProcessNames(layout.gameRoot, {
+        serviceRoot: normalizedServiceRoot,
+        helperPath,
+        spawnSyncImpl
+      })),
       sleepImpl,
       now,
       timeoutMilliseconds: protectedProcessTimeoutMilliseconds,
@@ -833,6 +948,8 @@ export async function handoffUpdate({
       servicePort: normalizedPort,
       serviceVersion,
       serviceHost,
+      helperPath,
+      spawnSyncImpl,
       queryProcessImpl: query,
       shutdownImpl: shutdown,
       sleepImpl,
@@ -909,7 +1026,10 @@ export function preflight({
   skipProcessCheck = false,
   skipWriteProbe = false,
   platform = process.platform,
-  processListImpl = null
+  processListImpl = null,
+  queryProcessImpl = null,
+  helperPath = null,
+  spawnSyncImpl = spawnSync
 } = {}) {
   if (!gameRoot) throw new InstallerError("没有提供游戏根目录", { code: "missing_game_root" });
   if (process.platform === "win32" && !process.env.PROCESSOR_ARCHITEW6432 && process.arch !== "x64") {
@@ -920,9 +1040,21 @@ export function preflight({
   assertRegularFile(layout.feappPath, `${EXPECTED_GAME_VERSION} 前端包`);
   assertRegularFile(layout.webplayerPath, `${EXPECTED_GAME_VERSION} webplayer 前端包`);
   assertRegularFile(layout.launcherPath, "游戏启动器");
-  waitForPid(waitPid ? Number(waitPid) : null);
+  waitForPid(waitPid ? Number(waitPid) : null, 120_000, {
+    queryProcessImpl,
+    serviceRoot: layout.serviceRoot,
+    helperPath,
+    spawnSyncImpl
+  });
   if (!skipProcessCheck) {
-    const running = runningLauncherNames({ platform, processListImpl, gameRoot: layout.gameRoot });
+    const running = runningLauncherNames({
+      platform,
+      processListImpl,
+      gameRoot: layout.gameRoot,
+      serviceRoot: layout.serviceRoot,
+      helperPath,
+      spawnSyncImpl
+    });
     if (running.length) {
       throw new InstallerError(
         `游戏或启动器仍在运行：${running.join("、")}。请完全退出游戏和启动器后重试；不会强制结束进程，也不会跳过进程保护。`,
@@ -1023,9 +1155,21 @@ export function prepareTransaction({
   waitPid = null,
   skipProcessCheck = false,
   platform = process.platform,
-  processListImpl = null
+  processListImpl = null,
+  helperPath = null,
+  spawnSyncImpl = spawnSync,
+  queryProcessImpl = null
 } = {}) {
-  const check = preflight({ gameRoot, waitPid, skipProcessCheck, platform, processListImpl });
+  const check = preflight({
+    gameRoot,
+    waitPid,
+    skipProcessCheck,
+    platform,
+    processListImpl,
+    queryProcessImpl,
+    helperPath,
+    spawnSyncImpl
+  });
   const layout = resolveLayout(check.gameRoot);
   const recoveredTransactions = recoverInterruptedTransactions(layout.serviceRoot);
   const manifest = loadRuntimeManifest(manifestPath);
@@ -1101,9 +1245,11 @@ export async function prepareInstallTransaction({
   waitPid = null,
   platform = process.platform,
   processListImpl = null,
+  helperPath = null,
+  spawnSyncImpl = spawnSync,
   preflightImpl = preflight,
   prepareImpl = prepareTransaction,
-  queryProcessImpl = (pid) => queryWindowsProcessIdentity(pid),
+  queryProcessImpl = null,
   shutdownImpl = (options) => requestAuthenticatedShutdown(options),
   sleepImpl = delay,
   now = () => Date.now(),
@@ -1115,12 +1261,20 @@ export async function prepareInstallTransaction({
     waitPid,
     skipWriteProbe: true,
     platform,
-    processListImpl
+    processListImpl,
+    queryProcessImpl,
+    helperPath,
+    spawnSyncImpl
   });
   const layout = resolveLayout(check.gameRoot || gameRoot);
   const record = readServicePidRecord(layout);
+  const query = queryProcessImpl || ((pid) => queryWindowsProcessIdentity(pid, {
+    serviceRoot: layout.serviceRoot,
+    helperPath,
+    spawnSyncImpl
+  }));
   if (record) {
-    const identity = normalizeProcessIdentity(await queryProcessImpl(record.pid));
+    const identity = normalizeProcessIdentity(await query(record.pid));
     if (identity) {
       if (!isServiceIdentity(identity, { serviceRoot: layout.serviceRoot })) {
         throw new InstallerError(`指定 PID ${record.pid} 不是所选服务目录中的 node server.mjs，拒绝终止`, {
@@ -1135,7 +1289,9 @@ export async function prepareInstallTransaction({
         servicePort: 27149,
         serviceVersion: null,
         serviceHost: "127.0.0.1",
-        queryProcessImpl,
+        helperPath,
+        spawnSyncImpl,
+        queryProcessImpl: query,
         shutdownImpl,
         sleepImpl,
         now,
@@ -1150,7 +1306,10 @@ export async function prepareInstallTransaction({
     transactionFile,
     waitPid,
     platform,
-    processListImpl
+    processListImpl,
+    helperPath,
+    spawnSyncImpl,
+    queryProcessImpl: queryProcessImpl || undefined
   });
 }
 
@@ -1551,12 +1710,21 @@ export function uninstall({
   deleteUserData = false,
   skipProcessCheck = false,
   platform = process.platform,
-  processListImpl = null
+  processListImpl = null,
+  helperPath = null,
+  spawnSyncImpl = spawnSync
 } = {}) {
   const layout = resolveLayout(gameRoot);
   assertRegularFile(layout.launcherPath, "游戏启动器");
   if (!skipProcessCheck) {
-    const running = runningLauncherNames({ platform, processListImpl, gameRoot: layout.gameRoot });
+    const running = runningLauncherNames({
+      platform,
+      processListImpl,
+      gameRoot: layout.gameRoot,
+      serviceRoot: layout.serviceRoot,
+      helperPath,
+      spawnSyncImpl
+    });
     if (running.length) {
       throw new InstallerError(
         `游戏或启动器仍在运行：${running.join("、")}。请完全退出游戏和启动器后重试卸载；不会强制结束进程。`,
@@ -1604,6 +1772,7 @@ async function main() {
       serviceHost: options["service-host"] || "127.0.0.1",
       servicePort: options["service-port"] || null,
       serviceVersion: options["service-version"] || null,
+      helperPath: options["helper-path"] || null,
       logPath: options.log || null
     }));
     return;
@@ -1613,7 +1782,8 @@ async function main() {
       gameRoot,
       waitPid: options["wait-pid"] || null,
       skipProcessCheck: Boolean(options["skip-process-check"]),
-      skipWriteProbe: Boolean(options["skip-write-probe"])
+      skipWriteProbe: Boolean(options["skip-write-probe"]),
+      helperPath: options["helper-path"] || null
     }));
     return;
   }
@@ -1622,7 +1792,8 @@ async function main() {
       gameRoot,
       manifestPath: options.manifest,
       transactionFile: options.transaction,
-      waitPid: options["wait-pid"] || null
+      waitPid: options["wait-pid"] || null,
+      helperPath: options["helper-path"] || null
     }));
     return;
   }
@@ -1642,7 +1813,8 @@ async function main() {
     printResult(uninstall({
       gameRoot,
       deleteUserData: Boolean(options["delete-user-data"]),
-      skipProcessCheck: Boolean(options["skip-process-check"])
+      skipProcessCheck: Boolean(options["skip-process-check"]),
+      helperPath: options["helper-path"] || null
     }));
     return;
   }

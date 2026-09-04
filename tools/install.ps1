@@ -4,8 +4,7 @@
 
 param(
   [switch]$NoLaunch,
-  [switch]$NonInteractive,
-  [switch]$RequireWrapper
+  [switch]$NonInteractive
 )
 
 $ErrorActionPreference = "Stop"
@@ -184,6 +183,38 @@ function Invoke-NodeCommand([string[]]$arguments) {
   }
 }
 
+function Get-MissingNativeRuntimeFiles([string]$wrapperPath, [string]$windowsHelperPath) {
+  $missing = @()
+  if (-not (Test-PathLiteral $wrapperPath -pathType Leaf)) { $missing += $wrapperPath }
+  if (-not (Test-PathLiteral $windowsHelperPath -pathType Leaf)) { $missing += $windowsHelperPath }
+  return $missing
+}
+
+function Ensure-NativeRuntimeBinaries([string]$wrapperPath, [string]$windowsHelperPath) {
+  $missing = @(Get-MissingNativeRuntimeFiles $wrapperPath $windowsHelperPath)
+  if ($missing.Count -eq 0) { return }
+
+  $rustc = Get-Command rustc.exe -ErrorAction SilentlyContinue
+  if (-not $rustc) {
+    Die "缺少原生运行时文件：$($missing -join ', ')。当前未检测到 rustc.exe，无法从源码构建。请在维护者环境运行 tools\build-launcher-wrapper.ps1 -Clean 生成两个 native 二进制，或使用 Release 页的 LinliLocalMail-Setup.exe。"
+  }
+
+  Write-Warn2 "缺少原生运行时文件；检测到 rustc.exe，正在调用维护者构建脚本生成 wrapper 和 Windows helper……"
+  $buildScript = Join-Path $PSScriptRoot "build-launcher-wrapper.ps1"
+  try {
+    & $buildScript -Clean
+    if ($LASTEXITCODE -ne 0) { throw "构建脚本退出码：$LASTEXITCODE" }
+  } catch {
+    Die "原生运行时构建失败：$($_.Exception.Message)。请在维护者环境运行 tools\build-launcher-wrapper.ps1 -Clean，或使用 Release 页的 LinliLocalMail-Setup.exe。"
+  }
+
+  $missing = @(Get-MissingNativeRuntimeFiles $wrapperPath $windowsHelperPath)
+  if ($missing.Count -gt 0) {
+    Die "原生构建脚本已完成，但仍缺少：$($missing -join ', ')。请确认构建脚本同时生成 launcher wrapper 和 Windows helper，或使用 Release 页的 LinliLocalMail-Setup.exe。"
+  }
+  Write-Ok "原生运行时文件已就绪（launcher wrapper + Windows helper）"
+}
+
 Assert-NoLauncherProcess
 
 # ---- 步骤 3：确认游戏本体是未打补丁的官方包或已完成安装 ----
@@ -244,67 +275,37 @@ try {
   Pop-Location
 }
 
-# ---- 步骤 4：把启动入口写入游戏根目录 ----
+# ---- 步骤 4：确认源码安装所需的两个原生运行时文件 ----
+$wrapperBinary = Join-Path -Path $serviceRoot -ChildPath "native\linli-launcher-wrapper.exe"
+$windowsHelperBinary = Join-Path -Path $serviceRoot -ChildPath "native\linli-windows-helper.exe"
+Ensure-NativeRuntimeBinaries $wrapperBinary $windowsHelperBinary
+
+# ---- 步骤 5：把启动入口写入游戏根目录 ----
 # 模板内容与 tools/release.mjs 的 ROOT_CMD_FILES 同源；脚本内置生成，
 # 因此源码归档（Git/Gitee 的 main zip，不含 game-root-shortcuts 目录）也能获得完整入口。
 Write-Step "配置游戏根目录启动入口"
-$shortcuts = Join-Path -Path $serviceRoot -ChildPath "game-root-shortcuts"
-$installed = 0
-if (Test-PathLiteral $shortcuts -pathType Container) {
-  foreach ($file in Get-ChildItem -LiteralPath $shortcuts -Filter "*.cmd" -File) {
-    $destination = Join-Path -Path $gameRoot -ChildPath $file.Name
-    Move-ConflictingContainer $destination
-    Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
-    $installed += 1
-  }
-} else {
-  # 源码归档没有这个目录；按同一份模板直接生成，保证行为一致。
-  $shortcutTemplates = [ordered]@{
-    "Start-LinliLocalMail.cmd"             = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"%~dp0linli-local-mail\Start-LinliLocalMail.ps1`"`r`n"
-    "Start-LinliLocalMail-ServiceOnly.cmd" = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"%~dp0linli-local-mail\Start-LinliLocalMail.ps1`" -NoGame`r`n"
-    "Stop-LinliLocalMail.cmd"              = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"%~dp0linli-local-mail\Stop-LinliLocalMail.ps1`"`r`n"
-  }
-  foreach ($entry in $shortcutTemplates.GetEnumerator()) {
-    $destination = Join-Path -Path $gameRoot -ChildPath $entry.Key
-    Move-ConflictingContainer $destination
-    [System.IO.File]::WriteAllText($destination, $entry.Value, [System.Text.Encoding]::ASCII)
-    $installed += 1
-  }
+$shortcutTemplates = [ordered]@{
+  "Start-LinliLocalMail.cmd"             = "@echo off`r`n`"%~dp0launcher.exe`"`r`n"
+  "Start-LinliLocalMail-ServiceOnly.cmd" = "@echo off`r`n`"%~dp0launcher.exe`" --linli-service-only`r`n"
+  "Stop-LinliLocalMail.cmd"              = "@echo off`r`n`"%~dp0launcher.exe`" --linli-service-stop`r`n"
 }
-if ($installed -gt 0) {
-  Write-Ok "已写入 $installed 个启动脚本到游戏根目录（Start / Stop / ServiceOnly）"
-} else {
-  Write-Warn2 "未找到 game-root-shortcuts 模板；如需启动脚本，请按 README 中的模板手动创建。"
+foreach ($entry in $shortcutTemplates.GetEnumerator()) {
+  $destination = Join-Path -Path $gameRoot -ChildPath $entry.Key
+  Move-ConflictingContainer $destination
+  [System.IO.File]::WriteAllText($destination, $entry.Value, [System.Text.Encoding]::ASCII)
 }
+$installed = $shortcutTemplates.Count
+Write-Ok "已写入 $installed 个启动快捷方式到游戏根目录（Start / Stop / ServiceOnly）"
 
-# ---- 步骤 5：安装直接运行 launcher.exe 的本地服务包装器 ----
+# ---- 步骤 6：安装直接运行 launcher.exe 的本地服务包装器 ----
 Write-Step "安装直接运行 launcher.exe 的本地服务包装器"
-$wrapperBinary = Join-Path -Path $serviceRoot -ChildPath "native\linli-launcher-wrapper.exe"
-if (-not (Test-PathLiteral $wrapperBinary -pathType Leaf)) {
-  if ($RequireWrapper) {
-    Die "安装载荷缺少本地服务包装器：$wrapperBinary。请重新下载 Release 页的 LinliLocalMail-Setup.exe，不要使用 Source code 压缩包。"
-  }
-  # 源码归档（Git/Gitee main zip）不含编译产物；补丁已完成，wrapper 缺失只影响
-  # “双击 launcher.exe 自动拉起服务”，不该让整个安装失败。
-  Write-Warn2 "未找到 native\linli-launcher-wrapper.exe —— 你下载的应该是源码归档（Source code zip），"
-  Write-Warn2 "它只包含源码，没有编译好的启动器包装器。两种解决办法："
-  Write-Host "    1.（推荐）到 Release 页下载 LinliLocalMail-Setup.exe 放进游戏根目录运行；"
-  Write-Host "       它内置包装器、启动脚本和 Node.js 运行时。"
-  Write-Host "    2. 跳过包装器：写信功能不受影响，只是不能通过双击 launcher.exe 自动启动本地服务，"
-  Write-Host "       需要先运行 Start-LinliLocalMail.cmd（已在本步写入游戏根目录）再打开游戏。"
-  if (-not $NonInteractive) {
-    $answer = Read-Host "是否跳过包装器继续完成安装？[Y/n]"
-    if ($answer -match '^(n|N)') { Die "本地服务包装器缺失。请下载 Release 页的 LinliLocalMail-Setup.exe 重新安装。" }
-  }
-  Write-Warn2 "已跳过包装器安装（写信链路不受影响）。"
-} else {
-  $launcherWrapperInstaller = Join-Path -Path $PSScriptRoot -ChildPath "install-launcher-wrapper.ps1"
-  & $launcherWrapperInstaller
-  if ($LASTEXITCODE -ne 0) { Die "本地服务包装器安装失败，请把上方错误信息反馈给维护者。" }
-  Write-Ok "包装器已安装；官方 launcher.exe 已保留为 launcher.original.exe"
-}
+$launcherWrapperInstaller = Join-Path -Path $PSScriptRoot -ChildPath "install-launcher-wrapper.ps1"
+& $launcherWrapperInstaller
+if ($LASTEXITCODE -ne 0) { Die "本地服务包装器安装失败，请把上方错误信息反馈给维护者。" }
+$wrapperInstalled = $true
+Write-Ok "包装器已安装；官方 launcher.exe 已保留为 launcher.original.exe"
 
-# ---- 步骤 6：完成并选择启动 ----
+# ---- 步骤 7：完成并选择启动 ----
 Write-Step "安装完成"
 Write-Host "后续步骤："
 Write-Host "  1. 打开游戏，进入设置页『本地回信』→『模型管理』，接入你的模型服务并填写 API Key。"
@@ -315,16 +316,24 @@ Write-Host "  5. 可选：在项目目录运行 npm run doctor 做全面体检�
 
 if ($NoLaunch) {
   Write-Host ""
-  Write-Host "已按 -NoLaunch 跳过启动。之后可双击游戏根目录的 launcher.exe 或 Start-LinliLocalMail.cmd 开始使用。"
+  Write-Host "已按 -NoLaunch 跳过启动。之后可双击游戏根目录的 launcher.exe 或三个新生成的 .cmd 快捷方式开始使用。"
   exit 0
+}
+
+if (-not $wrapperInstalled) {
+  Die "未安装 launcher wrapper，无法通过原生启动器控制路径启动本地服务。请下载 Release 页的 LinliLocalMail-Setup.exe，或使用 -NoLaunch 完成源码安装后再安装包装器。"
 }
 
 $answer = Read-Host "是否立即启动本地服务并打开游戏？[Y/n]"
 if ($answer -match '^(n|N)') {
-  Write-Host "完成。之后可双击游戏根目录的 launcher.exe 或 Start-LinliLocalMail.cmd 开始使用。"
+  Write-Host "完成。之后可双击游戏根目录 launcher.exe 或三个新生成的 .cmd 快捷方式开始使用。"
   exit 0
 }
 
-& (Join-Path $serviceRoot "Start-LinliLocalMail.ps1")
+$control = Start-Process -FilePath $launcher -ArgumentList "--linli-wrapper-check" -WorkingDirectory $gameRoot -Wait -PassThru
+if ($control.ExitCode -ne 0) {
+  Die "launcher wrapper 未能通过 control/check 路径启动本地服务。请检查游戏根目录和 linli-local-mail 日志。"
+}
+Start-Process -FilePath $launcher -WorkingDirectory $gameRoot | Out-Null
 Write-Host ""
 Write-Host "本地服务已启动，游戏启动器已打开。祝你和林离通信愉快。" -ForegroundColor Green

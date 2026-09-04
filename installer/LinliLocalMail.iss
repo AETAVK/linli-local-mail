@@ -1,6 +1,9 @@
 #ifndef MyAppVersion
   #error MyAppVersion must be supplied by the build script
 #endif
+#ifndef MyVersionInfoVersion
+  #error MyVersionInfoVersion must be supplied by the build script
+#endif
 #ifndef PayloadRoot
   #error PayloadRoot must be supplied by the build script
 #endif
@@ -51,7 +54,7 @@ ChangesAssociations=no
 ChangesEnvironment=no
 AllowNoIcons=yes
 LicenseFile={#PayloadRoot}\linli-local-mail\LICENSE
-VersionInfoVersion={#MyAppVersion}
+VersionInfoVersion={#MyVersionInfoVersion}
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription={#MyAppName} 安装程序
 VersionInfoCompany={#MyAppPublisher}
@@ -68,6 +71,7 @@ Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.i
 Source: "{#PayloadRoot}\linli-local-mail\runtime\node.exe"; DestName: "linli-installer-node.exe"; Flags: dontcopy noencryption
 Source: "{#PayloadRoot}\linli-local-mail\tools\installer-core.mjs"; DestName: "linli-installer-core.mjs"; Flags: dontcopy noencryption
 Source: "{#PayloadRoot}\linli-local-mail\runtime-manifest.json"; DestName: "linli-runtime-manifest.json"; Flags: dontcopy noencryption
+Source: "{#PayloadRoot}\linli-local-mail\native\linli-windows-helper.exe"; DestName: "linli-windows-helper.exe"; Flags: dontcopy noencryption
 
 ; The live character file is deliberately excluded. The installer core creates it
 ; from config\defaults on first install and preserves user edits on upgrades.
@@ -283,6 +287,7 @@ begin
   ExtractTemporaryFile('linli-installer-node.exe');
   ExtractTemporaryFile('linli-installer-core.mjs');
   ExtractTemporaryFile('linli-runtime-manifest.json');
+  ExtractTemporaryFile('linli-windows-helper.exe');
   BootstrapExtracted := True;
 end;
 

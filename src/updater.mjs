@@ -30,23 +30,49 @@ export class UpdateError extends Error {
   }
 }
 
-export function parseStableVersion(value) {
-  const match = String(value ?? "").trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/);
+const PRERELEASE_ORDER = Object.freeze({ alpha: 0, beta: 1, rc: 2 });
+
+export function parseVersion(value) {
+  const match = String(value ?? "").trim().match(
+    /^v?(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(0|[1-9]\d*))?$/
+  );
   if (!match) return null;
+  const base = `${Number(match[1])}.${Number(match[2])}.${Number(match[3])}`;
+  const prerelease = match[4]
+    ? { stage: match[4], number: Number(match[5]) }
+    : null;
   return {
-    text: `${Number(match[1])}.${Number(match[2])}.${Number(match[3])}`,
-    parts: [Number(match[1]), Number(match[2]), Number(match[3])]
+    text: prerelease ? `${base}-${prerelease.stage}.${prerelease.number}` : base,
+    parts: [Number(match[1]), Number(match[2]), Number(match[3])],
+    prerelease
   };
 }
 
+export function parseStableVersion(value) {
+  const parsed = parseVersion(value);
+  if (!parsed || parsed.prerelease) return null;
+  return { text: parsed.text, parts: parsed.parts };
+}
+
 export function compareVersions(left, right) {
-  const a = parseStableVersion(left);
-  const b = parseStableVersion(right);
-  if (!a || !b) throw new UpdateError("版本号必须符合 major.minor.patch", { status: 400, code: "invalid_version" });
+  const a = parseVersion(left);
+  const b = parseVersion(right);
+  if (!a || !b) {
+    throw new UpdateError("版本号必须符合 major.minor.patch 或受支持的预发布格式", {
+      status: 400,
+      code: "invalid_version"
+    });
+  }
   for (let index = 0; index < 3; index += 1) {
     if (a.parts[index] !== b.parts[index]) return a.parts[index] > b.parts[index] ? 1 : -1;
   }
-  return 0;
+  if (!a.prerelease && !b.prerelease) return 0;
+  if (!a.prerelease) return 1;
+  if (!b.prerelease) return -1;
+  const stageDifference = PRERELEASE_ORDER[a.prerelease.stage] - PRERELEASE_ORDER[b.prerelease.stage];
+  if (stageDifference !== 0) return stageDifference > 0 ? 1 : -1;
+  if (a.prerelease.number === b.prerelease.number) return 0;
+  return a.prerelease.number > b.prerelease.number ? 1 : -1;
 }
 
 export function installerLaunchArguments(gameRoot, pid = process.pid) {
@@ -253,7 +279,7 @@ export class UpdateManager {
     requestTimeoutMilliseconds = REQUEST_TIMEOUT_MILLISECONDS,
     downloadTimeoutMilliseconds = DOWNLOAD_TIMEOUT_MILLISECONDS
   }) {
-    const parsedCurrent = parseStableVersion(currentVersion);
+    const parsedCurrent = parseVersion(currentVersion);
     if (!parsedCurrent) throw new UpdateError(`当前版本号无效：${currentVersion}`, { code: "invalid_current_version" });
     if (typeof fetchImpl !== "function") throw new UpdateError("当前 Node.js 不支持网络更新检查");
     this.currentVersion = parsedCurrent.text;

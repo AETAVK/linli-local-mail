@@ -1,143 +1,44 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "316b7d80bfe86fb24e8fe110da3adf9068c1c35b",
-  "packageVersion": "0.11.2",
+  "canonicalCommit": "69be99055b40e4c173e5a951efe9523eda294589",
+  "packageVersion": "0.11.3",
+  "releaseVersion": "0.11.3",
   "files": [
     {
       "path": ".gitattributes",
-      "gitBlob": "d42c9a190dab7f1238a72f52f2db0fe1dff6ae51",
-      "sha256": "4638c925f499b35fee4dd4c5c7550f2b0c48814d58295f23286eff70d4360a82"
+      "gitBlob": "a12abfabe41c9d0dc15f5c484eca7ec6d0f6c9b7",
+      "sha256": "4ee8456f0a011f74e2e8fc1cf155849f19756f076c3851d647f02d974851f66f"
     },
     {
-      "path": ".githooks/pre-commit",
-      "gitBlob": "4f60d9aec2c16564d0c486288296bcbb462b611b",
-      "sha256": "2aeb30372dc617ae8837e1f7bcb03617385464d4da8d3184754f290fa227b351"
-    },
-    {
-      "path": ".githooks/pre-push",
-      "gitBlob": "db920cc15cd1eaf341c69d46cc705902da04c104",
-      "sha256": "58a44aa4e8bad22159321e02d42c28e844bf5fac0af23faa084fb49048bf3628"
-    },
-    {
-      "path": ".github/release-notes/v0.10.0.md",
-      "gitBlob": "0fd07f72a2657cf7907ea8cb03c76d3e4272dd41",
-      "sha256": "09b1cc204f5e2b495c845039039210d3c09fe24f9687ec29b866d315e407b5af"
-    },
-    {
-      "path": ".github/release-notes/v0.10.1.md",
-      "gitBlob": "2d644a6c6108dcf21d5632f5afac4b0d17a8fe80",
-      "sha256": "885ae6be9447e5215c56b738727859a66f28f84f5966cea518f298619b71011f"
-    },
-    {
-      "path": ".github/release-notes/v0.10.2.md",
-      "gitBlob": "a97deff6342416725216465a34787d348858483d",
-      "sha256": "2ca0748b34002aa62835edd0a458e60c05bf551011624d2f28529a4448897519"
-    },
-    {
-      "path": ".github/release-notes/v0.10.3.md",
-      "gitBlob": "fdc4dc80002cff085254fa824bf8781118635932",
-      "sha256": "5c8fc605786403500b1cd59885a1fded1546c3adfee640a3a3214f9cd403ed94"
-    },
-    {
-      "path": ".github/release-notes/v0.10.4.md",
-      "gitBlob": "04a6d30709872bbb80e58201f438c8c61c70cb71",
-      "sha256": "746f7c38ab47ef85e4bc8ce2fc30392cd26b50f31737d8e7420229023b131c54"
-    },
-    {
-      "path": ".github/release-notes/v0.10.5.md",
-      "gitBlob": "9113fc43d8310ff9ee98cbb1ece171680be84933",
-      "sha256": "339f7e7e70c954d5d36f8b23d995c6cad3f3b4cc0dfea654fca1fe92b76ddee7"
-    },
-    {
-      "path": ".github/release-notes/v0.10.6.md",
-      "gitBlob": "c18d667108315b266fd83a1737e4af5169706f2b",
-      "sha256": "90919b3f7a8cf00c448c18c65c5ffb527b24d5d321a87e559095f4f873e853dd"
-    },
-    {
-      "path": ".github/release-notes/v0.10.7.md",
-      "gitBlob": "3d5425fb895495098bd88be6642a928de9b80300",
-      "sha256": "61ea831be73b0585dfab1973c6acf36f982c62bf288881cbd1ea8b70d0b3f48a"
-    },
-    {
-      "path": ".github/release-notes/v0.10.8.md",
-      "gitBlob": "ae145862260a9b0c35f77ebf0ac24851010356c7",
-      "sha256": "0393f57bdef1e8d55b8804d52d63c8a506f507daaa5584797584bd55424e4135"
-    },
-    {
-      "path": ".github/release-notes/v0.10.9.md",
-      "gitBlob": "befc77620a2227ff60a131c64f6661690173a5c9",
-      "sha256": "769d8e24108f1b90d18842a8a54ff2a2d6811803ae9923974893ef4ebdd28e6d"
-    },
-    {
-      "path": ".github/release-notes/v0.11.0.md",
-      "gitBlob": "622af0b1c8c86d6c96501d423f7d04bd18129ba7",
-      "sha256": "8cf4b67b8fc43aa2815db0af722314be9ec6b332a1342b003f0719d71b910115"
-    },
-    {
-      "path": ".github/release-notes/v0.11.1.md",
-      "gitBlob": "5fa3ba44be39f372e8ccf3f6fe2b81144e701f5d",
-      "sha256": "73735fa989a80be903d5072422c9b4150e7fee0d21f745eaad8100e82d5d146f"
-    },
-    {
-      "path": ".github/release-notes/v0.11.2.md",
-      "gitBlob": "885c04fc6b184fd7acd69fbb220df1fae99b93c4",
-      "sha256": "234236d55d03017784f004aa57bd96c24167d64774f6db76b7fc5c49d7dda1cc"
-    },
-    {
-      "path": ".github/release-notes/v0.8.1.md",
-      "gitBlob": "6cae11581b5bed94cd9b6f708eb259edd0d94092",
-      "sha256": "b550ae54df7752794117813fd79cc7f0c04e33d3c5f7b9fd298ad9bc7c0938f4"
-    },
-    {
-      "path": ".github/release-notes/v0.9.0.md",
-      "gitBlob": "706884d70a4aceb451942751ce28e795da1fd5a5",
-      "sha256": "701223c03199a219988897934a7f059910677408db178af2e3862e2769eb1268"
-    },
-    {
-      "path": ".github/release-notes/v0.9.3.md",
-      "gitBlob": "fe297618c8bf6b0fd1f541e094eaf126952d9bfe",
-      "sha256": "4a2f1990b2f219fa1f7f25cc2a68f7cd9289b5af7a1402896e908b707ee1bf66"
-    },
-    {
-      "path": ".github/release-notes/v0.9.4.md",
-      "gitBlob": "e233939e3bfcca61a5c7dddc08ad979bebb81133",
-      "sha256": "3d6e5c780eeb373125a99965d9261cdb77f61ab315a3dfe85bb4c2bcb0564c73"
-    },
-    {
-      "path": ".github/release-notes/v0.9.5.md",
-      "gitBlob": "e52928b28ae02e94aee0f005e6c8e2fed79eadd4",
-      "sha256": "ff7eb49ef3a9c1d0f2730ae464697a1fef0b8878b6a9581cb4f0f2fa40cd5f8b"
-    },
-    {
-      "path": ".github/release-notes/v0.9.6.md",
-      "gitBlob": "7e4e4f1372185b0689c5c36665978c02a2482688",
-      "sha256": "4780eb04a717db0f0024f085903772437f42f0d06eb5cfc71858c945744474f5"
-    },
-    {
-      "path": ".github/release-notes/v0.9.8.md",
-      "gitBlob": "846c1e725ea74ec378014df4fffbb80c72e115f2",
-      "sha256": "c2cae2498c9b6871e6f26e35616b4e57538bbc126a976b8ce56f9eda8b7e5ffb"
+      "path": ".github/release-notes/v0.11.3.md",
+      "gitBlob": "2e20141943e3d89edde7b56c556db4c167317556",
+      "sha256": "0381f84b8d5526fe0a1515bd58dee77a3ff4a72ddd9098272b21fc636db23d39"
     },
     {
       "path": ".github/scripts/publish-gitee-release.mjs",
-      "gitBlob": "42727b7f1370953af4f567d4067f2c82b23a23da",
-      "sha256": "9f904bdb95e6e5c3036ec064397bb0a00b080718c320d0728e741e955bc87b18"
+      "gitBlob": "603df5c07a81d6c0a44c727387af75925408b37b",
+      "sha256": "97bac5766b71e931dd676a490b19d1ae5146857a6727e11b4c88aa7de7ce2134"
+    },
+    {
+      "path": ".github/scripts/release-contract.mjs",
+      "gitBlob": "119f8246bb6d9df4b46b2eb5537bad9a56e79fae",
+      "sha256": "4acb701603a7e73f04807d243be6d8ae960837e0f687aa52ce6dccb59140c0ec"
     },
     {
       "path": ".github/workflows/governance.yml",
-      "gitBlob": "e6225b824019f370ef003d56a38f8386d0f1d69d",
-      "sha256": "1281a3b6dfe1bdfd0593c30b4d0b722a5fd083e13014caec45ce85a1494b0913"
+      "gitBlob": "a5e5ce8cd76ab0611a9c23727aaaa2a52d313e4b",
+      "sha256": "6b79684f4bc2cbf7a31b019c2c3b22baa4b0feadd73db7029fdb161eee39af6d"
     },
     {
       "path": ".github/workflows/release.yml",
-      "gitBlob": "3839979ea4cb46b1a03eb0911f4e97e671302c5a",
-      "sha256": "04d989a5f06982234710b969b383b75fd33817404c0105b1c0b630f242828d9b"
+      "gitBlob": "bfa0442b7a111704325c2af533e15222b1fb3f96",
+      "sha256": "04a408d5bfd0508412266111d22d2f5ecd5dcd8f1bef02d8d72b4436d0b57c5b"
     },
     {
       "path": ".github/workflows/sync-gitee.yml",
-      "gitBlob": "2a5f0085161b65911bea653c8542a13258ca3161",
-      "sha256": "28730f3fa0e2816e932eeba7a854ebb896ee0165a73866add3a28c0ea7f79cde"
+      "gitBlob": "b0cd719776b6b103c42e36bf3fd9b6d486dd1790",
+      "sha256": "3ac427aa2ef364c20ae19c51453027368db8da0985d003a465d333ef03cdaf4b"
     },
     {
       "path": ".gitignore",
@@ -145,14 +46,9 @@
       "sha256": "4e46924495245ffa53215fafd31f11a7f87bddd59af99490d822de1e33c02f00"
     },
     {
-      "path": "AGENTS.md",
-      "gitBlob": "7b208fd5e207988b62f61b4c850df445272a2ea0",
-      "sha256": "160fbd607911f6d0c385d516f3b08d4995876d96af29e2aa9a58be5ab56a82e5"
-    },
-    {
       "path": "config/characters/linli.v1.json",
-      "gitBlob": "620b774bc663ae821e963547a055ed38ff999da2",
-      "sha256": "069dc4893d0bc194ab18b7fd74f27eb324ee6d7059a1fdfb80daa6c90d7d4b4f"
+      "gitBlob": "c1f3c201870f4b033fbde53bc39c846310ab630d",
+      "sha256": "29a8d595cd19ec4c92f6ecccb0602675808f2423eaf1c7fae713f2877fd93afc"
     },
     {
       "path": "frontend-src/local-mail-poc/01-core-styles.js",
@@ -196,8 +92,8 @@
     },
     {
       "path": "installer/LinliLocalMail.iss",
-      "gitBlob": "32395ddaa8efc9566dc9022002b1b10a1322db83",
-      "sha256": "5593f12b27ff784369e1bffb5aaa01a6ba1f2b707e380b390672cb2d0296913c"
+      "gitBlob": "c6a28206fd6c2a2b7c4b719aedcc8671c8fb96ff",
+      "sha256": "68699985403aed5f3a4b9cf0e3b79d9aa2ea5d51eccd31db07e6ae0bb97b664a"
     },
     {
       "path": "LICENSE",
@@ -206,8 +102,8 @@
     },
     {
       "path": "native/launcher-wrapper.rs",
-      "gitBlob": "d53001d41695d57ff2ee9fc56d89ab14088853d8",
-      "sha256": "2a1d904e07577e584406167f809625a67683631069b56eca63a206fff630321d"
+      "gitBlob": "cdd1f7b87f2b842f16e8260436decf56baaa8337",
+      "sha256": "6fa1888a4f52e27f993a9cadfd5681633c2561b7d8e5704061d7f16e9b0ea839"
     },
     {
       "path": "NOTICE.md",
@@ -216,18 +112,13 @@
     },
     {
       "path": "package.json",
-      "gitBlob": "5d5f61583f83b74c7bd7a4ca7d7d1ef0b59c82d8",
-      "sha256": "9310613a41f381d11de284c72f0d55de636f41e4f90704305c9cf7cb10fd513c"
-    },
-    {
-      "path": "PROJECT_STATUS.json",
-      "gitBlob": "93ae95f156ee843fc7c4a5610b11967c45bba04f",
-      "sha256": "2103df0219431337bde3f965131960495908c23c1f04812269884fa72b4b3f7c"
+      "gitBlob": "f64ad415963e3cd7c5efe27ad78fd18318166546",
+      "sha256": "12743d78875853caef516fff69e8248b4046ae1f083481e663a9f9f078f7c972"
     },
     {
       "path": "README.md",
-      "gitBlob": "ee815513191f193b774b84192bbedf85fe6b454d",
-      "sha256": "36a4b2a4e5d72760b61d32a10f8a49c7d12bebe7e89ca19a87de763ed11054b0"
+      "gitBlob": "376046fba79c8baf6f679a088f93a89565cae932",
+      "sha256": "676ef45df28fab85550d3ddefb2c12703249bfcb97318d30042dce1fb0a4fa34"
     },
     {
       "path": "repo-role.json",
@@ -236,23 +127,28 @@
     },
     {
       "path": "server.mjs",
-      "gitBlob": "01fe1710d7b99a9ba594b34bec6773705b6ff5c7",
-      "sha256": "f3b1db741f4cad434025aa646e113f3d2627e89b677cfcb5a2671996aaa7f795"
+      "gitBlob": "ab9e2ef79a1271cabdf619b6191afe7b69b1b9b6",
+      "sha256": "eedb11adf1c482317668cb9ad894fcbbbfa24c078856a7f3a8ce41126f55a06b"
     },
     {
       "path": "SOURCE_CODE.md",
-      "gitBlob": "11756100299f11673419a9c5edfe46a7dbac8428",
-      "sha256": "6525746501a432e07e998db7615f0516d37a27cd1a4b3d6049f8c9b56e8a507c"
+      "gitBlob": "ae692558145b6ef2cc840965edc9ccc01d826365",
+      "sha256": "5d4351a9ab1e648f808546248fc906449b5102c07feac15cdb88cda6e38c4092"
     },
     {
       "path": "src/character.mjs",
-      "gitBlob": "1c8b4f68559a73d7c967b8acf945ce54cc610bfc",
-      "sha256": "b7b42ecd8f74bd8d5319f67cbe346391063cac48b90402712bcedb45268e0be1"
+      "gitBlob": "e8e678a9d1a5e9dfbc0475ef51a9a6eefcf63ebd",
+      "sha256": "7008c670dbd42c236d1b236a428ad9f4b028b5a355be5d7d0eebaec165107100"
+    },
+    {
+      "path": "src/cold-start-reference.mjs",
+      "gitBlob": "c6a52075a9b4220a27e68db9bfa586cfa537a4f8",
+      "sha256": "3d66b0687c9cfb372f5b15021eb04ba51f3dd20a292227d7c5eda52492295001"
     },
     {
       "path": "src/constants.mjs",
-      "gitBlob": "366779068e6d8946f4b963fe646092626b9480a4",
-      "sha256": "46dbee2dbf14dd0c347028b13a815dc9f405b50a2e05ab9a0288d0d058cae036"
+      "gitBlob": "a19d44e49e958e400e0112a25172b2cbad4e6804",
+      "sha256": "97c5c185007697ccd81b0564b3c16ded8efc164dbd0787cc8e8c26f156c9713c"
     },
     {
       "path": "src/context-budget.mjs",
@@ -306,8 +202,8 @@
     },
     {
       "path": "src/orchestrator.mjs",
-      "gitBlob": "9b865519e752712447ad47d99340e41454bc5644",
-      "sha256": "d344212550e51c6c984f2690a8540ec2736963d01caf551805b3a14a5395efc4"
+      "gitBlob": "87b7cc7815e66dd3643d2067980fbc99e268c5a2",
+      "sha256": "606d7d96e8d73e401d8984aba6c76dee390bfefefc5c9787600e452dce28cc97"
     },
     {
       "path": "src/providers.mjs",
@@ -326,8 +222,8 @@
     },
     {
       "path": "src/secrets.mjs",
-      "gitBlob": "973a3e1f3836006da0507fed166783587b334aa3",
-      "sha256": "2cc4c208865b75e21848d88105f499d30961f702838093d54560b3dbd1cb749e"
+      "gitBlob": "0f64fd56a6bf2ad3cc5e4c41b3490292218ef53e",
+      "sha256": "62f8ddaffc0840cc88c4587d70640f86f3ac2da4fb83cf188ddd213c4208258c"
     },
     {
       "path": "src/share-import.mjs",
@@ -336,8 +232,8 @@
     },
     {
       "path": "src/updater.mjs",
-      "gitBlob": "7076cdd0c5fb3a78e93f76d8f80c13b0b16b24be",
-      "sha256": "739e5ab76d06aadb24c8a4a405a25fb097bfbb093f3ed83a6380534c74041248"
+      "gitBlob": "81ceb7e49692a8aebabc0c2e9f74a629ae37ee1f",
+      "sha256": "81ef60db10d3555351c443fe8e37350db4a993382799c35f1d1d24fe856c9fb5"
     },
     {
       "path": "src/utils.mjs",
@@ -350,24 +246,14 @@
       "sha256": "8fbabe45549a1ed6e83947667dd6b88e2c1804c8bb742075100ae7abc364cdd4"
     },
     {
-      "path": "Start-LinliLocalMail.ps1",
-      "gitBlob": "5f25de11129a8df02e0fbfd81c2d4ed09cccc210",
-      "sha256": "7775550c3b19d20c41ac3da595f4abe54ca103dee667456175ef43e11ec0dcd7"
-    },
-    {
-      "path": "STATUS.md",
-      "gitBlob": "f2aa34c5e0bf4ada01714064f5fcbd2a72c7dfa3",
-      "sha256": "f39996be901ae6cbd043bc55ee956291551fa8e307df0c447222acec116b8bac"
-    },
-    {
-      "path": "Stop-LinliLocalMail.ps1",
-      "gitBlob": "e6904208deb176a4ff5a8eecef32bbb922271db0",
-      "sha256": "d4d998aae02fe4950be7d20f5ed8d9fea1dfe57eaee939e95c4cf71a3258dcb0"
-    },
-    {
       "path": "tests/installer-core.test.mjs",
-      "gitBlob": "d27fa8a8be74b99ce1469008f5c0ab59a971bcd2",
-      "sha256": "10b33d312a01be7c350f851135b0b20cdef9494e97f6922720c6d8d65c4f9b25"
+      "gitBlob": "cd56332db8d40225e6cd4de14e5536ced8ed61e9",
+      "sha256": "adf1e9057e1c0cd7a5ee38497f3215ea8f61c3787be00fb82898cd3471f32b96"
+    },
+    {
+      "path": "tests/release-automation.test.mjs",
+      "gitBlob": "cb8ccbf1c1897e6d093e6cc9d2994bfaf30dc20d",
+      "sha256": "46f1d42a4d3da4250ff393ffe33927bda2f67cff225849f3952194df60122ca3"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -381,13 +267,13 @@
     },
     {
       "path": "tools/build-installer.ps1",
-      "gitBlob": "00ebe981ca5d3417a8e558bf4720e5a0bee00130",
-      "sha256": "cccc555cbc660e282cbc8e3f04487c388fb99f9a8eca4a20e0e4eaf3925b110f"
+      "gitBlob": "1fb7469842f57f5789aefd72aa39f6812ae1bc25",
+      "sha256": "c829b5e5311bca14322fc6dfcf6c82ae97ae5da627597e6c69cb14a425f01c24"
     },
     {
       "path": "tools/build-launcher-wrapper.ps1",
-      "gitBlob": "17822fa3db18780e59ca10a483cb21c05ae826ec",
-      "sha256": "5ea42a8a438577f54427573591287e6c9a8e430a2b66c1c1eaf2c824dedacd71"
+      "gitBlob": "65e8e4a5a6c58b76097d5266c19f8c3256c50775",
+      "sha256": "defa0d59fb94f22b6d0ec381896ab71774d1feeeb3d546b1b273a39deaa816fb"
     },
     {
       "path": "tools/doctor.mjs",
@@ -421,18 +307,13 @@
     },
     {
       "path": "tools/generate-runtime-manifest.mjs",
-      "gitBlob": "7c3b8404ebfb55b1d3ad43d6ab7d69cfc4a508fb",
-      "sha256": "b4470f1a4985b2517e631d228a44d3b68958980109033875c2619fb3573644c4"
-    },
-    {
-      "path": "tools/git-hook-guard.mjs",
-      "gitBlob": "c8d69adef00e5891c65f8d8eaf71c2cc69ce8534",
-      "sha256": "5cb4f9ab50f0f1b33d65d773e48b49668986d2bef5f4c05957cb01c8b4a5ded2"
+      "gitBlob": "f9f499500a366ba02288199550c33740c1c7b5d7",
+      "sha256": "df6092657ed793536246b584fa1f4986bf05fa8cbeeb6560cfd0f949dabab575"
     },
     {
       "path": "tools/governance-check.mjs",
-      "gitBlob": "3bcc0b95f9cb3f384fcf8e7bd8ece99730734215",
-      "sha256": "686a1180702d194093c86588c6cc899db9f048f9a46489ca75d93749cea2f1b3"
+      "gitBlob": "d2fa20d9d76fe2a88271430a98c45fa89bd3c98d",
+      "sha256": "55798aba0e0f3580c2ced5fb9c7464cc1319e0d0840053f2d2ad08abc493056f"
     },
     {
       "path": "tools/history.mjs",
@@ -446,23 +327,18 @@
     },
     {
       "path": "tools/install.ps1",
-      "gitBlob": "e58932ed63d7f757dd59f67896f157c0bc93fb24",
-      "sha256": "6c7d2f7330426abfc03adde921855c702758ebfc81e90ad513e7dc89da9cf721"
+      "gitBlob": "aeda469a668fcc76cc945569ab07109d5a36ee7f",
+      "sha256": "de2c2d0021c588a7d42d18e15d0319a35f361c1b9a0ce4c13d06ad6126cfbdfe"
     },
     {
       "path": "tools/installer-core.mjs",
-      "gitBlob": "eeac585e1f74f6d3eb777231a5d5cfed3302b5e2",
-      "sha256": "9eaac383dcd322cb60faf70831af85ccb4125d3e14fa73a63dec663462ba78ff"
-    },
-    {
-      "path": "tools/project-status.mjs",
-      "gitBlob": "ab2d63746992b79c3bd97ef9adbfdfe6c216bc48",
-      "sha256": "d61fc9e6dbb2151505c2380be75b6c96a9ef894bf793a9b3be96bed9374ca8a8"
+      "gitBlob": "a54981a1a1038d28b1e292a472091ebaf976edc3",
+      "sha256": "744e9f7a2938fb2af513997412288d8954491957c315651b624c843551d75588"
     },
     {
       "path": "tools/release.mjs",
-      "gitBlob": "0875f0477a6ef7546cd93520066c20309d3eff60",
-      "sha256": "c47c7acfe9068e9b079f327221378ac199449a2aa25725b295dbd553ada196ca"
+      "gitBlob": "c3998aba497ccfcea2ebee92aea436f8e186e303",
+      "sha256": "0e55f8246dab0b8784457e85cef95e849d3146c6c264ce98d63ab790d126f641"
     },
     {
       "path": "tools/repo-guard.mjs",
@@ -473,11 +349,6 @@
       "path": "tools/restore-launcher.ps1",
       "gitBlob": "a8829e811ac2af6ab2b7a5656e7ba6392f9d94c4",
       "sha256": "0aa910cf7d0fd8196a6c5f65c803d4702c86fa98a5f0ad72334746fbbb79d5a6"
-    },
-    {
-      "path": "tools/setup-repository.ps1",
-      "gitBlob": "87c94ed6c15340a8adf27fca83f478506f94b643",
-      "sha256": "eb9c1aa21f62715a9bb067da994c21236e34897fe67e11f09483e2804548dd9b"
     },
     {
       "path": "tools/sign-inno-file.ps1",

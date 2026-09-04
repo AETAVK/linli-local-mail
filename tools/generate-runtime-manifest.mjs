@@ -30,7 +30,9 @@ const root = path.resolve(option("--root", ""));
 const output = path.resolve(option("--output", path.join(root, "runtime-manifest.json")));
 const version = String(option("--version", "")).trim();
 if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) throw new Error(`Runtime root does not exist: ${root}`);
-if (!/^\d+\.\d+\.\d+$/u.test(version)) throw new Error(`Version must use major.minor.patch: ${version}`);
+if (!/^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?$/u.test(version)) {
+  throw new Error(`Version must use major.minor.patch or an approved prerelease form: ${version}`);
+}
 
 const outputRelative = path.relative(root, output).replaceAll("\\", "/");
 const files = walk(root).filter((relative) => relative !== outputRelative).sort();

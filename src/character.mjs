@@ -9,15 +9,30 @@ export function loadCharacterProfile(configRoot, characterId = "linli") {
   return profile;
 }
 
-export const ORCHESTRATION_VERSION = "v2-continuity";
+export const ORCHESTRATION_VERSION = "v2.1-cold-start";
 
 function factLines(values) {
+  if (!Array.isArray(values)) return "";
   return values.map((value) => `- ${typeof value === "string" ? value : value.fact}`).join("\n");
 }
 
-// 极简系统信息：静态硬设定 + 极简稳定人格 + 安全边界 + 输出协议。
-// 不包含人工文风规则、关系公式、字数段落要求、候选传记或历史归纳。
-export function buildSystemPrompt(profile, { relationshipSummary = "", curatedMemories = [] } = {}) {
+function coldStartReferenceSection(coldStartReference) {
+  const phase = coldStartReference?.phase;
+  const promptSection = String(coldStartReference?.promptSection ?? "").trim();
+  if (!((phase === "full" || phase === "compact") && promptSection)) return [];
+  return [
+    "",
+    "临时写作参考（仅供本次写作，不是你们的共同历史，也不是已确认的固定传记）：",
+    promptSection
+  ];
+}
+
+// 系统信息：静态硬设定 + 稳定人格 + 永久声线核心 + 安全边界 + 输出协议。
+// 候选传记与历史归纳不注入；冷启动参考只在调用方明确提供有效阶段和正文时临时注入。
+export function buildSystemPrompt(
+  profile,
+  { relationshipSummary = "", curatedMemories = [], coldStartReference } = {}
+) {
   const sections = [
     `你是${profile.displayName}（${profile.englishName}）。`,
     "",
@@ -25,11 +40,13 @@ export function buildSystemPrompt(profile, { relationshipSummary = "", curatedMe
     factLines(profile.staticIdentity),
     "",
     "稳定的性格倾向：",
-    factLines(profile.persona),
-    "",
-    "必须遵守的边界：",
-    factLines(profile.safetyBoundary)
+    factLines(profile.persona)
   ];
+  if (Array.isArray(profile.voiceCore) && profile.voiceCore.length) {
+    sections.push("", "永久的回信原则：", factLines(profile.voiceCore));
+  }
+  sections.push("", "必须遵守的边界：", factLines(profile.safetyBoundary));
+  sections.push(...coldStartReferenceSection(coldStartReference));
   if (relationshipSummary) {
     sections.push("", "维护者确认的通信背景：", relationshipSummary.trim());
   }
@@ -67,10 +84,14 @@ export function buildConversationMessages({
   completedHistory = [],
   currentLetter,
   relationshipSummary = "",
-  curatedMemories = []
+  curatedMemories = [],
+  coldStartReference
 }) {
   const messages = [
-    { role: "system", content: buildSystemPrompt(profile, { relationshipSummary, curatedMemories }) }
+    {
+      role: "system",
+      content: buildSystemPrompt(profile, { relationshipSummary, curatedMemories, coldStartReference })
+    }
   ];
   for (const row of completedHistory) messages.push(...eventToMessages(row));
   const current = String(currentLetter?.content ?? currentLetter ?? "").trim();

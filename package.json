@@ -1,6 +1,6 @@
 {
   "name": "linli-local-mail-bridge",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "private": true,
   "license": "MPL-2.0",
   "repository": {
@@ -18,9 +18,6 @@
     "frontend:build": "node tools/frontend-source.mjs build",
     "frontend:check": "node tools/frontend-source.mjs check",
     "governance:check": "node tools/governance-check.mjs",
-    "status:generate": "node tools/project-status.mjs generate",
-    "status:check": "node tools/project-status.mjs check",
-    "repository:setup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/setup-repository.ps1",
     "doctor": "node tools/doctor.mjs",
     "backup": "node tools/backup.mjs create",
     "patch:install": "node tools/feapp.mjs install",
