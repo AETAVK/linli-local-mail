@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "4a71a2c8e4a2ab6b4e8042f79a09f52c3bc5179e",
+  "canonicalCommit": "a28b2bb7e72586eda07215226760d09753fdcbec",
   "packageVersion": "0.11.2",
   "files": [
     {
@@ -126,8 +126,8 @@
     },
     {
       "path": ".github/workflows/governance.yml",
-      "gitBlob": "de455fca284023bacb4e38d2819a1c1176e0e85f",
-      "sha256": "e1257fea12a78295c1b3442b0ea64e1247c9f23dd6887f8a905df4e98387f444"
+      "gitBlob": "e6225b824019f370ef003d56a38f8386d0f1d69d",
+      "sha256": "1281a3b6dfe1bdfd0593c30b4d0b722a5fd083e13014caec45ce85a1494b0913"
     },
     {
       "path": ".github/workflows/release.yml",
