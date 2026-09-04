@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "0b83c1870503ae57e3c7350e579421c4d658f207",
+  "canonicalCommit": "4a71a2c8e4a2ab6b4e8042f79a09f52c3bc5179e",
   "packageVersion": "0.11.2",
   "files": [
     {
@@ -81,8 +81,8 @@
     },
     {
       "path": ".github/release-notes/v0.11.2.md",
-      "gitBlob": "2aa0cb52b510bc86bbff60a9bc919769996762d6",
-      "sha256": "c018dfacad285c8a7b504c79bac5c78f92fba39e5511788787d7da2952ae9201"
+      "gitBlob": "15466a872a4b6dd668b1df84934158a7032bee8f",
+      "sha256": "67297fd10a361a80135007bbd88f0e42215787b5cfb63fa054e45dad76c8aeef"
     },
     {
       "path": ".github/release-notes/v0.8.1.md",
@@ -221,13 +221,13 @@
     },
     {
       "path": "PROJECT_STATUS.json",
-      "gitBlob": "c41bbaac6b23c8ea2551810f66bbbbd6f20ba079",
-      "sha256": "0be7dc0a73a67476340cce5eaf05e8a3cec0f3dd585b649024f84ac8ced6c419"
+      "gitBlob": "c554f75f469c7741bec1a55748e6eb0ea878de87",
+      "sha256": "a70215534d2bde19b28da0e2a8fc0a425747b06a1e85e89b40c7beeb3a3f1f25"
     },
     {
       "path": "README.md",
-      "gitBlob": "49933910f479027432e66cc7d63f8a55086ca6d3",
-      "sha256": "d95cb6c183aa329cb67f3837608a880af713a0944e7f4fcd73ff8e826f3e425e"
+      "gitBlob": "354a5b4b47906632ec83e1893639613accc2d373",
+      "sha256": "3892d94f87b49ffd1b491310107596f5ccb87b60c1ac1172cc03b71db68ba183"
     },
     {
       "path": "repo-role.json",
@@ -241,8 +241,8 @@
     },
     {
       "path": "SOURCE_CODE.md",
-      "gitBlob": "3514338e1caf262b2eb2deae9fb729f554b71148",
-      "sha256": "66c8dfc35a4868b17fb8e10b3a4468c37b1165ce93d8388c5dd19042a22aa0cb"
+      "gitBlob": "7d14c0c5881cefe32d005f31e0b27cf31b845b3c",
+      "sha256": "06be4bd2a8e0aa879d6d0f65baafbd0a826f48cb306e3644445d2bcf7bdb2e9e"
     },
     {
       "path": "src/character.mjs",
@@ -356,8 +356,8 @@
     },
     {
       "path": "STATUS.md",
-      "gitBlob": "04447a674c7e976a5b0a9249e8f8015b46e08d8e",
-      "sha256": "16740256a8b998dcc4959dd08185eeee6dbaea258704db4612833a08b0d7f3af"
+      "gitBlob": "4548c18e702556daee649dcb6ed340169f6adcec",
+      "sha256": "973d2dfbff4826dff5bac7078ad18a4e4a2b00e281f8f894976828050137eb26"
     },
     {
       "path": "Stop-LinliLocalMail.ps1",
