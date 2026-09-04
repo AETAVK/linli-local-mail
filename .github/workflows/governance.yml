@@ -34,11 +34,17 @@ jobs:
         shell: pwsh
         run: npm run status:check
 
-      - name: Check projected JavaScript syntax
+      - name: Verify assembled frontend source
+        shell: pwsh
+        run: npm run frontend:check
+
+      - name: Check projected standalone JavaScript syntax
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $files = @(git ls-files "*.js" "*.mjs")
+          # frontend-src contains ordered fragments of one classic script; each
+          # fragment is intentionally not a standalone JavaScript program.
+          $files = @(git ls-files "*.js" "*.mjs" | Where-Object { $_ -notlike "frontend-src/*" })
           foreach ($file in $files) {
             & node --check $file
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $file" }
