@@ -3,9 +3,9 @@
 > 本文件由 `PROJECT_STATUS.json` 确定性生成。请修改机器可读状态源后运行 `npm run status:generate`，不要直接维护本文件。
 
 - 状态日期：2026-09-04
-- 当前源码：`0.11.2`（候选）
-- 当前正式版：`0.10.9`，发布于 2026-09-02
-- 当前候选：`0.11.2`（真实客户端验收通过并已获发布授权，等待平台发布完成）
+- 当前源码：`0.11.2`（已发布）
+- 当前正式版：`0.11.2`，发布于 2026-09-04
+- 当前候选：无
 - 目标客户端：BSide Olivia Lin Test 0.0.9.627
 
 ## 已由真实客户端确认
@@ -31,5 +31,5 @@
 
 ## 正式发布渠道
 
-- [GitHub](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.10.9)
-- [Gitee](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.10.9)
+- [GitHub](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.11.2)
+- [Gitee](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.11.2)

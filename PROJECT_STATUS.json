@@ -8,27 +8,24 @@
   },
   "source": {
     "version": "0.11.2",
-    "state": "candidate"
+    "state": "released"
   },
   "release": {
-    "version": "0.10.9",
+    "version": "0.11.2",
     "published": true,
-    "publishedAt": "2026-09-02",
+    "publishedAt": "2026-09-04",
     "channels": [
       {
         "name": "GitHub",
-        "url": "https://github.com/AETAVK/linli-local-mail/releases/tag/v0.10.9"
+        "url": "https://github.com/AETAVK/linli-local-mail/releases/tag/v0.11.2"
       },
       {
         "name": "Gitee",
-        "url": "https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.10.9"
+        "url": "https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.11.2"
       }
     ]
   },
-  "candidate": {
-    "version": "0.11.2",
-    "state": "真实客户端验收通过并已获发布授权，等待平台发布完成"
-  },
+  "candidate": null,
   "acceptance": {
     "environment": "真实的 BSide Olivia Lin Test 0.0.9.627 Windows 客户端",
     "confirmed": [

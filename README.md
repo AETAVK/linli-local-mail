@@ -7,25 +7,26 @@
 本项目不是官方项目，不隶属于、未经原游戏开发商或发行商认可。仓库和安装包均不包含游戏本体、
 官方启动器、图片、音乐、视频、字体、DLL、历史信件或其他官方资源。使用者必须自行准备原版客户端。
 
-当前源码版本为 `0.11.2`。截至 2026-09-04，本地候选已经通过真实 `.627` 客户端验收并获得发布授权，
-正在等待平台自动化发布完成；在 Release 实际生成前，最近的可下载正式版仍是 2026-09-02 发布的 `0.10.9`。
+当前源码版本为 `0.11.2`，同时也是 2026-09-04 发布到 GitHub 与 Gitee 的当前正式版。发布前的本地候选已在真实
+`.627` Windows 客户端完成本次手动文字录入、右侧待导入队列和全选交互验收。
 
-- [GitHub 0.10.9 正式发布页](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.10.9)
-- [Gitee 0.10.9 正式发布页（国内镜像）](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.10.9)
-- [v0.10.9 更新说明](.github/release-notes/v0.10.9.md)
+- [GitHub 0.11.2 正式发布页](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.11.2)
+- [Gitee 0.11.2 正式发布页（国内镜像）](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.11.2)
 - [v0.11.2 发布说明](.github/release-notes/v0.11.2.md)
 
 ## 0.11.2 新增
 
-0.11.2 源码候选包含手动文字导入：在信箱导入入口录入去信和/或来信正文及日期时间，先保存到
+0.11.2 包含手动文字导入：在信箱导入入口录入去信和/或来信正文及日期时间，先保存到
 SQLite 持久待导入队列，再进行查看、编辑、删除、选择和批量提交。它支持仅去信、仅回信、日期或分钟
 精度，以及明确保留未知来信时间；重复提交幂等，不占每日写信额度，也不创建大模型任务。待导入队列
 已从主导入窗口中拆出，宽屏时作为独立窗口显示在主窗口右侧，窄屏时自动排列到下方。队列操作区新增
 “全选”复选框，可以一次选择或取消全部当前草稿；逐项取消时会显示部分选择状态。
 
-既有 JSON、分享链接和官方历史导入保持原有行为。图片导入目前仍只有占位，OCR 未实现。0.11.2 已生成
-固定自签名的本地候选安装包，并在真实 `.627` 客户端完成安装及本次手动文字导入、右侧队列和全选功能
-验收。修改服务代码后必须重启 Node 本地服务；涉及前端补丁的验收还必须重启游戏。
+既有 JSON、分享链接和官方历史导入保持原有行为。图片导入目前仍只有占位，OCR 未实现。发布前的
+0.11.2 本地候选已在真实 `.627` 客户端完成本次功能验收；正式安装器由 GitHub Actions 从
+`v0.11.2` 标签构建，并将同一批附件同步到 Gitee。正式 CI 安装器没有单独重复实机安装；标签相对
+已验收候选只变更发布文档、投影元数据和 CI 治理，不含运行时代码差异。修改服务代码后必须重启
+Node 本地服务；涉及前端补丁的验收还必须重启游戏。
 
 `0.11.1` 曾于 2026-09-03 生成固定自签名的本地候选安装包，但未安装、未推送、未打标签、未发布，
 随后被 0.11.2 的全选交互取代；该安装包不得作为 0.11.2 的构建或验收证据。0.11.0 的更早候选同样
@@ -44,14 +45,14 @@ SQLite 持久待导入队列，再进行查看、编辑、删除、选择和批�
 
 ## 快速安装与启动
 
-以下步骤适用于最近的正式版 `0.10.9`，不适用于尚未发布的 0.11.2 源码候选。
+以下步骤适用于正式版 `0.11.2`。
 
 ### 1. 下载安装器
 
-- [GitHub：下载 LinliLocalMail-0.10.9-Setup.exe](https://github.com/AETAVK/linli-local-mail/releases/download/v0.10.9/LinliLocalMail-0.10.9-Setup.exe)
-- [Gitee：下载 LinliLocalMail-0.10.9-Setup.exe](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.10.9/LinliLocalMail-0.10.9-Setup.exe)
+- [GitHub：下载 LinliLocalMail-0.11.2-Setup.exe](https://github.com/AETAVK/linli-local-mail/releases/download/v0.11.2/LinliLocalMail-0.11.2-Setup.exe)
+- [Gitee：下载 LinliLocalMail-0.11.2-Setup.exe](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.11.2/LinliLocalMail-0.11.2-Setup.exe)
 
-普通玩家只需下载 `LinliLocalMail-0.10.9-Setup.exe`。Release 页面中的 `.sha256`、`.json` 和
+普通玩家只需下载 `LinliLocalMail-0.11.2-Setup.exe`。Release 页面中的 `.sha256`、`.json` 和
 `.cer` 文件用于完整性校验与签名信息核对；自动生成的 `Source code` 压缩包不是安装程序。
 
 ### 2. 放入游戏根目录
@@ -66,7 +67,7 @@ SQLite 持久待导入队列，再进行查看、编辑、删除、选择和批�
 
 ### 3. 退出游戏并安装
 
-完全退出游戏和官方启动器后，双击 `LinliLocalMail-0.10.9-Setup.exe`。安装器会自动识别当前目录，
+完全退出游戏和官方启动器后，双击 `LinliLocalMail-0.11.2-Setup.exe`。安装器会自动识别当前目录，
 部署内置 Node.js、本地服务、启动包装器和客户端补丁。
 
 安装器采用自签名证书，Windows 可能显示“未知发布者”或 SmartScreen 提示。请先确认文件来自上述
@@ -91,11 +92,12 @@ GitHub/Gitee Release 页面并核对 SHA-256；不要对网盘、群文件或陌
 ## 升级说明
 
 - 从 `0.9.x` 或更早版本升级时，最稳妥的方式是完全退出游戏与官方启动器，再手动运行
-  `0.10.9` 安装器。
+  `0.11.2` 安装器。
 - 新版内置更新器可以在游戏运行时下载并校验更新，但安装交接仍需退出游戏和官方启动器；安装器不会
   为继续安装而强制结束游戏进程。
 - 升级默认保留信件、模型配置、API Key、媒体和备份。
-- `0.10.0` 至 `0.10.8` 没有作为正式 Release 发布；`0.10.9` 汇总了这些开发版本中最终保留的改动。
+- `0.10.0` 至 `0.10.8`、`0.11.0` 和 `0.11.1` 没有作为正式 Release 发布；`0.10.9` 是
+  `0.11.2` 之前的正式版本。
 
 ## 功能范围
 
@@ -123,12 +125,12 @@ API Key 使用当前 Windows 账户的 DPAPI 加密并保存在本机，不写�
 - 本地能力不等同于恢复官方在线曲库、在线写信服务或其他已经停止的官方服务。
 - 尚未完成 Windows 10、Windows 11、ARM64 x64 模拟环境及多种安全软件的完整兼容矩阵测试。
 
-## 校验 0.10.9 正式发布文件
+## 校验 0.11.2 正式发布文件
 
-`LinliLocalMail-0.10.9-Setup.exe` 的 SHA-256：
+`LinliLocalMail-0.11.2-Setup.exe` 的 SHA-256：
 
 ```text
-c295d5d600be78747af06694a96a828ba1fada284a49abc33b1ee18ba0a9c24c
+6cc3600000d47c9c8e57b768c6379a05e09a3d814c2157f48d102d508463c898
 ```
 
 也可以从 Release 页面下载同名 `.sha256` 文件进行核对。若计算结果不同，请勿运行安装器。
@@ -168,8 +170,8 @@ npm run installer:build
 证书。Gitee 只镜像 GitHub 构建的同一批附件，不进行第二次编译或签名。每个标签必须与 `package.json`
 版本一致，并提供 `.github/release-notes/v<版本>.md`。
 
-已发布标签不可移动或重写。发布后的 README 或发布说明勘误可以提交到 `main`，但不得借此改变对应标签的
-源码和二进制内容。0.11.2 已通过验收并获得本次发布授权；标签和 Release 仍以平台实际完成状态为准。
+已发布标签不可移动或重写。发布后的 README、状态文件或发布说明勘误可以提交到 `main`，但不得借此
+改变对应标签的源码和二进制内容。`v0.11.2` 的 GitHub 构建发布和 Gitee 同源附件同步均已完成。
 
 ## 数据与隐私
 
