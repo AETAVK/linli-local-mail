@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "6b0510b38c982e0a605fe12fc385a27ea30c9d4a",
+  "canonicalCommit": "316b7d80bfe86fb24e8fe110da3adf9068c1c35b",
   "packageVersion": "0.11.2",
   "files": [
     {
@@ -81,8 +81,8 @@
     },
     {
       "path": ".github/release-notes/v0.11.2.md",
-      "gitBlob": "df46d74bf4f39ce8ec233d82e9afd60d1a995c11",
-      "sha256": "11d548d99e9cefdd6b92bb078cbe6e4a37422e9ebf231e1cf0da7f6055b9898e"
+      "gitBlob": "885c04fc6b184fd7acd69fbb220df1fae99b93c4",
+      "sha256": "234236d55d03017784f004aa57bd96c24167d64774f6db76b7fc5c49d7dda1cc"
     },
     {
       "path": ".github/release-notes/v0.8.1.md",
@@ -226,8 +226,8 @@
     },
     {
       "path": "README.md",
-      "gitBlob": "bfb2f308f7169625839ae563871569a67890ac12",
-      "sha256": "96670aa7aa1f63cd3c36affc562fa317d336b44c00d2042308183d269febf5c1"
+      "gitBlob": "ee815513191f193b774b84192bbedf85fe6b454d",
+      "sha256": "36a4b2a4e5d72760b61d32a10f8a49c7d12bebe7e89ca19a87de763ed11054b0"
     },
     {
       "path": "repo-role.json",
