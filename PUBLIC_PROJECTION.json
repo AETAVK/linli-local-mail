@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "69be99055b40e4c173e5a951efe9523eda294589",
+  "canonicalCommit": "f784ec20e280b73deb13588ca6dc77b236e71e84",
   "packageVersion": "0.11.3",
   "releaseVersion": "0.11.3",
   "files": [
@@ -104,6 +104,11 @@
       "path": "native/launcher-wrapper.rs",
       "gitBlob": "cdd1f7b87f2b842f16e8260436decf56baaa8337",
       "sha256": "6fa1888a4f52e27f993a9cadfd5681633c2561b7d8e5704061d7f16e9b0ea839"
+    },
+    {
+      "path": "native/windows-helper.rs",
+      "gitBlob": "85c7a2b1fb1cb71f7db5fbdad0e680afd1edfd47",
+      "sha256": "87451166167136e22ac2d35e4d9da0e39b441783fcd21db7d4b185b6a26688bb"
     },
     {
       "path": "NOTICE.md",
