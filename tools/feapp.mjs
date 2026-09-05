@@ -20,6 +20,28 @@ const LOCAL_SCRIPT_ENTRY = "assets/local-mail-poc.js";
 const WEBPLAYER_MAIN_ENTRY = "assets/main-95684bf7.js";
 
 const PATCH_RULES = [
+  // Restore the existing user-song component with a local catalog. Offline
+  // catalog selection must prioritize this tab even when no PGC is downloaded.
+  [
+    'async function dm(e,t){return Te.get("/searchUserSongs",{params:e,...t}).then(s=>({...s.data,list:(s.data.list??[]).map(i=>{const l=i;return{...l,id:l.userSongId}})}))}',
+    'async function dm(e,t){return window.__LOCAL_MUSIC_API__.searchUserSongs(e,t)}'
+  ],
+  ['o(w)?Y("",!0):(r(),F(on,{key:0,index:so,class:"h-fit"}', '!1?Y("",!0):(r(),F(on,{key:0,index:so,class:"h-fit"}'],
+  ['!o(w)||o(D).length>0?(r(),_("section",H3,', '!0?(r(),_("section",H3,'],
+  [
+    'Ce=j(()=>w.value?oe.getSongsByStyle(R.value).filter(q=>f.isDownloaded(q.id)):Q.value?te.value:N.value)',
+    'Ce=j(()=>Q.value?te.value:w.value?oe.getSongsByStyle(R.value).filter(q=>f.isDownloaded(q.id)):N.value)'
+  ],
+  [
+    'q.filter(Be=>!f.isDownloaded(Be.id)&&!f.isDownloading(Be.id)).forEach(Be=>f.startDownload(Be))',
+    'w.value?q.filter(Be=>Be.localCustomSong&&Be.localAvailable).forEach(Be=>f.downloadMap.set(Be.id,{state:"completed",progress:100})):q.filter(Be=>!w.value&&!f.isDownloaded(Be.id)&&!f.isDownloading(Be.id)).forEach(Be=>f.startDownload(Be))'
+  ],
+  ['Bo=q=>{f.startDownload(q)}', 'Bo=q=>{w.value||f.startDownload(q)}'],
+  ['Ma=async q=>{await cm({userSongId:q.id})', 'Ma=async q=>{if(w.value)return;await cm({userSongId:q.id})'],
+  [
+    'Lt().setOnJobCompleted(()=>{dt()});',
+    'Lt().setOnJobCompleted(dt);He(()=>{window.addEventListener("linli-custom-songs-changed",dt);window.__LOCAL_MUSIC_API__.mountUserSongsTools()}),jt(()=>window.removeEventListener("linli-custom-songs-changed",dt));'
+  ],
   ["Te.post(\"/letter/send\"", "window.__LOCAL_MAIL_HTTP__.post(\"/letter/send\""],
   ["Te.get(\"/letter/list\"", "window.__LOCAL_MAIL_HTTP__.get(\"/letter/list\""],
   ["Te.get(\"/letter/detail\"", "window.__LOCAL_MAIL_HTTP__.get(\"/letter/detail\""],

@@ -21,6 +21,7 @@ import { extractSharedLetters } from "./src/share-import.mjs";
 import { normalizeHttpUrl, readJsonBody, safeErrorMessage } from "./src/utils.mjs";
 import { UpdateManager } from "./src/updater.mjs";
 import { VideoAssetStore, parseByteRange } from "./src/video-assets.mjs";
+import { CustomSongCatalog } from "./src/custom-songs.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 // LINLI_MAIL_PORT / LINLI_MAIL_DB_PATH 仅用于并行冒烟测试；日常启动保持默认 27149 与项目数据库。
@@ -90,6 +91,11 @@ async function readImportDraftBody(req, maximumBytes) {
 }
 
 const database = new MailDatabase(DB_PATH, LEGACY_JSON_PATH);
+const customSongs = new CustomSongCatalog({
+  db: database.db, baseUrl: `http://${HOST}:${PORT}`,
+  mediaRoot: process.env.LINLI_CUSTOM_SONG_ROOT,
+  logRoot: process.env.LINLI_CUSTOM_SONG_LOG_ROOT
+});
 const secretStore = new SecretStore(SECRETS_PATH);
 const worker = new GenerationWorker({ database, configRoot: CONFIG_ROOT, secretStore });
 const videoStore = new VideoAssetStore(MEDIA_ROOT);
@@ -454,6 +460,31 @@ const server = http.createServer(async (req, res) => {
       serveVideoAsset(req, res, asset);
       return;
     }
+    const customMedia = url.pathname.match(/^\/custom-song-media\/([a-f0-9]{48})\/([^/]+)$/);
+    if (customMedia && (req.method === "GET" || req.method === "HEAD")) {
+      const media = await customSongs.media(customMedia[1], decodeURIComponent(customMedia[2]));
+      const range = parseByteRange(req.headers.range, media.size);
+      if (range?.invalid) {
+        sendJson(req, res, 416, { message: "Invalid video range" }, { "Content-Range": `bytes */${media.size}` });
+        return;
+      }
+      const start = range?.start ?? 0;
+      const end = range?.end ?? media.size - 1;
+      setCommonHeaders(req, res);
+      res.writeHead(range ? 206 : 200, {
+        "Content-Type": "video/mp4", "Accept-Ranges": "bytes",
+        "Content-Length": end - start + 1,
+        ...(range ? { "Content-Range": `bytes ${start}-${end}/${media.size}` } : {})
+      });
+      if (req.method === "HEAD") res.end();
+      else {
+        const stream = fs.createReadStream(media.path, { start, end });
+        stream.on("error", () => res.destroy());
+        res.on("close", () => stream.destroy());
+        stream.pipe(res);
+      }
+      return;
+    }
     if (isPrivatePath(url.pathname) && !hasValidSession(req)) {
       fail(req, res, 401, "Missing or invalid local session");
       return;
@@ -499,6 +530,22 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       fail(req, res, 404, `No local route for ${req.method} ${url.pathname}`);
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/custom-songs") {
+      ok(req, res, await customSongs.list(Object.fromEntries(url.searchParams)));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/custom-songs/search") {
+      ok(req, res, await customSongs.search(await readJsonBody(req)));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/custom-songs/scan") {
+      ok(req, res, await customSongs.rebuild(await readJsonBody(req)));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/custom-songs/update") {
+      ok(req, res, await customSongs.update(await readJsonBody(req)));
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/music-library") {

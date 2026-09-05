@@ -230,6 +230,8 @@ test("workflows enforce one body, immutable GitHub assets, and GitHub-sourced Gi
   assert.doesNotMatch(releaseWorkflow, /source_ref/u);
   assert.doesNotMatch(releaseWorkflow, /ephemeral self-signed|临时自签名.*exit 0/iu);
   assert.ok(nativeHelperBuild >= 0 && nativeHelperBuild < finalCandidateTests);
+  assert.match(releaseWorkflow, /name: Build installer and runtime allowlist\s+shell: pwsh\s+(?:#[^\n]*\n\s*)?run: \.\/tools\/build-installer\.ps1/u);
+  assert.doesNotMatch(releaseWorkflow, /run: npm run installer:build/u);
   assert.match(releaseWorkflow, /release-contract\.mjs prepare/u);
   assert.match(releaseWorkflow, /release-body\.md/u);
   assert.match(releaseWorkflow, /release-receipt\.json/u);

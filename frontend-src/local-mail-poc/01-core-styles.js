@@ -314,6 +314,8 @@
     addToPlaylist: localMusicAdd,
     removeFromPlaylist: localMusicRemove,
     searchPlaylist: localMusicSearch,
+    searchUserSongs: localCustomSongSearch,
+    mountUserSongsTools: mountCustomSongTools,
     order: localMusicOrder
   });
 

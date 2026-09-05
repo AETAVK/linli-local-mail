@@ -7,11 +7,11 @@
 本项目不是官方项目，不隶属于、未经原游戏开发商或发行商认可。仓库和安装包均不包含游戏本体、
 官方启动器、图片、音乐、视频、字体、DLL、历史信件或其他官方资源。使用者必须自行准备原版客户端。
 
-当前源码版本为 `0.11.3`，当前稳定版为 `0.11.3`。普通玩家可使用下方正式版安装器。
+当前稳定版为 `0.11.4`。普通玩家可使用下方正式版安装器。
 
-- [GitHub 0.11.3 正式发布页](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.11.3)
-- [Gitee 0.11.3 正式发布页（国内镜像）](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.11.3)
-- [v0.11.3 发布说明](.github/release-notes/v0.11.3.md)
+- [GitHub 0.11.4 正式发布页](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.11.4)
+- [Gitee 0.11.4 正式发布页（国内镜像）](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.11.4)
+- [v0.11.4 发布说明](.github/release-notes/v0.11.4.md)
 
 ## 系统要求
 
@@ -26,14 +26,14 @@
 
 ## 快速安装与启动
 
-以下步骤适用于正式版 `0.11.3`。
+以下步骤适用于正式版 `0.11.4`。
 
 ### 1. 下载安装器
 
-- [GitHub：下载 LinliLocalMail-0.11.3-Setup.exe](https://github.com/AETAVK/linli-local-mail/releases/download/v0.11.3/LinliLocalMail-0.11.3-Setup.exe)
-- [Gitee：下载 LinliLocalMail-0.11.3-Setup.exe](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.11.3/LinliLocalMail-0.11.3-Setup.exe)
+- [GitHub：下载 LinliLocalMail-0.11.4-Setup.exe](https://github.com/AETAVK/linli-local-mail/releases/download/v0.11.4/LinliLocalMail-0.11.4-Setup.exe)
+- [Gitee：下载 LinliLocalMail-0.11.4-Setup.exe](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.11.4/LinliLocalMail-0.11.4-Setup.exe)
 
-普通玩家只需下载 `LinliLocalMail-0.11.3-Setup.exe`。Release 页面中的 `.sha256`、`.json` 和
+普通玩家只需下载 `LinliLocalMail-0.11.4-Setup.exe`。Release 页面中的 `.sha256`、`.json` 和
 `.cer` 文件用于完整性校验与签名信息核对；自动生成的 `Source code` 压缩包不是安装程序。
 
 ### 2. 放入游戏根目录
@@ -48,7 +48,7 @@
 
 ### 3. 退出游戏并安装
 
-完全退出游戏和官方启动器后，双击 `LinliLocalMail-0.11.3-Setup.exe`。安装器会自动识别当前目录，
+完全退出游戏和官方启动器后，双击 `LinliLocalMail-0.11.4-Setup.exe`。安装器会自动识别当前目录，
 部署内置 Node.js、本地服务、启动包装器和客户端补丁。
 
 安装器采用自签名证书，Windows 可能显示“未知发布者”或 SmartScreen 提示。请先确认文件来自上述
@@ -73,7 +73,7 @@ GitHub/Gitee Release 页面并核对 SHA-256；不要对网盘、群文件或陌
 ## 升级说明
 
 - 从 `0.9.x` 或更早版本升级时，最稳妥的方式是完全退出游戏与官方启动器，再手动运行
-  `0.11.3` 安装器。
+  `0.11.4` 安装器。
 - 新版内置更新器可以在游戏运行时下载并校验更新，但安装交接仍需退出游戏和官方启动器；安装器不会
   为继续安装而强制结束游戏进程。
 - 升级默认保留信件、模型配置、API Key、媒体和备份。
@@ -90,6 +90,7 @@ GitHub/Gitee Release 页面并核对 SHA-256；不要对网盘、群文件或陌
 - 只读检测本机官方客户端登录会话，并在用户确认后尝试恢复本人官方历史信件。
 - 本地保存、校验并使用 Range 请求播放历史中已有的视频回信。
 - 为 `.627` 客户端恢复本地信箱入口、左上“曲库/信箱”页签和本地模型设置。
+- 从本机已下载的定制演奏视频建立“我的上传”索引，支持重新扫描、曲名编辑、视频预览和时段校正。
 - 隐藏离线客户端中的 UID 水印，并在设置页提供补丁版本与更新检查入口。
 - 提供事务式 Inno Setup 安装、修复、升级和卸载流程，安装包内置 Node.js。
 - 安装后的常规启动、停服、API Key 保护和安装器进程检查不依赖 PowerShell。
@@ -105,6 +106,7 @@ API Key 使用当前 Windows 账户的 DPAPI 加密并保存在本机，不写�
 - 分享链接导入与官方历史恢复依赖相应官方接口继续可访问。
 - 自定义歌单、批量操作以及原生 Gizmo/桌面气泡组件尚未完成；不稳定入口已隐藏或标注为未修复。
 - 本地能力不等同于恢复官方在线曲库、在线写信服务或其他已经停止的官方服务。
+- 定制演奏索引只能恢复本机现有文件；没有日志时使用目录名，未知时段需手动校正，缺失时段会复用现有视频。该功能不恢复官方上传或生成服务。
 - 林离人设与首封参考是依据可见资料和用户保存的通信样本独立重建的社区实现，不是官方隐藏提示词；
   回信质量仍会随模型、参数和来信内容变化。当前仅有少量个人官方信件可用于探索性对比，不能证明
   对所有玩家、模型或话题都达到官方文风。
