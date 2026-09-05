@@ -18,8 +18,19 @@ const INDEX_ENTRY = "index.html";
 const MAIN_ENTRY = "assets/main-31595bd3.js";
 const LOCAL_SCRIPT_ENTRY = "assets/local-mail-poc.js";
 const WEBPLAYER_MAIN_ENTRY = "assets/main-95684bf7.js";
+const MUSIC_BRIDGE_EXTRAS = 'getQueueElement:()=>Ut.value&&Ut.value.$el,getQueue:()=>K.value,notify:(q,me)=>window.__LINLI_NATIVE_NOTIFY__(q,me),stopRemoved: q=>{const me=h.currentSong;if(h.playSource==="playlist"&&me&&q.some(Be=>Number(Be.itemType)===Number(me.itemType)&&String(Be.itemId)===String(me.itemId)))h.stopCurrentSong()},';
 
 const PATCH_RULES = [
+  // Stable row identity survives production builds without Vue dev metadata.
+  ['onDblclick:L,onContextmenu:Oe(he,["prevent"])', 'onDblclick:L,"data-linli-song-id":a.song.id,onContextmenu:Oe(he,["prevent"])'],
+  ['loading:Nl}),Bn=', 'loading:Nl}),lmNativeNotify=window.__LINLI_NATIVE_NOTIFY__=(q,me)=>ze({message:String(q),type:me==="error"?"error":"success",duration:3000}),Bn='],
+  // One component-owned bridge: catalog data remains native truth and playlist
+  // writes must replace the reactive queue, not just persist HTTP rows. Reset
+  // the native pager first so an in-flight fetch cannot append stale results.
+  [
+    '{list:K,fetchList:W,initInfiniteScroll:ue,addItem:re,deleteItem:ye,total:Ee}=Mt(Us,{pageSize:200}),ee=q=>',
+    '{list:K,fetchList:W,initInfiniteScroll:ue,addItem:re,deleteItem:ye,total:Ee,handleReset:lmQueueReset}=Mt(Us,{pageSize:200}),lmMusicBridge={getView:()=>({sourceType:Fe.value,songs:Ce.value,viewKey:String(J.value)}),getCatalog:()=>oe.songs.map(q=>({sourceType:2,itemId:String(q.id),song:q,available:f.isDownloaded(q.id)})),switchView:async q=>{if(q==="我的上传"){await M(so);return}const me=D.value.find(Be=>Be.displayName===q||String(Be.type)===q);if(!me)throw new Error("曲库分类不存在");await M(me.type)},replaceQueue:async q=>{if(window.__LINLI_MUSIC_BRIDGE__!==lmMusicBridge)throw new Error("曲库页面已关闭");lmQueueReset();K.value=q;Ee.value=q.length;await qe();await Po()}},lmMusicLifecycle=(He(()=>{window.__LINLI_MUSIC_BRIDGE__=lmMusicBridge;window.dispatchEvent(new Event("linli-music-view-ready"))}),jt(()=>{if(window.__LINLI_MUSIC_BRIDGE__===lmMusicBridge)delete window.__LINLI_MUSIC_BRIDGE__})),ee=q=>'
+  ],
   // Restore the existing user-song component with a local catalog. Offline
   // catalog selection must prioritize this tab even when no PGC is downloaded.
   [
@@ -146,6 +157,11 @@ const PATCH_RULES = [
   ["J=async()=>{Q(),await C(),await H(),L=setInterval(H,U)}", "J=async()=>{if(Ie().isOfflineMode)return;Q(),await C(),await H(),L=setInterval(H,U)}"]
 ];
 
+// Keep the exact previous bridge for upgrades from installed 0.11.5 archives.
+const musicBridgeRule = PATCH_RULES.find(([before]) => before.startsWith('{list:K,fetchList:W'));
+const previousMusicBridgeAfter = musicBridgeRule[1];
+musicBridgeRule[1] = previousMusicBridgeAfter.replace('lmMusicBridge={', 'lmMusicBridge={' + MUSIC_BRIDGE_EXTRAS);
+
 // .627 webplayer.dat 的 WatermarkOverlay 会把 query uid 绘制到全屏 canvas。
 // 组件定义是归档内唯一稳定锚点；保留 props 形状但让 setup 返回空渲染函数，
 // 这样不会依赖 CSS，也不会误伤 webplayer 的其他浮层。该规则必须独立于
@@ -171,6 +187,7 @@ const RETIRED_PATCH_RULES = [
 
 // 兼容更早版本只登记过的 hide-write 变体。
 const LEGACY_PATCH_AFTERS = new Map([
+  [musicBridgeRule[0], [previousMusicBridgeAfter]],
   ["\"hide-write\":o(p)||!o(N3)", ["\"hide-write\":o(p)"]]
 ]);
 

@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ALLOWED_API_STYLES, ALLOWED_BROWSER_ORIGINS, API_KEY_MASK, HOST, PORT as PORT_FROM_CONSTANTS, SERVICE_VERSION } from "./src/constants.mjs";
-import { MailDatabase } from "./src/database.mjs";
+import { MailDatabase, MUSIC_DESKTOP_PLAYLIST_ID } from "./src/database.mjs";
 import { importFileEntries } from "./src/file-import.mjs";
 import {
   cacheProviderModelCapacities,
@@ -576,10 +576,14 @@ const server = http.createServer(async (req, res) => {
       ok(req, res, database.createMusicPlaylist(await readJsonBody(req)));
       return;
     }
-    const musicPlaylistMatch = url.pathname.match(/^\/api\/music-library\/playlists\/([^/]+)(?:\/(items|remove))?$/);
+    const musicPlaylistMatch = url.pathname.match(/^\/api\/music-library\/playlists\/([^/]+)(?:\/(items|remove|rename|delete|order))?$/);
     if (musicPlaylistMatch) {
       const playlistId = decodeURIComponent(musicPlaylistMatch[1]);
       const action = musicPlaylistMatch[2] || "";
+      if (playlistId === MUSIC_DESKTOP_PLAYLIST_ID) {
+        fail(req, res, 409, "系统桌面歌单不能作为自定义歌单操作");
+        return;
+      }
       if (req.method === "GET" && !action) {
         ok(req, res, database.listMusicPlaylistItems(playlistId));
         return;
@@ -590,6 +594,19 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === "POST" && action === "remove") {
         ok(req, res, database.removeMusicPlaylistItems(playlistId, await readJsonBody(req)));
+        return;
+      }
+      if (req.method === "POST" && action === "rename") {
+        ok(req, res, { playlist: database.renameMusicPlaylist(playlistId, await readJsonBody(req)) });
+        return;
+      }
+      if (req.method === "POST" && action === "delete") {
+        await readJsonBody(req);
+        ok(req, res, database.deleteMusicPlaylist(playlistId));
+        return;
+      }
+      if (req.method === "POST" && action === "order") {
+        ok(req, res, database.reorderMusicPlaylistItemsExact(playlistId, await readJsonBody(req)));
         return;
       }
     }

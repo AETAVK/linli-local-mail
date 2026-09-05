@@ -1,9 +1,9 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "3e65bc8e01cc8e2bff355a0cf70bed8da5d08e90",
-  "packageVersion": "0.11.4",
-  "releaseVersion": "0.11.4",
+  "canonicalCommit": "696f48d15043e7f51315387e6953cb340d9806fc",
+  "packageVersion": "0.11.6",
+  "releaseVersion": "0.11.6",
   "files": [
     {
       "path": ".gitattributes",
@@ -11,9 +11,9 @@
       "sha256": "4ee8456f0a011f74e2e8fc1cf155849f19756f076c3851d647f02d974851f66f"
     },
     {
-      "path": ".github/release-notes/v0.11.4.md",
-      "gitBlob": "0341a7afb9849d60acd39ed75ee3f89b0eb1e0f1",
-      "sha256": "11d163c53c3ee19ba1fe8768b495c74bef35b75b4b7a65c961beb0ef28945ff8"
+      "path": ".github/release-notes/v0.11.6.md",
+      "gitBlob": "f21b5591380727611b9e80315701d4377dd773b4",
+      "sha256": "f5211a5d0aea09d9cca21c7b5b7cd08263b17e0b728673388fef3c223ee4ceb7"
     },
     {
       "path": ".github/scripts/publish-gitee-release.mjs",
@@ -52,8 +52,8 @@
     },
     {
       "path": "frontend-src/local-mail-poc/01-core-styles.js",
-      "gitBlob": "5da2ff684e1a648d8bcc5395b940955d55da7bc4",
-      "sha256": "544233259ccd8135462818736efbb0d3bbcc8d9c1dfa433ea4be1c9f296b9746"
+      "gitBlob": "699647772e5c41c6ad0fce315782771ea70c0952",
+      "sha256": "f5fd95ed7613741d8c37f8cf5a5e7c460b88a5af27a25df357a56463a945b8cb"
     },
     {
       "path": "frontend-src/local-mail-poc/02-mail-import-updater.js",
@@ -62,28 +62,28 @@
     },
     {
       "path": "frontend-src/local-mail-poc/03-settings.js",
-      "gitBlob": "64a4367ce43a459d821645fa5e720a84e39cc13d",
-      "sha256": "74b1055fec95e4c88c9ebe2c3adca395bd0c40824fd1cb8a02bf0f26eb5e51cd"
+      "gitBlob": "8ad7c286b72c04fac8b71de823e998169ceb9119",
+      "sha256": "b5efb46a666fe9a90a4159fb9117afa56d0d6b54630446aa6f0509ab1a73589e"
     },
     {
       "path": "frontend-src/local-mail-poc/04-vue-pinia-navigation.js",
-      "gitBlob": "0c8245805dcefaffa56c19ba8f64705183240f25",
-      "sha256": "9a2aa76dd3230cce97e737adc3e8cc913a0adffc70973a6c35f4050fb3706d53"
+      "gitBlob": "b39338ca1de2e2c93fb4167e538ed317e8481829",
+      "sha256": "0bf6d9f95ad688138f576d49ee62fd1cf4ef7ed98c649cadda7f5ef071975e54"
     },
     {
       "path": "frontend-src/local-mail-poc/05-music.js",
-      "gitBlob": "a20f0c707dc31ec4fd6b102ccf8d356ec1e0be22",
-      "sha256": "2b5b339b52774d2565cd4e9e968401bbd4d183c637f0c1f3ea695098a8e09de7"
+      "gitBlob": "6f5958094e79bae5ae8b773489854baaf6d78d69",
+      "sha256": "6e7706f0fae7cc9e77af06092c48ab226d617dcb47f47b593741b3c041ccbe31"
     },
     {
       "path": "frontend-src/local-mail-poc/06-bootstrap.js",
-      "gitBlob": "abd7d0e42f2f1160fabe651eb7f674c59ae85474",
-      "sha256": "ff0d67f29ddebd59a89de025da59e58efa185c4cdfab89b51ff59b17cc4c909f"
+      "gitBlob": "bdaa60bcba742dad7532484874761092f8fba082",
+      "sha256": "c16c1be61cf098f7ad1887bdf645f43da6f0b2fc476006aeff9b965ef20bae01"
     },
     {
       "path": "frontend/local-mail-poc.js",
-      "gitBlob": "2c23ca054c0578518e44171b869f85b386775e48",
-      "sha256": "e00d6c791c02b6942d4b428b037ee7005d33d4f9f5e2ef2b8dac0186975ef97c"
+      "gitBlob": "a0115097a4ce1a9d9cf5aa0ef5ee7ea1ba52101f",
+      "sha256": "740e0cb31d55077a246c20b042503c99027276b47e3edaa578af657860283b4e"
     },
     {
       "path": "Install.cmd",
@@ -117,13 +117,13 @@
     },
     {
       "path": "package.json",
-      "gitBlob": "388d4f9ae3bdb1b6dfe56704cc29124543495cdd",
-      "sha256": "fd44f2bbc1692ac9b6e7363b27639bcf4c6635c7a93b2c005f0179aa61edda4a"
+      "gitBlob": "6e77202cc20d57bc0c62ca6bbb8b48bb9cc5f38e",
+      "sha256": "9a9b68724083cf2eb9d67d288e883f7f70f25c85e09f7adfd7e26dac61b27d7f"
     },
     {
       "path": "README.md",
-      "gitBlob": "c5dce1e7358b3b982fb7b9889dffc228010a4550",
-      "sha256": "218993828a2da8e3187542c332d8e647975b766076acbf91629f1742741fcb75"
+      "gitBlob": "71cba1d002619be385bd896b5f849c449ddd64e1",
+      "sha256": "442d6796a9dd747b23e1e9f33171344f942d21d5e9c7aeb0ca35877160bf2050"
     },
     {
       "path": "repo-role.json",
@@ -132,13 +132,13 @@
     },
     {
       "path": "server.mjs",
-      "gitBlob": "e8afd2844caef1c86289fbb482a1619c947a5a03",
-      "sha256": "6b75065778f4710907e6b9db297486b2c460fe99f2231bbcce17f0d9c554d133"
+      "gitBlob": "aa07e94a0ba0df9f33bc8dfd3fdc2a96d2bc579d",
+      "sha256": "0b789a30d0ddd15f81829b821069b479575616cb17ba3ecfb7ce0475bcb216d4"
     },
     {
       "path": "SOURCE_CODE.md",
-      "gitBlob": "f904fbf9a17b3a61f14cc8012fb318e467ea4210",
-      "sha256": "a306327eeb0687821dcc8b1a70915f9bb3f8dd34d0e15692573aa5597e5051ab"
+      "gitBlob": "1b0621a1951b3d3cf0bf55b1999a3e2fdaff3b20",
+      "sha256": "1c042f122673f5fff4e13cf25cdd83e2c619dee85852efeb72d1c5226d3bb0b2"
     },
     {
       "path": "src/character.mjs",
@@ -152,8 +152,8 @@
     },
     {
       "path": "src/constants.mjs",
-      "gitBlob": "9d38204bc315d4f01679291737f2de9ae077d792",
-      "sha256": "3f7c04d49890c405acd477f7137de42f189844156b5d9587a50a8b01699a3e14"
+      "gitBlob": "f6c7f86a9e94042bd8c31dbc45a926bf4910028f",
+      "sha256": "2bb6260f219e1e72b264a00d9a736d28584dcbba74db5847deb4e1deabbe4653"
     },
     {
       "path": "src/context-budget.mjs",
@@ -182,8 +182,8 @@
     },
     {
       "path": "src/database/music.mjs",
-      "gitBlob": "db5a45c7f68792347d6f193533a0460072c9cb9b",
-      "sha256": "7cc957871e0008f010cfb1f6adb17d9f88d691f491a25f0c87c1e7d1d206028d"
+      "gitBlob": "590991c4d4a155c130b91997781f4e2bd12fb1db",
+      "sha256": "fccaeb7ee132cc60a81a20bc857dd9c230cbaff40588e28354aadebc6ecef706"
     },
     {
       "path": "src/file-import.mjs",
@@ -312,8 +312,8 @@
     },
     {
       "path": "tools/feapp.mjs",
-      "gitBlob": "9726a815c8c905aa7168eb1b0f04cf4021ca224b",
-      "sha256": "72e1ce07034412fe9c6d5d7e6d73e314f1868d4358674cd4d4eafb233f7961b1"
+      "gitBlob": "97c8490b195311fb389897105ed0c0b038c34905",
+      "sha256": "2eed79c1d786cd6240a093a21af6312104421cbef7885cc3e5cc2ecb72adc849"
     },
     {
       "path": "tools/frontend-source.mjs",
