@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "6fd9b638811e87a20dcd73ad79968908b99b25b7",
+  "canonicalCommit": "a81f105ccae947608d4734cdc0162c6cd8e3c9f4",
   "packageVersion": "0.11.6",
   "releaseVersion": "0.11.6",
   "files": [
@@ -122,8 +122,8 @@
     },
     {
       "path": "README.md",
-      "gitBlob": "21d8db9b6e6778e28e06514c8761727f5f97f335",
-      "sha256": "c09bd0b06b6cf9c60ca9c2f57e9e50fced4bfd1624e19a9b52d8a165d20e4d53"
+      "gitBlob": "927ea8f5da17e502a447b412168d5fad73774fcc",
+      "sha256": "77c98e22966d814881f8be9371ce1cfc75ffff5ac6c12a08280630af509f8eae"
     },
     {
       "path": "repo-role.json",
