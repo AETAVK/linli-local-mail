@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "696f48d15043e7f51315387e6953cb340d9806fc",
+  "canonicalCommit": "6fd9b638811e87a20dcd73ad79968908b99b25b7",
   "packageVersion": "0.11.6",
   "releaseVersion": "0.11.6",
   "files": [
@@ -122,8 +122,8 @@
     },
     {
       "path": "README.md",
-      "gitBlob": "71cba1d002619be385bd896b5f849c449ddd64e1",
-      "sha256": "442d6796a9dd747b23e1e9f33171344f942d21d5e9c7aeb0ca35877160bf2050"
+      "gitBlob": "21d8db9b6e6778e28e06514c8761727f5f97f335",
+      "sha256": "c09bd0b06b6cf9c60ca9c2f57e9e50fced4bfd1624e19a9b52d8a165d20e4d53"
     },
     {
       "path": "repo-role.json",
@@ -327,8 +327,8 @@
     },
     {
       "path": "tools/governance-check.mjs",
-      "gitBlob": "d2fa20d9d76fe2a88271430a98c45fa89bd3c98d",
-      "sha256": "55798aba0e0f3580c2ced5fb9c7464cc1319e0d0840053f2d2ad08abc493056f"
+      "gitBlob": "1776500b58aba96aaeac2348c8c873b6faec71ae",
+      "sha256": "9314b3ce406e9fb9695c171933ed7288a33f3ae7cdf57b18e9508acc8cdb1657"
     },
     {
       "path": "tools/history.mjs",
