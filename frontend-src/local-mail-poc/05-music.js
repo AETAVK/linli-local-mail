@@ -1,4 +1,206 @@
 
+  var customSongsState = { busy: false, data: null, error: "", page: 0, selected: null };
+
+  function officialSongStoragePath() {
+    var store = findOfficialSettingsStore();
+    var candidates = officialWidgetCandidates(store);
+    for (var index = 0; index < candidates.length; index += 1) {
+      var value = candidates[index].songStoragePath;
+      if (value && typeof value === "object") value = value.value;
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return undefined;
+  }
+
+  async function localCustomSongSearch(params, config) {
+    try {
+      var data = await callApi("/api/custom-songs/search", {
+        method: "POST", body: Object.assign({}, params || {}, { detectedRoot: officialSongStoragePath() }),
+        signal: config && config.signal
+      });
+      customSongsState.data = data;
+      customSongsState.error = "";
+      return data;
+    } catch (error) {
+      customSongsState.error = error.message || String(error);
+      throw error;
+    } finally { mountCustomSongTools(); }
+  }
+
+  function mountCustomSongTools() {
+    var route = window.location.hash || window.location.pathname;
+    if (!/\/studio\/?(?:[?#].*)?$/.test(route.replace(/^#/, ""))) return;
+    var main = document.querySelector("#app main") || document.querySelector("main");
+    if (!main) return;
+    installStyles();
+    var toolbar = document.getElementById("local-mail-custom-song-tools");
+    if (!toolbar) {
+      toolbar = document.createElement("div");
+      toolbar.id = "local-mail-custom-song-tools";
+      toolbar.className = "lm-import-row";
+      toolbar.style.cssText = "padding:8px 16px;gap:12px;flex-wrap:wrap";
+      toolbar.innerHTML = '<button type="button" class="lm-button lm-button-small" data-custom-manage>管理本地演奏</button><span class="lm-modal-status" role="status"></span>';
+      main.appendChild(toolbar);
+      toolbar.querySelector("[data-custom-manage]").onclick = openCustomSongManager;
+    }
+    var message = customSongsState.error || (customSongsState.data
+      ? "本地定制演奏 " + customSongsState.data.total + " 首" + (customSongsState.data.missingPeriods ? " · 部分时段复用现有视频，可在管理中校正" : "")
+      : "“我的上传”可读取已下载的定制演奏");
+    setLocalElementText(toolbar.querySelector("[role='status']"), message);
+  }
+
+  function customSongsChanged() {
+    window.dispatchEvent(new Event("linli-custom-songs-changed"));
+  }
+
+  async function openCustomSongManager() {
+    installStyles();
+    var modal = document.getElementById("local-mail-custom-song-modal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "local-mail-custom-song-modal";
+      modal.className = "lm-modal-backdrop";
+      modal.innerHTML = '<section class="lm-modal" role="dialog" aria-modal="true" aria-labelledby="local-custom-song-title">'
+        + '<div class="lm-modal-title" id="local-custom-song-title">本地定制演奏</div>'
+        + '<p class="lm-modal-status">读取已下载的演奏视频。曲名和视频时段可手动校正；缺失时段会复用现有视频。</p>'
+        + '<label>曲目下载文件夹<input class="lm-input" data-custom-root aria-label="曲目下载文件夹"></label>'
+        + '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-scan>重新扫描</button></div>'
+        + '<label>选择曲目<select class="lm-select" data-custom-song aria-label="选择曲目"></select></label>'
+        + '<div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-prev>上一页</button><span data-custom-page></span><button type="button" class="lm-button lm-button-small" data-custom-next>下一页</button></div>'
+        + '<label>曲名<input class="lm-input" data-custom-name aria-label="曲名"></label>'
+        + '<div data-custom-files></div><p class="lm-modal-status" role="status" data-custom-status></p>'
+        + '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-close>关闭</button><button type="button" class="lm-button lm-button-primary" data-custom-save>保存</button></div></section>';
+      document.body.appendChild(modal);
+      modal.querySelector("[data-custom-close]").onclick = function () { if (!customSongsState.busy) { modal.hidden = true; modal.querySelectorAll("video").forEach(function (video) { video.pause(); }); } };
+      modal.addEventListener("keydown", function (event) { if (event.key === "Escape") modal.querySelector("[data-custom-close]").click(); });
+      modal.querySelector("[data-custom-scan]").onclick = function () { void loadCustomSongManager(modal, true); };
+      modal.querySelector("[data-custom-prev]").onclick = function () { customSongsState.page = Math.max(0, customSongsState.page - 1); void loadCustomSongManager(modal, false); };
+      modal.querySelector("[data-custom-next]").onclick = function () { customSongsState.page += 1; void loadCustomSongManager(modal, false); };
+      modal.querySelector("[data-custom-song]").onchange = function () { customSongsState.selected = this.value; renderCustomSongEditor(modal); };
+      modal.querySelector("[data-custom-save]").onclick = function () { void saveCustomSongEditor(modal); };
+    }
+    modal.hidden = false;
+    modal.querySelector("[data-custom-root]").value = customSongsState.data && customSongsState.data.mediaRoot || "";
+    customSongsState.page = 0;
+    await loadCustomSongManager(modal, false);
+  }
+
+  function customSongManagerBusy(modal, busy) {
+    customSongsState.busy = busy;
+    modal.querySelectorAll("button,input,select").forEach(function (node) { node.disabled = busy; });
+    if (!busy) {
+      var data = modal.__customSongsPage;
+      modal.querySelector("[data-custom-prev]").disabled = !data || customSongsState.page === 0;
+      modal.querySelector("[data-custom-next]").disabled = !data || !data.hasMore;
+      modal.querySelector("[data-custom-save]").disabled = !customSongsState.selected;
+    }
+  }
+
+  async function loadCustomSongManager(modal, scan) {
+    if (customSongsState.busy) return;
+    customSongManagerBusy(modal, true);
+    var status = modal.querySelector("[data-custom-status]");
+    status.textContent = scan ? "正在扫描本地视频…" : "正在读取曲目…";
+    try {
+      var root = modal.querySelector("[data-custom-root]").value.trim() || undefined;
+      if (scan) {
+        await callApi("/api/custom-songs/scan", { method: "POST", body: { mediaRoot: root } });
+        customSongsState.page = 0;
+      }
+      var data = await callApi("/api/custom-songs/search", { method: "POST", body: {
+        mediaRoot: root, detectedRoot: officialSongStoragePath(), cursor: customSongsState.page * 100, pageSize: 100
+      } });
+      modal.__customSongsPage = data;
+      customSongsState.data = data;
+      customSongsState.error = "";
+      modal.querySelector("[data-custom-root]").value = data.mediaRoot;
+      var select = modal.querySelector("[data-custom-song]");
+      select.innerHTML = "";
+      data.list.forEach(function (song) {
+        var option = document.createElement("option");
+        option.value = song.nameKey; option.textContent = song.name;
+        select.appendChild(option);
+      });
+      select.value = data.list.some(function (song) { return song.nameKey === customSongsState.selected; })
+        ? customSongsState.selected : data.list[0] && data.list[0].nameKey || "";
+      customSongsState.selected = select.value;
+      modal.querySelector("[data-custom-page]").textContent = "共 " + data.total + " 首 · 第 " + (customSongsState.page + 1) + " 页";
+      status.textContent = data.list.length ? "已读取。关闭管理窗口后，可在“我的上传”中试听或演奏。" : "未找到可用的定制演奏视频。请检查下载文件夹。";
+      if (data.warnings && data.warnings.length) status.textContent += "\n" + data.warnings.join("\n");
+      renderCustomSongEditor(modal);
+      if (scan) customSongsChanged();
+    } catch (error) {
+      customSongsState.error = error.message || String(error);
+      status.textContent = customSongsState.error;
+      modal.__customSongsPage = null;
+      customSongsState.selected = null;
+      modal.querySelector("[data-custom-song]").innerHTML = "";
+      modal.querySelector("[data-custom-page]").textContent = "";
+      renderCustomSongEditor(modal);
+    } finally {
+      customSongManagerBusy(modal, false);
+      mountCustomSongTools();
+    }
+  }
+
+  function renderCustomSongEditor(modal) {
+    var data = modal.__customSongsPage;
+    var song = data && data.list.find(function (item) { return item.nameKey === customSongsState.selected; });
+    var container = modal.querySelector("[data-custom-files]");
+    container.querySelectorAll("video").forEach(function (video) { video.pause(); });
+    container.innerHTML = "";
+    modal.querySelector("[data-custom-name]").value = song ? song.name : "";
+    if (!song) return;
+    var note = document.createElement("p");
+    note.className = "lm-modal-status";
+    note.textContent = song.fallbackPeriods.length ? "部分时段未确认或缺失，当前复用现有视频。可预览后设置对应时段。" : "各时段已匹配。";
+    container.appendChild(note);
+    song.localFiles.forEach(function (file) {
+      var row = document.createElement("div");
+      row.style.cssText = "margin-top:12px";
+      var label = document.createElement("label");
+      label.className = "lm-modal-status"; label.textContent = file.fileName;
+      var select = document.createElement("select");
+      select.className = "lm-select"; select.setAttribute("data-custom-file", file.fileName);
+      select.setAttribute("aria-label", "视频时段 " + file.fileName);
+      [["", "时段未知"], ["TOD12", "白天"], ["TOD1730", "傍晚"], ["TOD20", "夜晚"]].forEach(function (period) {
+        var option = document.createElement("option");
+        option.value = period[0]; option.textContent = period[1]; select.appendChild(option);
+      });
+      select.value = file.tod || "";
+      var details = document.createElement("details");
+      var summary = document.createElement("summary"); summary.textContent = "预览视频";
+      var video = document.createElement("video");
+      video.controls = true; video.preload = "none"; video.src = file.url;
+      video.style.cssText = "width:100%;max-height:200px";
+      details.appendChild(summary); details.appendChild(video);
+      row.appendChild(label); row.appendChild(select); row.appendChild(details);
+      container.appendChild(row);
+    });
+  }
+
+  async function saveCustomSongEditor(modal) {
+    if (customSongsState.busy || !customSongsState.selected) return;
+    customSongManagerBusy(modal, true);
+    try {
+      var saved = await callApi("/api/custom-songs/update", { method: "POST", body: {
+        nameKey: customSongsState.selected, name: modal.querySelector("[data-custom-name]").value,
+        mappings: Array.prototype.map.call(modal.querySelectorAll("[data-custom-file]"), function (select) {
+          return { fileName: select.getAttribute("data-custom-file"), tod: select.value || null };
+        })
+      } });
+      if (!saved) throw new Error("本地视频已移动或无法读取，请重新扫描。");
+      var page = modal.__customSongsPage;
+      if (page) page.list = page.list.map(function (song) { return song.nameKey === saved.nameKey ? saved : song; });
+      Array.prototype.forEach.call(modal.querySelector("[data-custom-song]").options, function (option) {
+        if (option.value === saved.nameKey) option.textContent = saved.name;
+      });
+      customSongsChanged();
+      modal.querySelector("[data-custom-status]").textContent = "已保存。";
+    } catch (error) { modal.querySelector("[data-custom-status]").textContent = error.message || String(error); }
+    finally { customSongManagerBusy(modal, false); }
+  }
+
   function musicSection() {
     var list = document.getElementById("tour-song-list");
     if (!list) return null;
@@ -579,6 +781,7 @@
   }
 
   function renderMusicEnhancements() {
+    mountCustomSongTools();
     if (!document.getElementById("tour-song-list")) return;
     installStyles();
     if (!MUSIC_EXPERIMENTAL_UI_ENABLED) {

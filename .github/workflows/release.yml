@@ -113,7 +113,8 @@ jobs:
 
       - name: Build installer and runtime allowlist
         shell: pwsh
-        run: npm run installer:build
+        # Stay in PowerShell 7: npm's Windows PowerShell entry writes a BOM in JSON metadata.
+        run: ./tools/build-installer.ps1
 
       - name: Render and verify the single final release body
         shell: pwsh
