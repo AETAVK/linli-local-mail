@@ -9,6 +9,8 @@ const MUSIC_SOURCE_TYPES = new Set([2, 3]);
 const MUSIC_PLAYLIST_ID_PATTERN = /^music-playlist-[a-z0-9-]+$/i;
 export const MUSIC_DESKTOP_PLAYLIST_ID = "music-playlist-desktop";
 export const MUSIC_DESKTOP_PLAYLIST_NAME = "__LOCAL_MUSIC_DESKTOP__";
+const MUSIC_PLAYLIST_SNAPSHOT_MAX_BYTES = 256 * 1024;
+const MUSIC_PLAYLIST_EXACT_ORDER_MAX = 10_000;
 
 function musicInputError(message, status = 400) {
   const error = new Error(message);
@@ -33,6 +35,11 @@ function normalizeMusicPlaylistName(value) {
 
 function normalizeMusicText(value, maximum = 240) {
   return String(value ?? "").replace(/\u0000/g, "").trim().slice(0, maximum);
+}
+
+function musicReferenceFromItemKey(itemKey) {
+  const match = /^([23]):([^\s]{1,160})$/.exec(String(itemKey ?? ""));
+  return match ? { sourceType: Number(match[1]), itemId: match[2] } : null;
 }
 
 const MUSIC_STRUCTURED_MAX_DEPTH = 8;
@@ -335,6 +342,18 @@ function normalizeMusicDesktopSong(entry) {
   };
 }
 
+function normalizeMusicPlaylistSong(entry) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw musicInputError("歌单曲目格式无效");
+  }
+  if (!entry.song || typeof entry.song !== "object" || Array.isArray(entry.song)) {
+    return normalizeMusicDesktopSong(entry);
+  }
+  const source = { ...entry, ...entry.song };
+  delete source.song;
+  return normalizeMusicDesktopSong({ ...entry, song: source });
+}
+
 const MUSIC_DESKTOP_PARTIAL_FIELDS = [
   ["id", ["id"]],
   ["songId", ["songId", "song_id"]],
@@ -411,6 +430,28 @@ function normalizeMusicOrder(input) {
   }
   if (!keys.length) throw musicInputError("请至少提供一项曲目顺序");
   if (keys.length > 200) throw musicInputError("一次最多排序 200 首曲目");
+  return keys;
+}
+
+function normalizeExactMusicOrder(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw musicInputError("排序参数格式无效");
+  }
+  const raw = input.itemKeys ?? input.item_keys;
+  if (!Array.isArray(raw)) throw musicInputError("排序参数必须提供 itemKeys 数组");
+  if (raw.length > MUSIC_PLAYLIST_EXACT_ORDER_MAX) {
+    throw musicInputError(`一次最多排序 ${MUSIC_PLAYLIST_EXACT_ORDER_MAX} 首曲目`);
+  }
+  const keys = [];
+  const seen = new Set();
+  for (const value of raw) {
+    if (typeof value !== "string") throw musicInputError("排序曲目编号格式无效");
+    const key = value.trim();
+    if (!/^[23]:[^\s]{1,160}$/.test(key)) throw musicInputError("排序曲目编号格式无效");
+    if (seen.has(key)) throw musicInputError("排序曲目编号不能重复");
+    seen.add(key);
+    keys.push(key);
+  }
   return keys;
 }
 
@@ -601,6 +642,14 @@ export function installMusicDatabaseDomain(MailDatabase) {
       return playlist;
     },
 
+    requireCustomMusicPlaylist(playlistId) {
+      const normalizedId = normalizeMusicPlaylistId(playlistId);
+      if (normalizedId === MUSIC_DESKTOP_PLAYLIST_ID) {
+        throw musicInputError("系统桌面歌单不能作为自定义歌单操作", 409);
+      }
+      return this.requireMusicPlaylist(normalizedId);
+    },
+
     createMusicPlaylist(input) {
       const name = normalizeMusicPlaylistName(input?.name ?? input);
       if (name.toLowerCase() === MUSIC_DESKTOP_PLAYLIST_NAME.toLowerCase()) {
@@ -615,19 +664,65 @@ export function installMusicDatabaseDomain(MailDatabase) {
       return this.requireMusicPlaylist(playlistId);
     },
 
+    renameMusicPlaylist(playlistId, input) {
+      const playlist = this.requireCustomMusicPlaylist(playlistId);
+      const name = normalizeMusicPlaylistName(input?.name ?? input);
+      if (name.toLowerCase() === MUSIC_DESKTOP_PLAYLIST_NAME.toLowerCase()) {
+        throw musicInputError("该歌单名称为系统保留名称", 409);
+      }
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        const conflict = this.statements.musicPlaylistByName.get(name);
+        if (conflict && conflict.playlist_id !== playlist.playlistId) {
+          throw musicInputError("已有同名自定义歌单", 409);
+        }
+        this.db.prepare(
+          "UPDATE music_playlists SET name = ?, updated_at = ? WHERE playlist_id = ?"
+        ).run(name, nowSeconds(), playlist.playlistId);
+        this.db.exec("COMMIT");
+      } catch (error) {
+        this.db.exec("ROLLBACK");
+        throw error;
+      }
+      return this.requireCustomMusicPlaylist(playlist.playlistId);
+    },
+
+    deleteMusicPlaylist(playlistId) {
+      const playlist = this.requireCustomMusicPlaylist(playlistId);
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        const deleted = this.db.prepare(
+          "DELETE FROM music_playlists WHERE playlist_id = ?"
+        ).run(playlist.playlistId).changes;
+        if (deleted !== 1) throw musicInputError("找不到该自定义歌单", 404);
+        this.db.exec("COMMIT");
+      } catch (error) {
+        this.db.exec("ROLLBACK");
+        throw error;
+      }
+      return { deleted: true, playlistId: playlist.playlistId };
+    },
+
     listMusicPlaylistItems(playlistId) {
       const playlist = this.requireMusicPlaylist(playlistId);
-      const items = this.statements.musicPlaylistItems.all(playlist.playlistId).map((row) => ({
+      const items = this.statements.musicPlaylistItems.all(playlist.playlistId).map((row) => {
+        const reference = musicReferenceFromItemKey(row.item_key);
+        const sourceType = reference?.sourceType ?? Number(row.source_type);
+        const itemId = reference?.itemId ?? "";
+        return {
         itemKey: row.item_key,
-        sourceType: Number(row.source_type),
+        sourceType,
+        itemId,
+        ref: { sourceType, itemId },
         song: normalizeStoredMusicSong(parseJson(row.song_json, {})),
         addedAt: Number(row.added_at),
         position: Number(row.position ?? 0)
-      }));
+        };
+      });
       return { playlist, items };
     },
 
-    upsertMusicPlaylistItems(playlist, songs) {
+    upsertMusicPlaylistItems(playlist, songs, { maxSongBytes = null } = {}) {
       const now = nowSeconds();
       let added = 0;
       let updated = 0;
@@ -638,11 +733,15 @@ export function installMusicDatabaseDomain(MailDatabase) {
             "SELECT 1 AS found FROM music_playlist_items WHERE playlist_id = ? AND item_key = ?"
           ).get(playlist.playlistId, entry.itemKey);
           const position = Number(this.statements.musicPlaylistNextPosition.get(playlist.playlistId).position);
+          const songJson = JSON.stringify(entry.song);
+          if (maxSongBytes != null && Buffer.byteLength(songJson, "utf8") > maxSongBytes) {
+            throw musicInputError("曲目快照不能超过 256 KiB");
+          }
           this.statements.musicPlaylistItemUpsert.run(
             playlist.playlistId,
             entry.itemKey,
             entry.sourceType,
-            JSON.stringify(entry.song),
+            songJson,
             now,
             position
           );
@@ -664,16 +763,21 @@ export function installMusicDatabaseDomain(MailDatabase) {
     },
 
     addMusicPlaylistItems(playlistId, input) {
-      const playlist = this.requireMusicPlaylist(playlistId);
+      const playlist = this.requireCustomMusicPlaylist(playlistId);
       const rawSongs = Array.isArray(input?.songs) ? input.songs : input?.song ? [input.song] : [];
       if (!rawSongs.length) throw musicInputError("请至少选择一首曲目");
       if (rawSongs.length > 200) throw musicInputError("一次最多操作 200 首曲目");
-      return this.upsertMusicPlaylistItems(playlist, rawSongs.map(normalizeMusicSong));
+      return this.upsertMusicPlaylistItems(
+        playlist,
+        rawSongs.map(normalizeMusicPlaylistSong),
+        { maxSongBytes: MUSIC_PLAYLIST_SNAPSHOT_MAX_BYTES }
+      );
     },
 
     musicDesktopItem(row) {
       const song = normalizeStoredMusicSong(parseJson(row.song_json, {}));
-      const itemId = String(song.itemId || song.id || "");
+      const reference = musicReferenceFromItemKey(row.item_key);
+      const itemId = reference?.itemId || String(song.itemId || song.id || "");
       const songId = String(song.songId || song.id || itemId);
       const cover = song.cover || song.coverUrl || song.icon || song.iconUrl || "";
       const nameKey = song.nameKey || "";
@@ -778,7 +882,11 @@ export function installMusicDatabaseDomain(MailDatabase) {
     },
 
     removeMusicPlaylistItems(playlistId, input) {
-      const playlist = this.requireMusicPlaylist(playlistId);
+      const playlist = this.requireCustomMusicPlaylist(playlistId);
+      return this.removeMusicPlaylistItemsInternal(playlist, input);
+    },
+
+    removeMusicPlaylistItemsInternal(playlist, input) {
       const itemKeys = normalizeMusicItemKeys(input?.itemKeys ?? input?.item_keys ?? input);
       let removed = 0;
       this.db.exec("BEGIN IMMEDIATE");
@@ -800,7 +908,10 @@ export function installMusicDatabaseDomain(MailDatabase) {
     },
 
     removeMusicDesktopItems(input) {
-      const result = this.removeMusicPlaylistItems(MUSIC_DESKTOP_PLAYLIST_ID, input);
+      const result = this.removeMusicPlaylistItemsInternal(
+        this.requireMusicPlaylist(MUSIC_DESKTOP_PLAYLIST_ID),
+        input
+      );
       return {
         requested: result.requested,
         removed: result.removed,
@@ -839,6 +950,33 @@ export function installMusicDatabaseDomain(MailDatabase) {
       };
     },
 
+    reorderMusicPlaylistItemsExact(playlistId, input) {
+      const playlist = this.requireCustomMusicPlaylist(playlistId);
+      const requested = normalizeExactMusicOrder(input);
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        const current = this.statements.musicPlaylistItems.all(playlist.playlistId)
+          .map((row) => row.item_key);
+        const currentSet = new Set(current);
+        if (requested.length !== current.length || requested.some((itemKey) => !currentSet.has(itemKey))) {
+          throw musicInputError("歌单内容已发生变化，请刷新后重试", 409);
+        }
+        const setPosition = this.db.prepare(
+          "UPDATE music_playlist_items SET position = ? WHERE playlist_id = ? AND item_key = ?"
+        );
+        requested.forEach((itemKey, index) => setPosition.run(index, playlist.playlistId, itemKey));
+        this.statements.musicPlaylistTouch.run(nowSeconds(), playlist.playlistId);
+        this.db.exec("COMMIT");
+      } catch (error) {
+        this.db.exec("ROLLBACK");
+        throw error;
+      }
+      return {
+        playlist: this.requireCustomMusicPlaylist(playlist.playlistId),
+        items: this.listMusicPlaylistItems(playlist.playlistId).items
+      };
+    },
+
     reorderMusicDesktop(input) {
       const result = this.reorderMusicPlaylistItems(MUSIC_DESKTOP_PLAYLIST_ID, input);
       return { ...result, ...this.listMusicDesktop() };
@@ -846,7 +984,10 @@ export function installMusicDatabaseDomain(MailDatabase) {
 
     getMusicLibraryPreferences() {
       return {
-        confirmSelectionClear: this.getSetting("musicLibrary.confirmSelectionClear") !== "0"
+        confirmSelectionClear: this.getSetting("musicLibrary.confirmSelectionClear") !== "0",
+        customPlaylistsEnabled: this.getSetting("musicLibrary.customPlaylistsEnabled") !== "0",
+        batchOperationsEnabled: this.getSetting("musicLibrary.batchOperationsEnabled") !== "0",
+        desktopClearEnabled: this.getSetting("musicLibrary.desktopClearEnabled") !== "0"
       };
     },
 
@@ -854,8 +995,23 @@ export function installMusicDatabaseDomain(MailDatabase) {
       if (!input || typeof input !== "object" || Array.isArray(input)) {
         throw musicInputError("曲库偏好格式无效");
       }
+      const booleanKeys = [
+        "customPlaylistsEnabled",
+        "batchOperationsEnabled",
+        "desktopClearEnabled"
+      ];
+      for (const key of booleanKeys) {
+        if (Object.hasOwn(input, key) && typeof input[key] !== "boolean") {
+          throw musicInputError(`曲库偏好 ${key} 必须是布尔值`);
+        }
+      }
       if (input.confirmSelectionClear != null) {
         this.setSetting("musicLibrary.confirmSelectionClear", input.confirmSelectionClear ? "1" : "0");
+      }
+      for (const key of booleanKeys) {
+        if (Object.hasOwn(input, key)) {
+          this.setSetting(`musicLibrary.${key}`, input[key] ? "1" : "0");
+        }
       }
       return this.getMusicLibraryPreferences();
     },

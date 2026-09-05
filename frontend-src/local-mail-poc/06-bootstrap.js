@@ -1,7 +1,7 @@
 
   function mountMusicEnhancements() {
-    if (!document.getElementById("tour-song-list")) return;
-    if (!MUSIC_EXPERIMENTAL_UI_ENABLED) {
+    if (isSettingsRoute() || (!document.getElementById("tour-song-list") && !musicBridgeAvailable())) return;
+    if (!musicBridgeAvailable()) {
       renderMusicEnhancements();
       return;
     }
@@ -80,6 +80,11 @@
     hook.isMainRenderer = isMainRenderer;
     hook.navigateDesktopCommand = navigateDesktopCommand;
     hook.renderMusicEnhancements = renderMusicEnhancements;
+    hook.setMusicFeature = setMusicFeature;
+    hook.mountMusicEnhancementSettings = mountMusicEnhancementSettings;
+    hook.openMusicDesktopClearConfirm = openMusicDesktopClearConfirm;
+    hook.confirmMusicDesktopClear = confirmMusicDesktopClear;
+    hook.musicNotice = musicNotice;
     hook.addMusicEntryToDesktop = addMusicEntryToDesktop;
     hook.serializeMusicSong = serializeMusicSong;
     hook.callNativeMusicAdd = callNativeMusicAdd;
@@ -94,6 +99,7 @@
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", queueMount);
   window.addEventListener("hashchange", queueMount);
+  window.addEventListener("linli-music-view-ready", queueMount);
   window.addEventListener("resize", queueMount);
   window.addEventListener("scroll", queueMount, true);
   if (document.head) hideWatermark();

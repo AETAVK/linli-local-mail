@@ -310,13 +310,172 @@
     });
   }
 
+  // A playlist stores ordered references. Its saved song object is a display
+  // cache only: resolve against the native PGC / existing local UGC catalogs
+  // immediately before playback, never promote a cached URL to song truth.
+  function musicReference(entry) {
+    var value = entry || {};
+    var key = value.itemKey || value.key;
+    var match = typeof key === "string" && /^([23]):(.+)$/.exec(key);
+    var ref = value.ref || value;
+    var type = match ? Number(match[1]) : Number(ref.sourceType == null ? ref.itemType : ref.sourceType);
+    var id = match ? match[2] : ref.itemId == null ? (value.song || value).id : ref.itemId;
+    if ((type !== 2 && type !== 3) || id == null || !String(id).trim()) throw new Error("歌单曲目引用无效");
+    id = String(id);
+    return { key: type + ":" + id, itemKey: type + ":" + id, sourceType: type, itemId: id };
+  }
+
+  async function allLocalCustomSongs() {
+    var songs = [], cursor = 0;
+    for (var page = 0; page < 50; page += 1) {
+      var data = await localCustomSongSearch({ cursor: cursor, pageSize: 200 });
+      songs = songs.concat(data.list || []);
+      if (!data.hasMore) return songs;
+      var next = Number(data.nextCursor);
+      if (!Number.isSafeInteger(next) || next <= cursor) throw new Error("本地曲库分页异常，请重新打开曲库");
+      cursor = next;
+    }
+    throw new Error("当前本地曲库超过 10000 首，请分批整理");
+  }
+
+  function currentMusicBridge() {
+    var bridge = window.__LINLI_MUSIC_BRIDGE__;
+    if (!bridge || typeof bridge.getCatalog !== "function" || typeof bridge.replaceQueue !== "function") {
+      throw new Error("曲库尚未就绪，请打开曲库后重试");
+    }
+    return bridge;
+  }
+
+  async function resolveMusicReferences(entries) {
+    if (!Array.isArray(entries) || entries.length > 10000) throw new Error("歌单引用数量无效");
+    var bridge = currentMusicBridge();
+    var references = entries.map(musicReference);
+    var catalog = new Map();
+    bridge.getCatalog().forEach(function (entry) {
+      var ref = musicReference(entry);
+      catalog.set(ref.key, Object.assign({}, ref, { song: entry.song, available: entry.available !== false }));
+    });
+    if (references.some(function (ref) { return ref.sourceType === 3; })) {
+      (await allLocalCustomSongs()).forEach(function (song) {
+        var ref = musicReference({ sourceType: 3, itemId: song.userSongId == null ? song.id : song.userSongId });
+        catalog.set(ref.key, Object.assign({}, ref, { song: song, available: true }));
+      });
+    }
+    if (window.__LINLI_MUSIC_BRIDGE__ !== bridge) throw new Error("曲库页面已切换，请重试");
+    return references.map(function (ref, index) {
+      var found = catalog.get(ref.key);
+      return Object.assign({}, entries[index], ref, {
+        song: found ? found.song : entries[index].song || {},
+        available: Boolean(found && found.available),
+        reason: !found ? "原曲库中未找到该曲目" : !found.available ? "曲目未下载或本地文件不可用" : ""
+      });
+    });
+  }
+
+  async function listSelectableMusicSongs() {
+    var bridge = currentMusicBridge();
+    var view = bridge.getView();
+    var songs = Number(view.sourceType) === 3 ? await allLocalCustomSongs() : view.songs || [];
+    if (window.__LINLI_MUSIC_BRIDGE__ !== bridge || bridge.getView().viewKey !== view.viewKey) {
+      throw new Error("曲库分类已切换，请重新选择");
+    }
+    return songs.map(function (song) {
+      return Object.assign(musicReference({ sourceType: view.sourceType, itemId: song.id }), { song: song, available: true, reason: "" });
+    });
+  }
+
+  var musicDesktopBatchBusy = false;
+  async function addMusicDesktopBatch(entries) {
+    if (musicDesktopBatchBusy) throw new Error("已有歌曲正在加入播放队列，请稍候");
+    var bridge = currentMusicBridge();
+    musicDesktopBatchBusy = true;
+    var completedKeys = [], failedKeys = [], added = 0, updated = 0, errorText = "";
+    try {
+      var unique = new Map();
+      entries.forEach(function (entry) { var ref = musicReference(entry); if (!unique.has(ref.key)) unique.set(ref.key, entry); });
+      var resolved = await resolveMusicReferences(Array.from(unique.values()));
+      var ready = resolved.filter(function (entry) {
+        if (entry.available) return true;
+        failedKeys.push(entry.key);
+        errorText = "部分曲目在原曲库中不可用，已保留待处理";
+        return false;
+      });
+      for (var offset = 0; offset < ready.length;) {
+        if (window.__LINLI_MUSIC_BRIDGE__ !== bridge) { errorText = "曲库页面已关闭，尚未加入的曲目已保留"; break; }
+        var chunk = [], songs = [], bytes = 16;
+        while (offset < ready.length && chunk.length < 200) {
+          var entry = ready[offset];
+          var song = { itemType: entry.sourceType, itemId: entry.itemId, song: entry.song };
+          var json = JSON.stringify(song);
+          var size = typeof TextEncoder === "function" ? new TextEncoder().encode(json).length : unescape(encodeURIComponent(json)).length;
+          if (size > 1024 * 1024 - 16) { failedKeys.push(entry.key); errorText = "部分曲目资料过大，已保留待处理"; offset += 1; continue; }
+          if (bytes + size + 1 > 1024 * 1024) break;
+          chunk.push(entry); songs.push(song); bytes += size + 1; offset += 1;
+        }
+        if (!chunk.length) continue;
+        try {
+          var result = await callApi("/api/music-desktop/items", { method: "POST", body: JSON.stringify({ songs: songs }) });
+          completedKeys = completedKeys.concat(chunk.map(function (entry) { return entry.key; }));
+          added += Number(result.added || 0); updated += Number(result.updated || 0);
+        } catch (error) { errorText = error.message || String(error); break; }
+      }
+      resolved.forEach(function (entry) {
+        if (completedKeys.indexOf(entry.key) < 0 && failedKeys.indexOf(entry.key) < 0) failedKeys.push(entry.key);
+      });
+      if (completedKeys.length) {
+        try {
+          var queue = await localMusicSearch();
+          if (window.__LINLI_MUSIC_BRIDGE__ !== bridge) throw new Error("曲库页面已关闭");
+          await bridge.replaceQueue(queue.list);
+        } catch (error) {
+          errorText = "曲目已保存，但播放队列刷新失败；请重新打开曲库：" + (error.message || error);
+        }
+      }
+      return { completedKeys: completedKeys, failedKeys: failedKeys, error: errorText, added: added, updated: updated };
+    } finally { musicDesktopBatchBusy = false; }
+  }
+
+  async function clearMusicDesktop(snapshot) {
+    if (musicDesktopBatchBusy) throw new Error("播放队列正在修改，请稍候");
+    var bridge = currentMusicBridge();
+    if (typeof bridge.stopRemoved !== "function") throw new Error("音乐桥接需要更新，请重启游戏后重试");
+    var unique = new Map();
+    (snapshot || []).forEach(function (item) { var ref = musicReference(item); unique.set(ref.key, item); });
+    var items = Array.from(unique.values()), completed = [], errorText = "", removed = 0;
+    musicDesktopBatchBusy = true;
+    try {
+      for (var offset = 0; offset < items.length; offset += 200) {
+        if (window.__LINLI_MUSIC_BRIDGE__ !== bridge) { errorText = "曲库页面已关闭，剩余曲目未移除"; break; }
+        var chunk = items.slice(offset, offset + 200);
+        try {
+          var result = await callApi("/api/music-desktop/remove", { method: "POST", body: { itemKeys: chunk.map(function (item) { return musicReference(item).key; }) } });
+          completed = completed.concat(chunk); removed += Number(result.removed || 0);
+        } catch (error) { errorText = error.message || String(error); break; }
+      }
+      if (completed.length) {
+        try {
+          // Stop only an actually removed queue song, not independent library playback.
+          bridge.stopRemoved(completed);
+          var queue = await localMusicSearch();
+          if (window.__LINLI_MUSIC_BRIDGE__ !== bridge) throw new Error("曲库页面已关闭");
+          await bridge.replaceQueue(queue.list);
+        } catch (error) { errorText = "播单已修改，但播放状态刷新失败，请重新打开曲库：" + (error.message || error); }
+      }
+      return { removed: removed, error: errorText };
+    } finally { musicDesktopBatchBusy = false; }
+  }
+
   window.__LOCAL_MUSIC_API__ = Object.freeze({
     addToPlaylist: localMusicAdd,
     removeFromPlaylist: localMusicRemove,
     searchPlaylist: localMusicSearch,
     searchUserSongs: localCustomSongSearch,
     mountUserSongsTools: mountCustomSongTools,
-    order: localMusicOrder
+    order: localMusicOrder,
+    resolveReferences: resolveMusicReferences,
+    listSelectableSongs: listSelectableMusicSongs,
+    addToDesktopBatch: addMusicDesktopBatch,
+    clearDesktop: clearMusicDesktop
   });
 
   function isSettingsRoute() {
@@ -589,7 +748,16 @@
       ".lm-local-nav-button:hover,.lm-local-nav-button[data-active='true']{background:var(--tp-surface-1,rgba(255,255,255,.07));color:var(--tp-text-title,#e8e9eb)}",
       ".lm-local-nav-button[hidden]{display:none!important}",
       ".lm-local-nav-mark{display:flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:rgba(255,255,255,.04);color:var(--tp-text-title,#e8e9eb);font-size:11px}",
-      ".lm-music-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-left:auto;min-width:0;white-space:nowrap}",
+      ".lm-music-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:7px;min-width:0;white-space:nowrap;flex-shrink:0;padding:6px 0;margin-right:16px}",
+      "[id^='local-mail-music-'][hidden],.lm-music-custom-list[hidden],.lm-music-header-checkbox[hidden],.lm-music-row-checkbox[hidden],.lm-music-empty[hidden],#tour-song-list[hidden]{display:none!important}",
+      "[id^='local-mail-music-'],[id^='local-mail-music-'] button,[id^='local-mail-music-'] input,.lm-music-row-checkbox{-webkit-app-region:no-drag;pointer-events:auto}",
+      ".lm-music-playlist-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;color:var(--tp-text-secondary,#a1a5ad)}",
+      ".lm-music-toolbar{flex-wrap:wrap;max-width:100%}.lm-music-toolbar [data-role='select-all-wrap']{display:flex;align-items:center;gap:7px;font-size:12px}.lm-music-toolbar [hidden],#local-mail-custom-song-tools[hidden]{display:none!important}",
+      ".lm-music-toolbar [data-kind='error'],#local-mail-music-modal [role='alert'],.lm-music-custom-row [data-role='music-missing']{color:#e5aaa5;font-size:12px}",
+      "#local-mail-music-modal button,.lm-music-playlist-controls button,.lm-music-custom-row>button{border:1px solid var(--tp-grey-5,rgba(255,255,255,.22));border-radius:8px;padding:7px 10px;background:var(--tp-surface-1,rgba(255,255,255,.07));color:var(--tp-text-body,#ced2d4);font:inherit;cursor:pointer}",
+      "#local-mail-music-modal button:hover,.lm-music-playlist-controls button:hover{background:rgba(255,255,255,.13)}#local-mail-music-modal [data-music-modal-action='pick']{display:block;width:100%;margin:6px 0;text-align:left}",
+      ".lm-music-custom-row [data-role='music-cover']{width:48px;flex:0 0 48px}.lm-music-custom-row [data-role='music-name']{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lm-music-custom-row [data-role='music-missing']:empty{display:none}.lm-music-custom-row .lm-music-mode{flex:0 0 80px}.lm-music-row-actions{flex:0 0 170px;display:flex;gap:2px;justify-content:flex-end;align-items:center}.lm-music-custom-index{position:relative;flex:0 0 56px}.lm-music-custom-index>.lm-music-row-checkbox{position:absolute;inset:0;width:auto;background:var(--tp-grey-0,#16171b)}",
+      ".lm-music-row-unavailable{opacity:.6}.lm-music-order-button{border:0;background:transparent;color:inherit;cursor:pointer;padding:4px}.lm-music-order-button:disabled{opacity:.3;cursor:default}",
       ".lm-music-action{height:30px;padding:0 10px;border:1px solid var(--tp-grey-5,rgba(255,255,255,.22));border-radius:999px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:12px;line-height:28px;cursor:pointer;transition:background-color .15s,color .15s,border-color .15s}",
       ".lm-music-action:hover:not(:disabled){border-color:var(--tp-grey-7,rgba(255,255,255,.42));background:var(--tp-surface-1,rgba(255,255,255,.07));color:var(--tp-text-title,#e8e9eb)}",
       ".lm-music-action-primary{border-color:rgba(216,209,197,.45);background:rgba(216,209,197,.1);color:var(--tp-text-title,#e8e9eb)}",
@@ -600,7 +768,9 @@
       ".lm-music-checkbox{box-sizing:border-box;width:16px;height:16px;margin:0;accent-color:#d8d1c5;cursor:pointer;flex:0 0 auto}",
       ".lm-music-row-checkbox{display:flex;align-items:center;justify-content:center;width:20px;min-width:20px;align-self:stretch}",
       ".lm-music-header-checkbox{display:flex;align-items:center;justify-content:center;width:20px;min-width:20px}",
-      ".lm-music-playlists{display:flex;align-items:center;gap:12px;min-width:0;max-width:50vw;overflow-x:auto;padding-bottom:1px}",
+      ".lm-music-playlists{display:flex;flex:0 1 auto;align-items:center;gap:12px;min-width:0;max-width:50vw;overflow-x:auto;overflow-y:hidden;padding:0 0 7px;scrollbar-width:thin;scrollbar-color:transparent transparent}.lm-music-playlists:hover{scrollbar-color:var(--tp-grey-4,#44474e) transparent}.lm-music-playlists::-webkit-scrollbar{height:4px;width:0}.lm-music-playlists::-webkit-scrollbar-track{background:transparent}.lm-music-playlists::-webkit-scrollbar-thumb{border-radius:4px;background:transparent}.lm-music-playlists:hover::-webkit-scrollbar-thumb{background:var(--tp-grey-4,#44474e)}.lm-music-playlists::-webkit-scrollbar-button{display:none}",
+      "[data-lm-music-tab-parent]{min-width:0;max-width:100%;flex:1}[data-lm-music-tab-parent]>[role='menuitem']{flex-shrink:0}[data-lm-music-tab-menu]{min-width:0;max-width:100%;flex:1}",
+      "[data-lm-batch-index]{position:relative!important}[data-lm-batch-index]>*:not(.lm-music-row-checkbox){visibility:hidden;pointer-events:none}[data-lm-batch-index]>.lm-music-row-checkbox{position:absolute;inset:0;width:auto;min-width:0;z-index:5}[data-lm-batch-index] input{visibility:visible!important}.lm-music-toast{position:fixed;top:32px;left:50%;transform:translateX(-50%);z-index:2147483000;max-width:80vw;padding:12px 20px;border-radius:8px;background:#303136;color:#e7e1d7;box-shadow:0 4px 18px #0005;font-size:14px}",
       ".lm-music-tab{position:relative;flex:0 0 auto;height:28px;padding:0;border:0;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:14px;font-weight:600;cursor:pointer}",
       ".lm-music-tab:hover{color:var(--tp-text-title,#e8e9eb)}",
       ".lm-music-tab[data-active='true']{color:var(--tp-text-title,#e8e9eb)}",
@@ -610,7 +780,7 @@
       ".lm-music-custom-list{display:flex;flex-direction:column;gap:0;margin-right:16px}",
       ".lm-music-custom-row{display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;color:var(--tp-text-body,#ced2d4)}",
       ".lm-music-custom-row:hover{background:var(--tp-surface-1,rgba(255,255,255,.04))}",
-      ".lm-music-custom-index{display:flex;align-items:center;justify-content:center;width:44px;min-width:44px;color:var(--tp-text-tertiary,#7d818c);font-size:13px}",
+      ".lm-music-custom-index{display:flex;align-items:center;justify-content:center;width:56px;min-width:56px;color:var(--tp-text-tertiary,#7d818c);font-size:13px}",
       ".lm-music-cover{width:48px;height:48px;overflow:hidden;border-radius:10px;background:var(--tp-grey-2,#34363c);object-fit:cover;flex:0 0 auto}",
       ".lm-music-cover-placeholder{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:10px;background:var(--tp-grey-2,#34363c);color:var(--tp-text-tertiary,#7d818c);font-size:17px;flex:0 0 auto}",
       ".lm-music-song{min-width:120px;flex:1;overflow:hidden}",

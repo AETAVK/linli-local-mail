@@ -1026,13 +1026,110 @@
     return first.parentElement && first.parentElement.children.length ? first.parentElement : null;
   }
 
+  var MUSIC_ENHANCEMENTS_SECTION_ID = "local-mail-enhancements-section";
+  var MUSIC_ENHANCEMENT_FEATURES = [
+    {
+      key: "customPlaylistsEnabled",
+      label: "自定义歌单",
+      description: "控制自定义歌单入口，关闭不会删除歌单。"
+    },
+    {
+      key: "batchOperationsEnabled",
+      label: "批量操作",
+      description: "控制曲库和歌单中的批量选择。"
+    },
+    {
+      key: "desktopClearEnabled",
+      label: "音乐桌面清空开关",
+      description: "控制音乐桌面的清空按钮，关闭不会清空播单。"
+    }
+  ];
+
+  function musicEnhancementSectionHtml() {
+    var rows = MUSIC_ENHANCEMENT_FEATURES.map(function (feature) {
+      return '<div class="flex items-center justify-between px-0 py-3 rounded-3 lm-music-preference-row" data-music-feature-row="' + feature.key + '">' +
+        '<div class="flex flex-col gap-0 flex-1 min-w-0"><div class="text-text-body text-label-l">' + feature.label + '</div><div class="text-text-secondary text-body-m font-regular">' + feature.description + '</div></div>' +
+        '<label class="lm-music-switch" aria-label="' + feature.label + '"><input type="checkbox" data-music-feature="' + feature.key + '" data-feature-key="' + feature.key + '" aria-label="' + feature.label + '"></label></div>';
+    }).join("");
+    return '<div class="text-text-body text-label-l">增强功能</div>' + rows;
+  }
+
+  function updateMusicEnhancementSettings(section) {
+    if (!section) return;
+    var music = musicShape();
+    var saving = music.featureSaving || {};
+    MUSIC_ENHANCEMENT_FEATURES.forEach(function (feature) {
+      var input = section.querySelector('[data-music-feature="' + feature.key + '"]');
+      if (!input) return;
+      input.checked = typeof musicFeatureEnabled === "function"
+        ? Boolean(musicFeatureEnabled(feature.key))
+        : true;
+      input.disabled = Boolean(saving[feature.key]);
+    });
+  }
+
+  function bindMusicEnhancementSettings(section) {
+    if (!section || section.dataset.musicEnhancementsBound === "true") return;
+    section.dataset.musicEnhancementsBound = "true";
+    section.addEventListener("change", function (event) {
+      var input = event.target.closest("[data-music-feature]");
+      if (!input || input.disabled) return;
+      var key = input.dataset.musicFeature;
+      if (!key) return;
+      var desired = input.checked;
+      if (typeof setMusicFeature !== "function") {
+        updateMusicEnhancementSettings(section);
+        musicNotice("音乐增强功能暂不可用。", "error");
+        return;
+      }
+      Promise.resolve(setMusicFeature(key, desired)).catch(function (error) {
+        musicNotice("偏好保存失败：" + (error.message || error), "error");
+      }).finally(function () {
+        updateMusicEnhancementSettings(section);
+      });
+    });
+  }
+
+  function mountMusicEnhancementSettings() {
+    if (!isSettingsRoute()) return;
+    var localSection = document.getElementById(SECTION_ID);
+    if (!localSection || !localSection.parentElement) return;
+    var container = localSection.parentElement;
+    var patchSection = document.getElementById(PATCH_VERSION_SECTION_ID);
+    var section = document.getElementById(MUSIC_ENHANCEMENTS_SECTION_ID);
+    if (!section) {
+      section = document.createElement("section");
+      section.id = MUSIC_ENHANCEMENTS_SECTION_ID;
+      section.className = "tp-settings-item";
+      section.innerHTML = musicEnhancementSectionHtml();
+    }
+    if (patchSection && patchSection.parentElement === container && nextLocalElement(patchSection) !== section) {
+      container.insertBefore(patchSection, localSection);
+    }
+    if (nextLocalElement(section) !== localSection) {
+      container.insertBefore(section, localSection);
+    }
+    bindMusicEnhancementSettings(section);
+    updateMusicEnhancementSettings(section);
+    var music = musicShape();
+    if (!music.loaded && !music.loading && !music.featureSettingsLoadStarted) {
+      music.featureSettingsLoadStarted = true;
+      Promise.resolve(ensureMusicLibraryLoaded()).catch(function (error) {
+        musicNotice("音乐偏好读取失败：" + (error.message || error), "error");
+      });
+    }
+  }
+
   function mountSettingsSection() {
     if (!isSettingsRoute() || state.mounting) return;
     var container = findSettingsContainer();
     if (!container) return;
     var localSection = document.getElementById(SECTION_ID);
     var patchSection = document.getElementById(PATCH_VERSION_SECTION_ID);
-    if (localSection && patchSection) return;
+    if (localSection && patchSection) {
+      mountMusicEnhancementSettings();
+      return;
+    }
     state.mounting = true;
     installStyles();
     var createdLocal = false;
@@ -1060,6 +1157,7 @@
     state.mounting = false;
     if (createdLocal) loadConfig();
     else if (state.diagnostics) renderDiagnostics();
+    mountMusicEnhancementSettings();
   }
 
   var LOCAL_NAVIGATION_ID = "local-mail-local-navigation";

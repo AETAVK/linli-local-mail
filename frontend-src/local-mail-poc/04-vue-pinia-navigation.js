@@ -611,7 +611,15 @@
   var MUSIC_MODAL_ID = "local-mail-music-modal";
   var MUSIC_BEHAVIOR_SETTING_ID = "local-mail-music-behavior-setting";
   var MUSIC_NATIVE_TAB_NAMES = ["古典", "ACG", "轻音乐", "我的上传"];
-  var MUSIC_EXPERIMENTAL_UI_ENABLED = false;
+
+  function musicBridgeAvailable() {
+    var bridge = window.__LINLI_MUSIC_BRIDGE__;
+    return Boolean(bridge
+      && typeof bridge.getView === "function"
+      && typeof bridge.getCatalog === "function"
+      && typeof bridge.switchView === "function"
+      && typeof bridge.replaceQueue === "function");
+  }
 
   function musicHeaderIn(root) {
     if (!root) return null;
