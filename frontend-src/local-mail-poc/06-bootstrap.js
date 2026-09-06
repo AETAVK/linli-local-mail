@@ -100,6 +100,7 @@
   window.addEventListener("popstate", queueMount);
   window.addEventListener("hashchange", queueMount);
   window.addEventListener("linli-music-view-ready", queueMount);
+  window.addEventListener("linli-custom-songs-changed", invalidateCustomSongList);
   window.addEventListener("resize", queueMount);
   window.addEventListener("scroll", queueMount, true);
   if (document.head) hideWatermark();

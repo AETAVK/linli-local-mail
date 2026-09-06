@@ -122,7 +122,14 @@
       return localRequest(method, path, data, config, true);
     }
     var payload = await response.json();
-    if (!response.ok || payload.code !== 0) throw new Error(payload.message || "本地服务请求失败");
+    if (!response.ok || payload.code !== 0) {
+      var failure = new Error(payload.message || "本地服务请求失败");
+      failure.status = response.status;
+      if ((path === "/api/custom-songs/scan" || path === "/api/custom-songs/search") && payload.data && payload.data.scanDiagnostics) {
+        failure.scanDiagnostics = payload.data.scanDiagnostics;
+      }
+      throw failure;
+    }
     return { data: payload.data, status: response.status, headers: response.headers };
   }
 

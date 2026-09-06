@@ -12,6 +12,8 @@ export const FRAGMENT_MANIFEST = Object.freeze([
   Object.freeze({ file: "02-mail-import-updater.js", owner: "mail-import-updater" }),
   Object.freeze({ file: "03-settings.js", owner: "settings" }),
   Object.freeze({ file: "04-vue-pinia-navigation.js", owner: "native-navigation" }),
+  Object.freeze({ file: "04a-video-frames.js", owner: "video-frames" }),
+  Object.freeze({ file: "04b-video-vision.js", owner: "video-vision" }),
   Object.freeze({ file: "05-music.js", owner: "music" }),
   Object.freeze({ file: "06-bootstrap.js", owner: "bootstrap" })
 ]);

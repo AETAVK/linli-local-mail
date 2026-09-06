@@ -6,6 +6,153 @@ var customSongsState = {
   selected: null,
 };
 
+// The native pager owns the displayed rows. Retain only enough state to know
+// when switching back may reuse those rows; do not create a second song store.
+var customSongListState = { epoch: 0, ready: false, pending: 0, root: "", firstId: null, total: 0 };
+
+function customSongRootKey() {
+  return String(officialSongStoragePath() || "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function invalidateCustomSongList() {
+  customSongListState.epoch++;
+  customSongListState.ready = false;
+}
+
+function canReuseCustomSongList(rows) {
+  var cache = customSongListState;
+  return cache.ready && !cache.pending && !customSongsState.busy && cache.root === customSongRootKey()
+    && Array.isArray(rows) && (cache.total === 0 ? rows.length === 0
+      : rows.length > 0 && String(rows[0].id || rows[0].userSongId) === cache.firstId);
+}
+
+var customSongVisionState = { run: null, epoch: 0, results: {},
+  cache: typeof customSongVision !== "undefined" ? customSongVision.createCache(64) : null };
+
+function clearCustomSongVision(modal) {
+  customSongVisionState.epoch++;
+  if (customSongVisionState.run) customSongVisionState.run.controller.abort();
+  customSongVisionState.results = {};
+  if (modal) modal.querySelector("[data-custom-vision-status]").textContent = "仅核对当前曲目的待确认视频；建议不会自动保存。";
+  if (modal) modal.querySelectorAll("[data-vision-thumbnail]").forEach(function (image) { image.removeAttribute("src"); });
+}
+
+function customSongVisionLabel(tod) {
+  return { TOD12: "白天", TOD1730: "傍晚", TOD20: "夜晚" }[tod] || "未知";
+}
+
+function currentCustomSong(modal) {
+  return modal.__customSongsPage && modal.__customSongsPage.list.find(function (song) { return song.nameKey === customSongsState.selected; });
+}
+
+function renderCustomSongVision(modal) {
+  var song = currentCustomSong(modal);
+  if (!song || typeof customSongVision === "undefined") return;
+  var results = customSongVisionState.results;
+  var collisions = customSongVision.crossCheck(results);
+  modal.querySelectorAll("[data-vision-file]").forEach(function (panel) {
+    var fileName = panel.getAttribute("data-vision-file");
+    var file = song.localFiles.find(function (entry) { return entry.fileName === fileName; });
+    var result = results[fileName];
+    if (!file) return;
+    var message = panel.querySelector("[data-vision-message]");
+    var image = panel.querySelector("[data-vision-thumbnail]");
+    var apply = panel.querySelector("[data-vision-apply]");
+    var current = "当前：" + customSongVisionLabel(file.tod) + " · " + customSongEvidenceLabel(file);
+    var detail = "画面只作辅助核对，不会自动修改时段。";
+    if (!file.fileRevision) detail = "本地服务尚不支持画面核对，请在更新后重启服务和游戏。";
+    else if (result) {
+      detail = result.tod ? (result.stable ? "画面建议：" : "初步画面建议：") + customSongVisionLabel(result.tod) +
+        (result.stable ? "（两帧一致）" : "（证据不足，暂不采用）") : "画面暂无法判断，请预览后手工选择。";
+      if (result.cached) detail += " 已复用本次会话的核对结果。";
+      if (result.reason === "frame-conflict") detail += " 不同区域或帧之间存在冲突。";
+      if (result.error) detail += " " + result.error;
+      if (result.tod && file.tod && result.tod !== file.tod) detail += " 与当前映射不同。";
+      if (collisions[fileName]) detail += " 同曲出现相同时段建议，请逐一核对，不会强制分配。";
+    }
+    if (file.evidence === "original" || file.evidence === "manual") detail += " 已保留原始或手工设置；如需修改，请使用时段下拉框。";
+    message.textContent = current + "\n" + detail;
+    if (result && result.thumbnail) { image.src = result.thumbnail; image.style.display = "block"; }
+    else { image.removeAttribute("src"); image.style.display = "none"; }
+    apply.disabled = Boolean(customSongVisionState.run) || !customSongVision.canApply(file, result);
+    panel.querySelector("[data-vision-one]").disabled = Boolean(customSongVisionState.run) || customSongsState.busy || !file.fileRevision;
+  });
+}
+
+function applyCustomSongVision(modal, fileName) {
+  if (customSongsState.busy || customSongVisionState.run) return;
+  var song = currentCustomSong(modal), result = customSongVisionState.results[fileName];
+  var file = song && song.localFiles.find(function (entry) { return entry.fileName === fileName; });
+  if (!customSongVision.canApply(file, result)) return;
+  var selects = Array.prototype.slice.call(modal.querySelectorAll("[data-custom-file]"));
+  var occupied = selects.some(function (select) {
+    var name = select.getAttribute("data-custom-file");
+    if (name === fileName) return false;
+    var other = song.localFiles.find(function (entry) { return entry.fileName === name; });
+    return (select.value === "__auto__" ? other && other.automaticTod : select.value) === result.tod;
+  });
+  var status = modal.querySelector("[data-custom-vision-status]");
+  if (occupied) { status.textContent = "这个时段已有其他视频，请先手工核对并调整，未改动当前选择。"; return; }
+  var select = selects.find(function (entry) { return entry.getAttribute("data-custom-file") === fileName; });
+  if (select) select.value = result.tod;
+  status.textContent = "已填入画面建议，尚未保存。核对无误后点击“保存”，将作为手工设置保留。";
+}
+
+async function reviewCustomSongVision(modal, onlyFile) {
+  if (customSongsState.busy || customSongVisionState.run || modal.hidden || typeof customSongVision === "undefined" || typeof customSongFrameReader === "undefined") return;
+  var song = currentCustomSong(modal);
+  if (!song) return;
+  var targets = song.localFiles.filter(function (file) { return onlyFile ? file.fileName === onlyFile : customSongVision.defaultTarget(file); });
+  var status = modal.querySelector("[data-custom-vision-status]");
+  if (!targets.length) { status.textContent = "当前曲目没有待核对的视频；原始和手工映射已保留。"; return; }
+  if (targets.some(function (file) { return !file.fileRevision; })) { status.textContent = "需要更新本地服务并重启后，才能核对画面。"; return; }
+  if (targets.length > 12) { status.textContent = "这首曲目的视频较多，请逐个点击“核对画面”，避免一次读取过多文件。"; return; }
+  var run = { controller: new AbortController(), epoch: customSongVisionState.epoch, song: song.nameKey };
+  customSongVisionState.run = run;
+  customSongManagerBusy(modal, false);
+  var current = function () { return !run.controller.signal.aborted && run.epoch === customSongVisionState.epoch && !modal.hidden && song.nameKey === customSongsState.selected; };
+  try {
+    for (var index = 0; index < targets.length; index++) {
+      if (!current()) break;
+      var file = targets[index];
+      status.textContent = "正在核对画面 " + (index + 1) + "/" + targets.length + "，可随时取消；不会改变播放队列。";
+      var cached = onlyFile ? null : customSongVisionState.cache.get(file);
+      if (cached) {
+        customSongVisionState.results[file.fileName] = Object.assign(customSongVision.summarize(cached), { cached: true });
+        renderCustomSongVision(modal);
+        continue;
+      }
+      var frames = [];
+      try {
+        await customSongFrameReader.capture({ url: file.url, signal: run.controller.signal, onFrame: function (frame) {
+          if (!current()) return true;
+          var feature = customSongVision.features(frame.imageData, frame.sourceWidth, frame.sourceHeight);
+          var result = customSongVision.classify(feature);
+          frames.push(Object.assign({}, result, { time: frame.time, verified: frame.verified }));
+          var summary = customSongVision.summarize(frames);
+          customSongVisionState.results[file.fileName] = Object.assign(summary, { thumbnail: frame.thumbnail });
+          renderCustomSongVision(modal);
+          return summary.stable || summary.reason === "frame-conflict" || (frames.length >= 2 && summary.reason === "unfamiliar-scene");
+        } });
+        if (current()) customSongVisionState.cache.set(file, frames);
+      } catch (error) {
+        if (!current()) break;
+        customSongVisionState.results[file.fileName] = { tod: null, stable: false,
+          error: error.name === "TimeoutError" ? "取帧超时，可重试或手工核对。" : "取帧未完成，可重试或手工核对。" };
+        renderCustomSongVision(modal);
+      }
+    }
+    if (current()) status.textContent = "核对已结束。画面建议不等于原始记录；采用后还需点击“保存”。";
+  } finally {
+    if (customSongVisionState.run === run) customSongVisionState.run = null;
+    if (!modal.hidden) {
+      if (run.controller.signal.aborted && status.textContent === "正在取消画面核对…") status.textContent = "已取消画面核对，没有保存任何映射。";
+      customSongManagerBusy(modal, customSongsState.busy);
+      renderCustomSongVision(modal);
+    }
+  }
+}
+
 function officialSongStoragePath() {
   var store = findOfficialSettingsStore();
   var candidates = officialWidgetCandidates(store);
@@ -18,24 +165,47 @@ function officialSongStoragePath() {
 }
 
 async function localCustomSongSearch(params, config) {
+  var cache = customSongListState, epoch = cache.epoch, root = customSongRootKey();
+  var firstPage = !params || !Number(params.cursor || 0);
+  if (firstPage) cache.ready = false;
+  cache.pending++;
   try {
     var data = await callApi("/api/custom-songs/search", {
       method: "POST",
       body: Object.assign({}, params || {}, {
         detectedRoot: officialSongStoragePath(),
+        cached: true,
       }),
       signal: config && config.signal,
     });
+    if (epoch !== cache.epoch || root !== customSongRootKey() || (config && config.signal && config.signal.aborted)) {
+      var stale = new Error("曲库已刷新，已忽略过期的列表请求。");
+      stale.name = "AbortError";
+      throw stale;
+    }
+    if (firstPage) {
+      cache.root = root;
+      cache.total = Number(data.total);
+      cache.firstId = data.list && data.list.length ? String(data.list[0].id || data.list[0].userSongId) : null;
+      cache.ready = Array.isArray(data.list) && (data.list.length > 0 || cache.total === 0);
+    }
     customSongsState.data = data;
     customSongsState.error = "";
     return data;
   } catch (error) {
-    customSongsState.error = error.message || String(error);
+    if (epoch === cache.epoch) {
+      cache.ready = false;
+      if (error.name !== "AbortError") customSongsState.error = error.message || String(error);
+    }
     throw error;
   } finally {
+    cache.pending--;
     mountCustomSongTools();
   }
 }
+
+localCustomSongSearch.canReuse = canReuseCustomSongList;
+localCustomSongSearch.invalidate = invalidateCustomSongList;
 
 function mountCustomSongTools() {
   var route = window.location.hash || window.location.pathname;
@@ -75,7 +245,253 @@ function mountCustomSongTools() {
 }
 
 function customSongsChanged() {
+  invalidateCustomSongList();
   window.dispatchEvent(new Event("linli-custom-songs-changed"));
+}
+
+function setCustomSongDiagnostics(modal, snapshot, message) {
+  modal.__scanDiagnostics = snapshot && snapshot.scanId && snapshot.report && snapshot.local ? snapshot : null;
+  modal.__diagnosticsMessage = message || "";
+  modal.querySelector("[data-custom-diagnostic-detail]").style.display = "none";
+  modal.querySelector("[data-custom-diagnostic-reasons]").textContent = "查看原因";
+  renderCustomSongDiagnostics(modal);
+}
+
+var CUSTOM_DIAGNOSTIC_STAGE_LABELS = {
+  line: "行",
+  outer: "外层 JSON",
+  action: "动作",
+  request: "请求",
+  inner: "内层 JSON",
+  prefix: "前缀",
+  fields: "字段",
+  merge: "合并",
+  match: "匹配",
+  coverage: "覆盖",
+};
+
+var CUSTOM_DIAGNOSTIC_REASON_LABELS = {
+  NO_MARKER: "未发现标记",
+  ENCODING_SUSPECTED: "疑似编码问题",
+  UNCLASSIFIED_OUTER_JSON: "外层 JSON 未分类",
+  UNKNOWN_ACTION: "其他或未识别动作",
+  REQUEST_TYPE_INVALID: "请求类型无效",
+  INNER_JSON_FAILED: "内层 JSON 解析失败",
+  PREFIX_NO_RECORDS: "前缀未找到记录",
+  PREFIX_NAME_MISSING: "前缀记录缺少歌名",
+  NAME_KEY_NOT_EXTRACTED: "未提取名称键",
+  NAME_FIELD_MISSING: "名称字段缺失",
+  NAME_FIELD_TYPE_INVALID: "名称字段类型无效",
+  NAME_BLANK: "名称为空",
+  NAME_EQUALS_KEY: "名称等于名称键",
+  NO_MATCHING_KEY: "没有匹配名称键",
+  NAME_REASON_UNCERTAIN: "名称原因不确定",
+  MERGED_NAME_UNUSABLE: "合并后的名称不可用",
+  NAME_AVAILABLE: "已获得名称",
+};
+
+var CUSTOM_DIAGNOSTIC_SOURCE_LABELS = {
+  scanned: "扫描所得",
+  recovered: "恢复所得",
+  retained: "沿用已有",
+  manual: "手动名称",
+  directory: "目录名称",
+  unusable: "不可用名称",
+  unindexed: "未入库目录",
+};
+
+var CUSTOM_DIAGNOSTIC_FILE_STAGE_LABELS = {
+  totalLines: "总行",
+  nonEmptyLines: "非空行",
+  markerLines: "含标记行",
+  linesWithoutMarker: "无标记行",
+  outerJsonParsed: "外层已解析",
+  unclassifiedOuterFailures: "外层未分类失败",
+  unknownActions: "未知动作",
+  requestTypeFailures: "请求类型失败",
+  innerJsonParsed: "内层已解析",
+  innerJsonFailures: "内层解析失败",
+  prefixAttempts: "前缀尝试",
+  prefixRecoveredEvents: "前缀恢复事件",
+  prefixEmptyEvents: "前缀空事件",
+  eventsWithoutNameKey: "无名称键事件",
+  invalidNameRecords: "无效名称记录",
+  missingNameRecords: "缺失名称记录",
+  logFilesIgnored: "忽略日志",
+};
+
+function customDiagnosticStageLabel(stage) {
+  return Object.prototype.hasOwnProperty.call(CUSTOM_DIAGNOSTIC_STAGE_LABELS, stage) ? CUSTOM_DIAGNOSTIC_STAGE_LABELS[stage] : "未知阶段";
+}
+
+function customDiagnosticReasonLabel(reasonCode) {
+  return Object.prototype.hasOwnProperty.call(CUSTOM_DIAGNOSTIC_REASON_LABELS, reasonCode) ? CUSTOM_DIAGNOSTIC_REASON_LABELS[reasonCode] : "未知原因";
+}
+
+function customDiagnosticSourceLabel(source) {
+  return Object.prototype.hasOwnProperty.call(CUSTOM_DIAGNOSTIC_SOURCE_LABELS, source) ? CUSTOM_DIAGNOSTIC_SOURCE_LABELS[source] : "未知来源";
+}
+
+function customDiagnosticCount(value) {
+  return typeof value === "number" && isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+}
+
+function customDiagnosticLine(value) {
+  return typeof value === "number" && isFinite(value) && value >= 1 ? "第 " + Math.floor(value) + " 行" : "行号未知";
+}
+
+function customDiagnosticFilePointer(value, omitted) {
+  if (omitted === true) return "文件明细已省略";
+  return typeof value === "string" && value.trim() ? "匿名文件 " + value : "文件标识未知";
+}
+
+function customDiagnosticEvidenceLines(report, counts) {
+  var lines = [];
+  lines.push("阶段统计：行（总 " + customDiagnosticCount(counts.totalLines) + "，非空 " +
+    customDiagnosticCount(counts.nonEmptyLines) + "，含标记 " + customDiagnosticCount(counts.markerLines) +
+    "，无标记 " + customDiagnosticCount(counts.linesWithoutMarker) + "）");
+  lines.push("外层解析（已解析 " + customDiagnosticCount(counts.outerJsonParsed) + "，未分类失败 " +
+    customDiagnosticCount(counts.unclassifiedOuterFailures) + "）；动作未知 " +
+    customDiagnosticCount(counts.unknownActions) + "；请求类型失败 " +
+    customDiagnosticCount(counts.requestTypeFailures));
+  lines.push("内层解析（已解析 " + customDiagnosticCount(counts.innerJsonParsed) + "，失败 " +
+    customDiagnosticCount(counts.innerJsonFailures) + "）；前缀（尝试 " +
+    customDiagnosticCount(counts.prefixAttempts) + "，恢复事件 " +
+    customDiagnosticCount(counts.prefixRecoveredEvents) + "，空事件 " +
+    customDiagnosticCount(counts.prefixEmptyEvents) + "）");
+  lines.push("名称字段（无名称键 " + customDiagnosticCount(counts.eventsWithoutNameKey) + "，无效名称记录 " +
+    customDiagnosticCount(counts.invalidNameRecords) + "，缺失名称记录 " +
+    customDiagnosticCount(counts.missingNameRecords) + "）；忽略日志 " +
+    customDiagnosticCount(counts.logFilesIgnored));
+
+  var logFiles = Array.isArray(report.logFiles) ? report.logFiles : [];
+  if (logFiles.length) {
+    lines.push("\n文件证据（仅匿名文件标识）：");
+    logFiles.forEach(function (file) {
+      var sparse = [];
+      var stages = file && file.stages && typeof file.stages === "object" ? file.stages : {};
+      Object.keys(CUSTOM_DIAGNOSTIC_FILE_STAGE_LABELS).forEach(function (stage) {
+        var count = customDiagnosticCount(stages[stage]);
+        if (count) sparse.push(CUSTOM_DIAGNOSTIC_FILE_STAGE_LABELS[stage] + " " + count);
+      });
+      lines.push(customDiagnosticFilePointer(file && file.fileId, file && file.fileOmitted) + "：" +
+        (sparse.length ? sparse.join("，") : "无阶段计数"));
+    });
+  }
+
+  var issues = Array.isArray(report.issues) ? report.issues.slice(0, 64) : [];
+  if (issues.length) {
+    lines.push("\n问题证据：");
+    issues.forEach(function (issue) {
+      var count = customDiagnosticCount(issue && issue.count);
+      var relatedRecords = customDiagnosticCount(issue && issue.relatedRecords);
+      lines.push(customDiagnosticFilePointer(issue && issue.fileId, issue && issue.fileOmitted) + " · " +
+        customDiagnosticLine(issue && issue.line) + " · " + customDiagnosticStageLabel(issue && issue.stage) +
+        " · " + customDiagnosticReasonLabel(issue && issue.reasonCode) +
+        "（计数 " + count + "，" + (relatedRecords ? "关联记录" + relatedRecords + "条" : "未建立关联/影响尚不确定") + "）");
+    });
+  }
+
+  var omitted = report.omitted && typeof report.omitted === "object" ? report.omitted : null;
+  if (omitted) {
+    var omittedIssues = customDiagnosticCount(omitted.issues);
+    var omittedRecordKeys = customDiagnosticCount(omitted.recordKeys);
+    if (omittedIssues || omittedRecordKeys)
+      lines.push("省略：问题 " + omittedIssues + "，记录键 " + omittedRecordKeys + "。");
+  }
+
+  var samples = Array.isArray(report.samples) ? report.samples : [];
+  if (samples.length) {
+    samples = samples.map(function (sample, index) { return { sample: sample, index: index }; }).sort(function (a, b) {
+      var rank = function (entry) { return entry.sample && entry.sample.displaySource === "unindexed" ? 3 : entry.sample && entry.sample.displayHasName === false ? 0 :
+        (entry.sample && entry.sample.displayHasName === true ? 2 : 1); };
+      return rank(a) - rank(b) || a.index - b.index;
+    }).slice(0, 32);
+    lines.push("\n名称样本（优先显示未识别名称）：");
+    samples.forEach(function (entry, index) {
+      var sample = entry.sample || {};
+      var sources = Array.isArray(sample.sources) ? sample.sources.slice(0, 2) : [];
+      var hasName = sample.displayHasName === false ? "未识别名称" :
+        (sample.displayHasName === true ? "已有名称" : "名称状态未知");
+      var certainty = sample.certainty === "fact" ? "事实" :
+        (sample.certainty === "unknown" ? "不确定" : "确定性未知");
+      var pointer = sources.length ? sources.map(function (source) {
+        return customDiagnosticFilePointer(source && source.fileId, source && source.fileOmitted) + " · " +
+          customDiagnosticLine(source && source.line) + " · " + customDiagnosticStageLabel(source && source.stage) +
+          " · " + customDiagnosticReasonLabel(source && source.reasonCode);
+      }).join("；") : "无可用匿名指针";
+      lines.push("样本 " + (sample.sampleId || ("#" + (index + 1))) + " · " + hasName +
+        " · 来源：" + customDiagnosticSourceLabel(sample.displaySource) + " · 原因：" +
+        customDiagnosticReasonLabel(sample.reasonCode) + " · 确定性：" + certainty + "\n指针：" + pointer);
+    });
+  }
+  return lines;
+}
+
+function renderCustomSongDiagnostics(modal) {
+  var snapshot = modal.__scanDiagnostics;
+  var root = modal.querySelector("[data-custom-root]").value.trim();
+  if (snapshot && snapshot.local.mediaRoot !== root) snapshot = null;
+  var busy = customSongsState.busy || Boolean(customSongVisionState.run) || modal.__diagnosticsExporting;
+  modal.querySelector("[data-custom-diagnostic-reasons]").disabled = busy || !snapshot;
+  modal.querySelector("[data-custom-diagnostic-export]").disabled = busy || !snapshot;
+  var summary = modal.querySelector("[data-custom-diagnostic-summary]");
+  var detail = modal.querySelector("[data-custom-diagnostic-detail]");
+  if (!snapshot) {
+    summary.textContent = modal.__diagnosticsMessage || "尚无扫描报告。重新扫描后可查看原因或导出诊断。";
+    detail.textContent = "";
+    detail.style.display = "none";
+    return;
+  }
+  var report = snapshot.report, counts = report.stages || {};
+  summary.textContent = (report.complete ? "扫描完成" : "扫描未完整完成") +
+    "：发现 " + (counts.songDirectories || 0) + " 首，本次恢复歌名 " + (counts.recoveredNames || 0) +
+    " 首，沿用已有名称 " + (counts.retainedNames || 0) + " 首，手动名称 " + (counts.manualNames || 0) +
+    " 首，" + (counts.directoryNames || 0) + " 首仍使用目录名。" +
+    (counts.unindexedSongs ? "另有 " + counts.unindexedSongs + " 个目录未入库。" : "") +
+    (modal.__diagnosticsMessage ? " " + modal.__diagnosticsMessage : "");
+  var lines = ["扫描时间：" + snapshot.startedAt, "扫描标识：" + snapshot.scanId,
+    "曲目目录（仅本机显示）：" + snapshot.local.mediaRoot,
+    "日志目录（仅本机显示）：" + snapshot.local.logRoot,
+    "日志来源：" + (snapshot.local.logRootSource === "default" ? "默认位置" : "环境变量指定"),
+    "日志：发现 " + (counts.logFilesDiscovered || 0) + "，支持 " + (counts.logFilesSupported || 0) +
+      "，读完 " + (counts.logFilesRead || 0) + "，跳过 " + (counts.logFilesSkipped || 0) + "，读取失败 " + (counts.logFilesFailed || 0),
+    "事件：相关 " + (counts.relevantEvents || 0) + "，解析成功 " + (counts.parsedEvents || 0) +
+      "；有效名称记录 " + (counts.usableNameRecords || 0) + "，匹配目录 " + (counts.matchedNames || 0),
+    "本次恢复、沿用已有、手动名称和目录名互不重复，仅统计此次入库曲目；分页不改变统计。"];
+  (report.reasons || []).forEach(function (reason) {
+    lines.push("\n[" + reason.code + "] " + reason.message + "（" + reason.count + "）" +
+      (reason.certainty === "unknown" ? " · 暂不能确定" : ""));
+    if (reason.suggestion) lines.push("建议：" + reason.suggestion);
+  });
+  if (!(report.reasons || []).length) lines.push("\n本次扫描未发现需要说明的异常；不代表历史数据完整。 ");
+  if (report.schemaVersion >= 2) lines = lines.concat(customDiagnosticEvidenceLines(report, counts));
+  lines.push("\n导出仅包含脱敏诊断，不包含上述真实路径、曲名、日志正文或私人数据，不会上传。 ");
+  detail.textContent = lines.join("\n");
+}
+
+async function exportCustomSongDiagnostics(modal) {
+  if (customSongsState.busy || customSongVisionState.run || modal.__diagnosticsExporting) return;
+  var snapshot = modal.__scanDiagnostics;
+  var root = modal.querySelector("[data-custom-root]").value.trim();
+  if (!snapshot || snapshot.local.mediaRoot !== root) return;
+  modal.__diagnosticsExporting = true;
+  customSongManagerBusy(modal, false);
+  try {
+    var report = await callApi("/api/custom-songs/diagnostics/export", {
+      method: "POST", body: { mediaRoot: root, scanId: snapshot.scanId }
+    });
+    if (!report || report.scanId !== snapshot.scanId || modal.__scanDiagnostics !== snapshot || modal.hidden) {
+      throw new Error("扫描报告已变化，请重新查看后导出。");
+    }
+    downloadJson(report, "linli-song-scan-" + report.scanId);
+    modal.__diagnosticsMessage = "已发起脱敏 JSON 下载，请确认文件已保存。";
+  } catch (error) {
+    setCustomSongDiagnostics(modal, null, error.message || "导出失败，请重新扫描后重试。");
+  } finally {
+    modal.__diagnosticsExporting = false;
+    customSongManagerBusy(modal, false);
+  }
 }
 
 async function openCustomSongManager() {
@@ -91,17 +507,25 @@ async function openCustomSongManager() {
       '<p class="lm-modal-status">读取已下载的演奏视频。曲名和视频时段可手动校正；缺失时段会复用现有视频。</p>' +
       '<label>曲目下载文件夹<input class="lm-input" data-custom-root aria-label="曲目下载文件夹"></label>' +
       '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-scan>重新扫描</button></div>' +
+      '<p class="lm-modal-status" role="status" data-custom-diagnostic-summary></p>' +
+      '<div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-diagnostic-reasons disabled>查看原因</button><button type="button" class="lm-button lm-button-small" data-custom-diagnostic-export disabled>导出诊断</button></div>' +
+      '<div class="lm-modal-status" data-custom-diagnostic-detail style="display:none;white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto"></div>' +
       '<label>选择曲目<select class="lm-select" data-custom-song aria-label="选择曲目"></select></label>' +
       '<div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-prev>上一页</button><span data-custom-page></span><button type="button" class="lm-button lm-button-small" data-custom-next>下一页</button></div>' +
       '<label>曲名<input class="lm-input" data-custom-name aria-label="曲名"></label>' +
+      '<div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-vision-start>画面辅助核对</button><button type="button" class="lm-button lm-button-small" data-custom-vision-cancel style="display:none">取消核对</button></div>' +
+      '<p class="lm-modal-status" role="status" data-custom-vision-status>仅核对当前曲目的待确认视频；建议不会自动保存。</p>' +
       '<div data-custom-files></div><p class="lm-modal-status" role="status" data-custom-status></p>' +
       '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-close>关闭</button><button type="button" class="lm-button lm-button-primary" data-custom-save>保存</button></div></section>';
     document.body.appendChild(modal);
     modal.querySelector("[data-custom-close]").onclick = function () {
-      if (!customSongsState.busy) {
+      if (!customSongsState.busy && !modal.__diagnosticsExporting) {
+        clearCustomSongVision(modal);
         modal.hidden = true;
         modal.querySelectorAll("video").forEach(function (video) {
           video.pause();
+          video.removeAttribute("src");
+          if (video.load) video.load();
         });
       }
     };
@@ -112,6 +536,18 @@ async function openCustomSongManager() {
     modal.querySelector("[data-custom-scan]").onclick = function () {
       void loadCustomSongManager(modal, true);
     };
+    modal.querySelector("[data-custom-root]").oninput = function () {
+      invalidateCustomSongList();
+      setCustomSongDiagnostics(modal, null, "目录已更改，请重新扫描以获得此目录的报告。");
+    };
+    modal.querySelector("[data-custom-diagnostic-reasons]").onclick = function () {
+      if (this.disabled) return;
+      var detail = modal.querySelector("[data-custom-diagnostic-detail]");
+      var show = detail.style.display === "none";
+      detail.style.display = show ? "" : "none";
+      this.textContent = show ? "收起原因" : "查看原因";
+    };
+    modal.querySelector("[data-custom-diagnostic-export]").onclick = function () { void exportCustomSongDiagnostics(modal); };
     modal.querySelector("[data-custom-prev]").onclick = function () {
       customSongsState.page = Math.max(0, customSongsState.page - 1);
       void loadCustomSongManager(modal, false);
@@ -121,37 +557,56 @@ async function openCustomSongManager() {
       void loadCustomSongManager(modal, false);
     };
     modal.querySelector("[data-custom-song]").onchange = function () {
+      clearCustomSongVision(modal);
       customSongsState.selected = this.value;
       renderCustomSongEditor(modal);
+    };
+    modal.querySelector("[data-custom-vision-start]").onclick = function () { void reviewCustomSongVision(modal); };
+    modal.querySelector("[data-custom-vision-cancel]").onclick = function () {
+      clearCustomSongVision(modal);
+      modal.querySelector("[data-custom-vision-status]").textContent = "正在取消画面核对…";
+      renderCustomSongVision(modal);
     };
     modal.querySelector("[data-custom-save]").onclick = function () {
       void saveCustomSongEditor(modal);
     };
   }
   modal.hidden = false;
+  clearCustomSongVision(modal);
   modal.querySelector("[data-custom-root]").value =
     (customSongsState.data && customSongsState.data.mediaRoot) || "";
   customSongsState.page = 0;
+  setCustomSongDiagnostics(modal, null);
   await loadCustomSongManager(modal, false);
 }
 
 function customSongManagerBusy(modal, busy) {
   customSongsState.busy = busy;
+  var reviewing = Boolean(customSongVisionState.run);
   modal.querySelectorAll("button,input,select").forEach(function (node) {
-    node.disabled = busy;
+    node.disabled = busy || reviewing || Boolean(modal.__diagnosticsExporting);
   });
-  if (!busy) {
+  modal.querySelector("[data-custom-close]").disabled = busy || Boolean(modal.__diagnosticsExporting);
+  modal.querySelector("[data-custom-vision-cancel]").disabled = !reviewing;
+  modal.querySelector("[data-custom-vision-cancel]").style.display = reviewing ? "" : "none";
+  if (!busy && !reviewing && !modal.__diagnosticsExporting) {
     var data = modal.__customSongsPage;
     modal.querySelector("[data-custom-prev]").disabled =
       !data || customSongsState.page === 0;
     modal.querySelector("[data-custom-next]").disabled = !data || !data.hasMore;
     modal.querySelector("[data-custom-save]").disabled =
       !customSongsState.selected;
+    modal.querySelector("[data-custom-vision-start]").disabled = !customSongsState.selected || typeof customSongFrameReader === "undefined";
+    renderCustomSongVision(modal);
   }
+  renderCustomSongDiagnostics(modal);
 }
 
 async function loadCustomSongManager(modal, scan) {
-  if (customSongsState.busy) return;
+  if (customSongsState.busy || customSongVisionState.run || modal.__diagnosticsExporting) return;
+  if (scan) invalidateCustomSongList();
+  if (scan) setCustomSongDiagnostics(modal, null, "正在扫描，报告将在本次扫描结束后生成。");
+  clearCustomSongVision(modal);
   customSongManagerBusy(modal, true);
   var status = modal.querySelector("[data-custom-status]");
   status.textContent = scan ? "正在扫描本地视频…" : "正在读取曲目…";
@@ -159,10 +614,14 @@ async function loadCustomSongManager(modal, scan) {
     var root =
       modal.querySelector("[data-custom-root]").value.trim() || undefined;
     if (scan) {
-      await callApi("/api/custom-songs/scan", {
+      var scanResult = await callApi("/api/custom-songs/scan", {
         method: "POST",
         body: { mediaRoot: root },
       });
+      if (scanResult.diagnostics) {
+        modal.querySelector("[data-custom-root]").value = scanResult.diagnostics.local.mediaRoot;
+        setCustomSongDiagnostics(modal, scanResult.diagnostics);
+      }
       customSongsState.page = 0;
     }
     var data = await callApi("/api/custom-songs/search", {
@@ -178,6 +637,15 @@ async function loadCustomSongManager(modal, scan) {
     customSongsState.data = data;
     customSongsState.error = "";
     modal.querySelector("[data-custom-root]").value = data.mediaRoot;
+    if (!scan) {
+      try {
+        setCustomSongDiagnostics(modal, await callApi("/api/custom-songs/diagnostics", {
+          method: "POST", body: { mediaRoot: data.mediaRoot }
+        }));
+      } catch (diagnosticError) {
+        setCustomSongDiagnostics(modal, null, diagnosticError.message || "尚无扫描报告，请重新扫描。");
+      }
+    }
     var select = modal.querySelector("[data-custom-song]");
     select.innerHTML = "";
     data.list.forEach(function (song) {
@@ -202,6 +670,12 @@ async function loadCustomSongManager(modal, scan) {
     renderCustomSongEditor(modal);
     if (scan) customSongsChanged();
   } catch (error) {
+    if (error.scanDiagnostics) {
+      modal.querySelector("[data-custom-root]").value = error.scanDiagnostics.local.mediaRoot;
+      setCustomSongDiagnostics(modal, error.scanDiagnostics, "扫描失败，已保留本次收集到的诊断。");
+    } else if (!modal.__scanDiagnostics || !scan) {
+      setCustomSongDiagnostics(modal, null, "尚无本次扫描报告：服务不可达或扫描未启动，请确认本地服务后重试。");
+    }
     customSongsState.error = error.message || String(error);
     status.textContent = customSongsState.error;
     modal.__customSongsPage = null;
@@ -228,12 +702,11 @@ function renderCustomSongEditor(modal) {
   });
   container.innerHTML = "";
   modal.querySelector("[data-custom-name]").value = song ? song.name : "";
+  modal.__customInitialName = song ? String(song.name || "") : "";
   if (!song) return;
   var note = document.createElement("p");
   note.className = "lm-modal-status";
-  note.textContent = song.fallbackPeriods.length
-    ? "部分时段未确认或缺失，当前复用现有视频。可预览后设置对应时段。"
-    : "各时段已匹配。";
+  note.textContent = customSongCoverageText(song);
   container.appendChild(note);
   song.localFiles.forEach(function (file) {
     var row = document.createElement("div");
@@ -241,22 +714,40 @@ function renderCustomSongEditor(modal) {
     var label = document.createElement("label");
     label.className = "lm-modal-status";
     label.textContent = file.fileName;
+    var badges = document.createElement("div");
+    badges.className = "lm-evidence-badges";
+    var evidenceBadge = document.createElement("span");
+    evidenceBadge.className = "lm-badge";
+    evidenceBadge.textContent = customSongEvidenceLabel(file);
+    badges.appendChild(evidenceBadge);
+    if (file.conflict === true) {
+      var conflictBadge = document.createElement("span");
+      conflictBadge.className = "lm-badge";
+      conflictBadge.textContent = "原始记录冲突";
+      badges.appendChild(conflictBadge);
+    }
+    var evidenceNote = document.createElement("p");
+    evidenceNote.className = "lm-modal-status";
+    evidenceNote.textContent = file.evidenceNote ? String(file.evidenceNote) : "";
     var select = document.createElement("select");
     select.className = "lm-select";
     select.setAttribute("data-custom-file", file.fileName);
     select.setAttribute("aria-label", "视频时段 " + file.fileName);
     [
-      ["", "时段未知"],
-      ["TOD12", "白天"],
-      ["TOD1730", "傍晚"],
-      ["TOD20", "夜晚"],
+      ["__auto__", customSongAutomaticOptionLabel(file)],
+      ["", "人工设为未知"],
+      ["TOD12", "白天06:00–16:00"],
+      ["TOD1730", "傍晚16:00–20:00"],
+      ["TOD20", "夜晚20:00–06:00"],
     ].forEach(function (period) {
       var option = document.createElement("option");
       option.value = period[0];
       option.textContent = period[1];
       select.appendChild(option);
     });
-    select.value = file.tod || "";
+    var initialSelection = customSongInitialSelection(file);
+    select.setAttribute("data-custom-initial-selection", initialSelection);
+    select.value = initialSelection;
     var details = document.createElement("details");
     var summary = document.createElement("summary");
     summary.textContent = "预览视频";
@@ -268,31 +759,162 @@ function renderCustomSongEditor(modal) {
     details.appendChild(summary);
     details.appendChild(video);
     row.appendChild(label);
+    row.appendChild(badges);
+    row.appendChild(evidenceNote);
     row.appendChild(select);
+    var panel = document.createElement("div");
+    panel.setAttribute("data-vision-file", file.fileName);
+    panel.style.cssText = "display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap";
+    var thumbnail = document.createElement("img");
+    thumbnail.setAttribute("data-vision-thumbnail", "");
+    thumbnail.alt = "本地视频核对画面";
+    thumbnail.style.cssText = "display:none;width:160px;max-width:100%;aspect-ratio:16/9;object-fit:contain;border-radius:6px";
+    var hint = document.createElement("p");
+    hint.setAttribute("data-vision-message", "");
+    hint.className = "lm-modal-status";
+    hint.style.cssText = "flex:1;min-width:180px;white-space:pre-wrap;margin:0";
+    var actions = document.createElement("div");
+    actions.className = "lm-modal-actions";
+    var review = document.createElement("button");
+    review.type = "button"; review.className = "lm-button lm-button-small";
+    review.setAttribute("data-vision-one", ""); review.textContent = "核对画面";
+    review.onclick = function () { void reviewCustomSongVision(modal, file.fileName); };
+    var apply = document.createElement("button");
+    apply.type = "button"; apply.className = "lm-button lm-button-small";
+    apply.setAttribute("data-vision-apply", ""); apply.textContent = "采用建议"; apply.disabled = true;
+    apply.onclick = function () { applyCustomSongVision(modal, file.fileName); };
+    actions.appendChild(review); actions.appendChild(apply);
+    panel.appendChild(thumbnail); panel.appendChild(hint); panel.appendChild(actions);
+    row.appendChild(panel);
     row.appendChild(details);
     container.appendChild(row);
   });
+  renderCustomSongVision(modal);
+}
+
+function customSongEvidence(file) {
+  return customSongEvidenceValue(file && file.evidence != null
+    ? file.evidence
+    : file && file.automaticEvidence);
+}
+
+function customSongAutomaticEvidence(file) {
+  return customSongEvidenceValue(file && file.automaticEvidence != null
+    ? file.automaticEvidence
+    : file && file.evidence);
+}
+
+function customSongEvidenceValue(value) {
+  value = String(value || "").toLowerCase();
+  return ["original", "inferred", "manual", "legacy", "unknown", "missing"].indexOf(value) >= 0
+    ? value
+    : "unknown";
+}
+
+function customSongEvidenceLabelValue(value) {
+  var labels = {
+    original: "原始记录确认",
+    inferred: "排除推定",
+    manual: "手工设置",
+    legacy: "旧记录待确认",
+    unknown: "未知",
+    missing: "未知",
+  };
+  return labels[value] || "未知";
+}
+
+function customSongEvidenceLabel(file) {
+  return customSongEvidenceLabelValue(customSongEvidence(file));
+}
+
+function customSongAutomaticOptionLabel(file) {
+  var hasAutomaticTod = file && Object.prototype.hasOwnProperty.call(file, "automaticTod");
+  var tod = hasAutomaticTod
+    ? file.automaticTod
+    : file && file.tod != null
+      ? file.tod
+      : "";
+  tod = tod == null ? "" : String(tod);
+  var periods = {
+    TOD12: "白天",
+    TOD1730: "傍晚",
+    TOD20: "夜晚",
+  };
+  return "自动识别：" + (periods[tod] || "未知时段") +
+    "（" + customSongEvidenceLabelValue(customSongAutomaticEvidence(file)) + "）";
+}
+
+function customSongInitialSelection(file) {
+  return customSongEvidence(file) === "manual"
+    ? (file && file.tod != null ? String(file.tod) : "")
+    : "__auto__";
+}
+
+function customSongEffectiveTod(file) {
+  if (!file) return "";
+  if (customSongEvidence(file) === "manual")
+    return file.tod != null && String(file.tod) ? String(file.tod) : "";
+  if (file.tod != null && String(file.tod)) return String(file.tod);
+  return file.automaticTod != null ? String(file.automaticTod) : "";
+}
+
+function customSongCoverageText(song) {
+  var counts = { original: 0, inferred: 0, manual: 0, pending: 0 };
+  var periods = {};
+  (song.localFiles || []).forEach(function (file) {
+    var evidence = customSongEvidence(file);
+    if (evidence === "original") counts.original += 1;
+    if (evidence === "inferred") counts.inferred += 1;
+    if (evidence === "manual") counts.manual += 1;
+    if (evidence === "legacy" || evidence === "unknown" || evidence === "missing" ||
+      (evidence === "manual" && !customSongEffectiveTod(file)) || file.conflict === true)
+      counts.pending += 1;
+    var tod = customSongEffectiveTod(file);
+    if (tod) periods[tod] = true;
+  });
+  var allPeriods = ["TOD12", "TOD1730", "TOD20"].every(function (tod) {
+    return periods[tod];
+  });
+  var confirmed = allPeriods && !(song.fallbackPeriods || []).length &&
+    counts.inferred === 0 && counts.manual === 0 && counts.pending === 0 &&
+    (song.localFiles || []).every(function (file) {
+      return customSongEvidence(file) === "original" && file.conflict !== true;
+    });
+  var summary = "原始 " + counts.original + " · 推定 " + counts.inferred +
+    " · 手工 " + counts.manual + " · 待确认 " + counts.pending;
+  if (confirmed) return "各时段已匹配（原始记录确认）。" + summary;
+  if (counts.inferred) summary += "。推定不等于原始确认";
+  return (allPeriods ? "各时段已设置，证据状态仍需核对。" : "部分时段未确认或缺失，当前复用现有视频。") + summary;
 }
 
 async function saveCustomSongEditor(modal) {
-  if (customSongsState.busy || !customSongsState.selected) return;
+  if (customSongsState.busy || customSongVisionState.run || !customSongsState.selected) return;
   customSongManagerBusy(modal, true);
   try {
+    var name = modal.querySelector("[data-custom-name]").value;
+    var mappings = Array.prototype.map.call(
+      modal.querySelectorAll("[data-custom-file]"),
+      function (select) {
+        if (select.value === select.getAttribute("data-custom-initial-selection")) return null;
+        if (select.value === "__auto__")
+          return { fileName: select.getAttribute("data-custom-file"), reset: true };
+        return {
+          fileName: select.getAttribute("data-custom-file"),
+          tod: select.value || null,
+        };
+      },
+    ).filter(Boolean);
+    var selectedSong = currentCustomSong(modal);
+    mappings.forEach(function (entry) {
+      var file = selectedSong && selectedSong.localFiles.find(function (item) { return item.fileName === entry.fileName; });
+      if (file && file.fileRevision) entry.expectedFileRevision = file.fileRevision;
+    });
+    var body = { nameKey: customSongsState.selected };
+    if (name !== modal.__customInitialName) body.name = name;
+    if (mappings.length) body.mappings = mappings;
     var saved = await callApi("/api/custom-songs/update", {
       method: "POST",
-      body: {
-        nameKey: customSongsState.selected,
-        name: modal.querySelector("[data-custom-name]").value,
-        mappings: Array.prototype.map.call(
-          modal.querySelectorAll("[data-custom-file]"),
-          function (select) {
-            return {
-              fileName: select.getAttribute("data-custom-file"),
-              tod: select.value || null,
-            };
-          },
-        ),
-      },
+      body: body,
     });
     if (!saved) throw new Error("本地视频已移动或无法读取，请重新扫描。");
     var page = modal.__customSongsPage;
@@ -306,8 +928,10 @@ async function saveCustomSongEditor(modal) {
         if (option.value === saved.nameKey) option.textContent = saved.name;
       },
     );
+    renderCustomSongEditor(modal);
     customSongsChanged();
     modal.querySelector("[data-custom-status]").textContent = "已保存。";
+    modal.querySelector("[data-custom-vision-status]").textContent = "已保存。当前映射以保存结果为准，画面建议不会自动写入。";
   } catch (error) {
     modal.querySelector("[data-custom-status]").textContent =
       error.message || String(error);

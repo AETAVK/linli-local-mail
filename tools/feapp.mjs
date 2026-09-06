@@ -21,6 +21,13 @@ const WEBPLAYER_MAIN_ENTRY = "assets/main-95684bf7.js";
 const MUSIC_BRIDGE_EXTRAS = 'getQueueElement:()=>Ut.value&&Ut.value.$el,getQueue:()=>K.value,notify:(q,me)=>window.__LINLI_NATIVE_NOTIFY__(q,me),stopRemoved: q=>{const me=h.currentSong;if(h.playSource==="playlist"&&me&&q.some(Be=>Number(Be.itemType)===Number(me.itemType)&&String(Be.itemId)===String(me.itemId)))h.stopCurrentSong()},';
 
 const PATCH_RULES = [
+  // Re-entering an unchanged local catalog must not reset the native pager or
+  // flash its loading state. A new component/root or explicit edit/scan still
+  // follows the original fetch/reset path and request-generation guard.
+  [
+    'P=async()=>{J.value=so,l.value=!0;const q=T();$e(),await xe(),!(q!==c||!Q.value)&&(l.value=!1,await qe(),X(eo(ct.value)))}',
+    'P=async()=>{J.value=so;const q=T();if(window.__LOCAL_MUSIC_API__.searchUserSongs.canReuse(he.value)){l.value=!1;await qe();if(q===c&&Q.value)X(eo(ct.value));return}l.value=!0;$e(),await xe(),!(q!==c||!Q.value)&&(l.value=!1,await qe(),X(eo(ct.value)))}'
+  ],
   // Stable row identity survives production builds without Vue dev metadata.
   ['onDblclick:L,onContextmenu:Oe(he,["prevent"])', 'onDblclick:L,"data-linli-song-id":a.song.id,onContextmenu:Oe(he,["prevent"])'],
   ['loading:Nl}),Bn=', 'loading:Nl}),lmNativeNotify=window.__LINLI_NATIVE_NOTIFY__=(q,me)=>ze({message:String(q),type:me==="error"?"error":"success",duration:3000}),Bn='],
