@@ -544,6 +544,10 @@ const server = http.createServer(async (req, res) => {
       ok(req, res, await customSongs.rebuild(await readJsonBody(req)));
       return;
     }
+    if (req.method === "POST" && ["/api/custom-songs/diagnostics", "/api/custom-songs/diagnostics/export"].includes(url.pathname)) {
+      ok(req, res, customSongs.getDiagnostics(await readJsonBody(req), url.pathname.endsWith("/export")));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/custom-songs/update") {
       ok(req, res, await customSongs.update(await readJsonBody(req)));
       return;
@@ -893,7 +897,9 @@ const server = http.createServer(async (req, res) => {
     const status = Number.isInteger(candidateStatus) && candidateStatus >= 400 && candidateStatus <= 599
       ? candidateStatus
       : error instanceof SyntaxError ? 400 : 500;
-    fail(req, res, status, message);
+    if (["/api/custom-songs/scan", "/api/custom-songs/search"].includes(url.pathname) && error.scanDiagnostics) {
+      sendJson(req, res, status, { code: status, message, data: { scanDiagnostics: error.scanDiagnostics } });
+    } else fail(req, res, status, message);
   }
 });
 

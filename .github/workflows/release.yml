@@ -59,6 +59,10 @@ jobs:
           "SOURCE_COMMIT=$head" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
+      - name: Check self-contained public build prerequisites
+        shell: pwsh
+        run: node .github/scripts/release-contract.mjs check-source
+
       - name: Install the stable Rust MSVC toolchain
         shell: pwsh
         run: |

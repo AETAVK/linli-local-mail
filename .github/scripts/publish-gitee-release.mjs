@@ -1,9 +1,8 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 
 import {
   inspectReleaseBundle,
@@ -16,15 +15,20 @@ import {
   validateVersion,
 } from "./release-contract.mjs";
 
-const execFileAsync = promisify(execFile);
 const curlCommand = process.platform === "win32" ? "curl.exe" : "curl";
+const transferMaxTimeSeconds = "900";
+const transferSpeedLimitBytes = "1";
+const transferSpeedTimeSeconds = "90";
+const transferStdoutMaxBytes = 2_000_000;
+const transferStderrTailBytes = 8_192;
 const token = String(process.env.GITEE_TOKEN || "").trim();
 const repository = String(process.env.GITEE_REPOSITORY || "sforlife/linli-local-mail").trim();
 const releaseTag = String(process.env.GITEE_RELEASE_TAG || "").trim();
 
 function redact(value) {
   const text = String(value ?? "");
-  return token ? text.split(token).join("[REDACTED]") : text;
+  const secrets = [...new Set([token, String(process.env.GITEE_TOKEN || "").trim()].filter(Boolean))];
+  return secrets.reduce((redacted, secret) => redacted.split(secret).join("[REDACTED]"), text);
 }
 
 function fail(message) {
@@ -136,23 +140,128 @@ function temporaryCurlHeaders(directory) {
   return headerFile;
 }
 
+function curlConfigValue(value) {
+  return `"${String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\r", "\\r").replaceAll("\n", "\\n")}"`;
+}
+
+function temporaryCurlConfig(directory, entries) {
+  const configFile = path.join(directory, "curl.conf");
+  fs.writeFileSync(
+    configFile,
+    entries.map(([key, value]) => value === null ? key : `${key} = ${curlConfigValue(value)}`).join("\n") + "\n",
+    "utf8",
+  );
+  return configFile;
+}
+
+function parseCurlProgress(chunk) {
+  const matches = [...String(chunk).matchAll(/(?:^|\s)(\d{1,3}(?:\.\d+)?)%/gu)];
+  const value = matches.length ? Number(matches.at(-1)[1]) : null;
+  return Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
+}
+
+export function runCurlTransfer(configFile, label, curlOptions = [], { log = console.log } = {}) {
+  return new Promise((resolve, reject) => {
+    const safeLabel = redact(label);
+    const startedAt = Date.now();
+    let latestProgress = null;
+    let lastProgressAt = 0;
+    let lastReportedAt = startedAt;
+    let stdout = "";
+    let stdoutBytes = 0;
+    let stderrTail = Buffer.alloc(0);
+    let settled = false;
+
+    const clearHeartbeat = (error) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(heartbeat);
+      if (error) {
+        try { child.kill(); } catch { /* child may already be closed */ }
+        reject(error);
+      }
+    };
+    const appendStderrTail = (chunk) => {
+      const combined = Buffer.concat([stderrTail, chunk]);
+      stderrTail = combined.subarray(Math.max(0, combined.length - transferStderrTailBytes));
+    };
+
+    log(`[gitee-release] ${safeLabel} transfer started`);
+    const child = spawn(curlCommand, [...curlOptions, "--config", configFile], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    const reportProgress = (value) => {
+      const now = Date.now();
+      latestProgress = value;
+      lastProgressAt = now;
+      if (now - lastReportedAt >= 30_000 || value >= 100) {
+        log(`[gitee-release] ${safeLabel} transfer progress ${Math.round(value)}%`);
+        lastReportedAt = now;
+      }
+    };
+    const heartbeat = setInterval(() => {
+      const now = Date.now();
+      if (latestProgress !== null && now - lastProgressAt < 35_000 && now - lastReportedAt >= 30_000) {
+        log(`[gitee-release] ${safeLabel} transfer progress ${Math.round(latestProgress)}%`);
+        lastReportedAt = now;
+      }
+    }, 30_000);
+    heartbeat.unref?.();
+
+    child.stdout.on("data", (chunk) => {
+      if (settled) return;
+      stdoutBytes += chunk.byteLength;
+      if (stdoutBytes > transferStdoutMaxBytes) {
+        clearHeartbeat(new Error(`Gitee ${safeLabel} transfer stdout exceeded ${transferStdoutMaxBytes} bytes`));
+        return;
+      }
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      if (settled) return;
+      appendStderrTail(chunk);
+      const progress = parseCurlProgress(chunk.toString());
+      if (progress !== null) reportProgress(progress);
+    });
+    child.on("error", (error) => {
+      if (settled) return;
+      clearHeartbeat(new Error(`Gitee ${safeLabel} transfer could not start: ${redact(error.message)}`));
+    });
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      clearInterval(heartbeat);
+      settled = true;
+      const durationSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+      if (code !== 0) {
+        const detail = stderrTail.toString("utf8").trim().split(/\r?\n/u).at(-1)?.slice(0, 400) || `exit code ${code ?? "unknown"}`;
+        reject(new Error(`Gitee ${safeLabel} transfer failed after ${durationSeconds}s: ${redact(detail)}${signal ? ` (${signal})` : ""}`));
+        return;
+      }
+      log(`[gitee-release] ${safeLabel} transfer finished in ${durationSeconds}s`);
+      resolve(stdout);
+    });
+  });
+}
+
 async function uploadAttachment(apiRoot, releaseId, asset) {
   const temporaryDirectory = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP || os.tmpdir(), "linli-gitee-upload-"));
   const headerFile = temporaryCurlHeaders(temporaryDirectory);
+  const configFile = temporaryCurlConfig(temporaryDirectory, [
+    ["header", `@${headerFile}`],
+    ["header", "Expect:"],
+    ["form-string", `access_token=${token}`],
+    ["form", `file=@${asset.filePath};type=application/octet-stream`],
+    ["url", `${apiRoot}/releases/${releaseId}/attach_files`],
+  ]);
   try {
-    const { stdout } = await execFileAsync(curlCommand, [
-      "--silent", "--show-error", "--fail-with-body", "--location", "--http1.1",
-      "--connect-timeout", "30", "--max-time", "900",
-      "--header", `@${headerFile}`, "--header", "Expect:",
-      "--form-string", `access_token=${token}`,
-      "--form", `file=@${asset.filePath};type=application/octet-stream`,
-      `${apiRoot}/releases/${releaseId}/attach_files`,
-    ], { windowsHide: true, maxBuffer: 2_000_000 });
+    const stdout = await runCurlTransfer(configFile, `upload ${asset.name}`, [
+      "--show-error", "--fail-with-body", "--location", "--http1.1",
+      "--connect-timeout", "30", "--max-time", transferMaxTimeSeconds,
+      "--speed-limit", transferSpeedLimitBytes, "--speed-time", transferSpeedTimeSeconds,
+      "--progress-bar",
+    ]);
     if (!stdout) return null;
     try { return JSON.parse(stdout); } catch { return stdout; }
   } catch (error) {
-    const details = [error?.message, error?.stderr, error?.stdout].filter(Boolean).join(" ");
-    throw new Error(`Gitee 附件上传失败 ${asset.name}: ${redact(details).slice(0, 800)}`);
+    throw new Error(`Gitee 附件上传失败 ${redact(asset.name)}: ${redact(error?.message || error).slice(0, 800)}`);
   } finally {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
   }
@@ -164,23 +273,112 @@ async function downloadAndHashAttachment(apiRoot, releaseId, attachment, expecte
   const temporaryDirectory = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP || os.tmpdir(), "linli-gitee-verify-"));
   const headerFile = temporaryCurlHeaders(temporaryDirectory);
   const outputPath = path.join(temporaryDirectory, expected.name);
+  const configFile = temporaryCurlConfig(temporaryDirectory, [
+    ["header", `@${headerFile}`],
+    ["output", outputPath],
+    ["url", `${apiRoot}/releases/${releaseId}/attach_files/${encodeURIComponent(String(id))}/download`],
+  ]);
   try {
-    await execFileAsync(curlCommand, [
-      "--silent", "--show-error", "--fail", "--location", "--http1.1",
-      "--connect-timeout", "30", "--max-time", "900",
-      "--header", `@${headerFile}`, "--output", outputPath,
-      `${apiRoot}/releases/${releaseId}/attach_files/${encodeURIComponent(String(id))}/download`,
-    ], { windowsHide: true, maxBuffer: 2_000_000 });
+    await runCurlTransfer(configFile, `download ${expected.name}`, [
+      "--show-error", "--fail", "--location", "--http1.1",
+      "--connect-timeout", "30", "--max-time", transferMaxTimeSeconds,
+      "--speed-limit", transferSpeedLimitBytes, "--speed-time", transferSpeedTimeSeconds,
+      "--progress-bar",
+    ]);
     const size = fs.statSync(outputPath).size;
     if (size !== expected.size) fail(`Gitee 附件下载大小不一致：${expected.name}，预期 ${expected.size}，实际 ${size}`);
     const digest = sha256File(outputPath);
     if (digest !== expected.sha256) fail(`Gitee 附件 SHA-256 不一致：${expected.name}；不会覆盖，请发布新版本`);
     return digest;
   } catch (error) {
-    throw new Error(`Gitee 附件远端复核失败 ${expected.name}: ${redact(error?.message || error).slice(0, 800)}`);
+    throw new Error(`Gitee 附件远端复核失败 ${redact(expected.name)}: ${redact(error?.message || error).slice(0, 800)}`);
   } finally {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
   }
+}
+
+function hasAttachment(attachments, expectedName) {
+  return attachments.some((attachment) => attachmentName(attachment) === expectedName);
+}
+
+const defaultSleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const ambiguousInventoryRetryDelays = [0, 1_000, 2_000];
+
+export async function syncGiteeAttachments({
+  expectedAssets,
+  initialAttachments,
+  refreshAttachments,
+  uploadAttachment: upload,
+  verifyAttachment: verify,
+  publishBody,
+  maxInventoryRefreshes = 3,
+  sleep = defaultSleep,
+}) {
+  if (!Array.isArray(expectedAssets) || expectedAssets.length !== 4) {
+    fail("Gitee 附件同步必须接收完整的四资产契约");
+  }
+  if (typeof refreshAttachments !== "function" || typeof upload !== "function" || typeof verify !== "function") {
+    fail("Gitee 附件同步缺少注入的库存、上传或复核函数");
+  }
+  if (publishBody !== undefined && typeof publishBody !== "function") {
+    fail("Gitee 正文发布函数必须是函数");
+  }
+  if (!Number.isInteger(maxInventoryRefreshes) || maxInventoryRefreshes < 1 || maxInventoryRefreshes > 3) {
+    fail("Gitee 不确定上传库存刷新次数必须是 1 到 3 的整数");
+  }
+  if (typeof sleep !== "function") fail("Gitee 不确定上传重试等待函数必须是函数");
+
+  let attachments = initialAttachments;
+  const results = [];
+  const initialPlan = planAttachmentSync(expectedAssets, attachments);
+  for (const asset of initialPlan.upload) {
+    attachments = await refreshAttachments({ reason: "before-upload", asset });
+    const currentPlan = planAttachmentSync(expectedAssets, attachments);
+    if (!currentPlan.upload.some((candidate) => candidate.name === asset.name)) continue;
+    if (hasAttachment(attachments, asset.name)) continue;
+    try {
+      await upload(asset);
+      results.push({ name: asset.name, status: "uploaded", size: asset.size, sha256: asset.sha256 });
+    } catch (error) {
+      let reconciled = false;
+      let lastRefreshError = error;
+      for (let attempt = 1; attempt <= maxInventoryRefreshes; attempt += 1) {
+        if (attempt > 1) await sleep(ambiguousInventoryRetryDelays[attempt - 1]);
+        let refreshed;
+        try {
+          refreshed = await refreshAttachments({ reason: "upload-uncertain", asset, attempt });
+        } catch (refreshError) {
+          lastRefreshError = refreshError;
+          continue;
+        }
+        planAttachmentSync(expectedAssets, refreshed);
+        if (hasAttachment(refreshed, asset.name)) {
+          reconciled = true;
+          attachments = refreshed;
+          break;
+        }
+        attachments = refreshed;
+      }
+      if (!reconciled) {
+        fail(`Gitee 附件上传状态不明确：${asset.name}；已刷新库存 ${maxInventoryRefreshes} 次仍未确认，安全停止，请重新运行。原因：${redact(lastRefreshError?.message || lastRefreshError).slice(0, 500)}`);
+      }
+      results.push({ name: asset.name, status: "reconciled", size: asset.size, sha256: asset.sha256 });
+    }
+  }
+
+  attachments = await refreshAttachments({ reason: "post-upload" });
+  planAttachmentSync(expectedAssets, attachments);
+  for (const asset of expectedAssets) {
+    const matching = attachments.filter((attachment) => attachmentName(attachment) === asset.name);
+    if (matching.length !== 1) fail(`Gitee Release 附件缺失或重名：${asset.name}`);
+    await verify(matching[0], asset);
+    if (!results.some((entry) => entry.name === asset.name)) {
+      results.push({ name: asset.name, status: "skipped", size: asset.size, sha256: asset.sha256 });
+    }
+  }
+
+  if (publishBody) await publishBody();
+  return { attachments, results };
 }
 
 async function main() {
@@ -228,32 +426,23 @@ async function main() {
 
   const releaseId = encodeURIComponent(String(release.id));
   let attachments = asItems(await request(apiRoot, `/releases/${releaseId}/attach_files`), "附件");
-  const plan = planAttachmentSync(bundle.assets, attachments);
-  const results = [];
-
-  for (const asset of plan.upload) {
-    await uploadAttachment(apiRoot, releaseId, asset);
-    results.push({ name: asset.name, status: "uploaded", size: asset.size, sha256: asset.sha256 });
-  }
-
-  attachments = asItems(await request(apiRoot, `/releases/${releaseId}/attach_files`), "附件");
-  planAttachmentSync(bundle.assets, attachments);
-  for (const asset of bundle.assets) {
-    const matching = attachments.filter((attachment) => attachmentName(attachment) === asset.name);
-    if (matching.length !== 1) fail(`Gitee Release 附件缺失或重名：${asset.name}`);
-    await downloadAndHashAttachment(apiRoot, releaseId, matching[0], asset);
-    if (!results.some((entry) => entry.name === asset.name)) {
-      results.push({ name: asset.name, status: "skipped", size: asset.size, sha256: asset.sha256 });
-    }
-  }
-
-  if (normalizeReleaseBody(release.body) !== body) {
-    await request(apiRoot, `/releases/${releaseId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ tag_name: releaseTag, name: `Linli Local Mail ${version}`, body }),
-    });
-  }
+  const syncResult = await syncGiteeAttachments({
+    expectedAssets: bundle.assets,
+    initialAttachments: attachments,
+    refreshAttachments: async () => asItems(await request(apiRoot, `/releases/${releaseId}/attach_files`), "附件"),
+    uploadAttachment: (asset) => uploadAttachment(apiRoot, releaseId, asset),
+    verifyAttachment: (attachment, asset) => downloadAndHashAttachment(apiRoot, releaseId, attachment, asset),
+    publishBody: async () => {
+      if (normalizeReleaseBody(release.body) !== body) {
+        await request(apiRoot, `/releases/${releaseId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ tag_name: releaseTag, name: `Linli Local Mail ${version}`, body }),
+        });
+      }
+    },
+  });
+  const results = syncResult.results;
 
   release = await getRelease(apiRoot);
   const finalBody = normalizeReleaseBody(release?.body);

@@ -48,9 +48,45 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $file" }
           }
 
-      - name: Run public installer transaction tests
+      - name: Check self-contained public build prerequisites
         shell: pwsh
-        run: npm run installer:test
+        run: node .github/scripts/release-contract.mjs check-source
+
+      - name: Classify source changes
+        id: scope
+        shell: pwsh
+        env:
+          BASE_COMMIT: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sourceChanged = $true
+          if ($env:BASE_COMMIT -match '^[0-9a-f]{40}$' -and $env:BASE_COMMIT -notmatch '^0+$') {
+            $paths = @(& git diff --name-only $env:BASE_COMMIT HEAD)
+            if ($LASTEXITCODE -ne 0) { throw "Unable to classify changed source paths" }
+            $sourceChanged = @($paths | Where-Object {
+              $_ -notmatch '^(README\.md|SOURCE_CODE\.md|PUBLIC_PROJECTION\.json|\.github/release-notes/[^/]+\.md)$'
+            }).Count -gt 0
+          }
+          "source_changed=$($sourceChanged.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Install the stable Rust MSVC toolchain
+        if: steps.scope.outputs.source_changed == 'true'
+        shell: pwsh
+        run: |
+          rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal
+          if ($LASTEXITCODE -ne 0) { throw "Unable to install Rust toolchain" }
+          rustup default stable-x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw "Unable to select Rust toolchain" }
+
+      - name: Build native helpers for public protocol tests
+        if: steps.scope.outputs.source_changed == 'true'
+        shell: pwsh
+        run: npm run launcher:build
+
+      - name: Test the complete public source before tagging
+        if: steps.scope.outputs.source_changed == 'true'
+        shell: pwsh
+        run: npm test
 
       - name: Reject whitespace errors
         shell: pwsh

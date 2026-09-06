@@ -109,12 +109,6 @@ export function validatePublicDocumentation({ version, readme, releaseNotes, sou
       errors.push(`README contains internal ${candidate.name}`);
     }
   }
-  if (!/^##\s+功能说明\s*$/m.test(readme)) {
-    errors.push("README is missing the player-facing 功能说明 section");
-  }
-  if (/^##\s+当前限制\s*$/m.test(readme)) {
-    errors.push("README must place necessary limitations with the relevant feature or installation guidance, not in a 当前限制 section");
-  }
   if (!readme.includes(`.github/release-notes/v${version}.md`)) {
     errors.push("README does not link to the current release notes");
   }

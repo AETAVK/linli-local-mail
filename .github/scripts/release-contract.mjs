@@ -13,6 +13,32 @@ export const RELEASE_NOTE_SECTIONS = Object.freeze([
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/iu;
 
+// Cheap source checks run before native compilation, signing, or tagging.
+// Running the public tests in a clean projection remains the dependency proof.
+export const PUBLIC_BUILD_PREREQUISITES = Object.freeze([
+  "native/launcher-wrapper.rs", "native/windows-helper.rs",
+  "tools/build-launcher-wrapper.ps1", "tools/build-installer.ps1",
+  "tools/installer-core.mjs", "tools/release.mjs", "installer/LinliLocalMail.iss",
+  ".github/scripts/release-contract.mjs", ".github/scripts/publish-gitee-release.mjs",
+  "tests/installer-core.test.mjs", "tests/release-automation.test.mjs"
+]);
+
+export function inspectPublicBuildSource(root) {
+  const base = fs.realpathSync(root);
+  const role = JSON.parse(fs.readFileSync(path.join(base, "repo-role.json"), "utf8"));
+  invariant(role.role === "public-projection", "Source preflight must run in an isolated public projection, not the private repository.");
+  for (const relative of PUBLIC_BUILD_PREREQUISITES) {
+    const filename = path.join(base, relative);
+    invariant(fs.existsSync(filename) && fs.statSync(filename).isFile() && fs.statSync(filename).size > 0,
+      `Missing public build prerequisite: ${relative}`);
+    const resolved = path.relative(base, fs.realpathSync(filename));
+    invariant(!resolved.startsWith(`..${path.sep}`) && resolved !== ".." && !path.isAbsolute(resolved),
+      `Public build prerequisite escapes projection: ${relative}`);
+  }
+  return { ok: true, prerequisites: PUBLIC_BUILD_PREREQUISITES,
+    next: "Build native helpers, then run npm test in this clean public projection; do not build an extra installer." };
+}
+
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -336,6 +362,8 @@ async function runCli(argv) {
   const { command, values } = parseCli(argv);
   const root = path.resolve(values["--root"] || process.cwd());
 
+  if (command === "check-source") return { command, ...inspectPublicBuildSource(root) };
+
   if (command === "prepare") {
     const version = validateVersion(required(values, "--version"));
     const tag = validateTag(required(values, "--tag"), version);
@@ -385,7 +413,7 @@ async function runCli(argv) {
     return { command, tag, version, sourceCommit, body: path.relative(root, bodyPath), receipt: path.relative(root, receiptPath), bodySha256: receipt.bodySha256, assets: receipt.assets };
   }
 
-  throw new Error("Usage: release-contract.mjs <prepare|verify|extract-github> [options]");
+  throw new Error("Usage: release-contract.mjs <check-source|prepare|verify|extract-github> [options]");
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";

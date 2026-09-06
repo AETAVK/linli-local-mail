@@ -10,6 +10,8 @@ import {
   createReleaseReceipt,
   expectedReleaseAssetNames,
   inspectReleaseBundle,
+  inspectPublicBuildSource,
+  PUBLIC_BUILD_PREREQUISITES,
   renderReleaseBody,
   sha256File,
   validateReleaseReceipt,
@@ -24,6 +26,40 @@ const CONTRACT = path.join(ROOT, ".github", "scripts", "release-contract.mjs");
 const VERSION = "1.2.3";
 const TAG = `v${VERSION}`;
 const SOURCE_COMMIT = "a".repeat(40);
+
+test("source preflight rejects private roots and missing native sources before building", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "linli-source-preflight-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const rolePath = path.join(root, "repo-role.json");
+  fs.writeFileSync(rolePath, JSON.stringify({ role: "private-canonical" }));
+  assert.throws(() => inspectPublicBuildSource(root), /isolated public projection/);
+  fs.writeFileSync(rolePath, JSON.stringify({ role: "public-projection" }));
+  assert.throws(() => inspectPublicBuildSource(root), /native\/launcher-wrapper.rs/);
+  for (const relative of PUBLIC_BUILD_PREREQUISITES) {
+    const target = path.join(root, relative);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, "fixture source\n");
+  }
+  assert.equal(inspectPublicBuildSource(root).ok, true);
+  const cli = runContract(["check-source", "--root", root]);
+  assert.equal(JSON.parse(cli.stdout).ok, true);
+  fs.rmSync(path.join(root, "native/windows-helper.rs"));
+  assert.throws(() => inspectPublicBuildSource(root), /native\/windows-helper.rs/);
+  const failed = runContract(["check-source", "--root", root], 1);
+  assert.match(failed.stderr, /Missing public build prerequisite/);
+});
+
+test("pre-tag CI runs all public tests with native prerequisites; docs-only changes avoid compilation", () => {
+  const governance = fs.readFileSync(path.join(ROOT, ".github/workflows/governance.yml"), "utf8");
+  const release = fs.readFileSync(path.join(ROOT, ".github/workflows/release.yml"), "utf8");
+  assert.ok(governance.indexOf("release-contract.mjs check-source") < governance.indexOf("run: npm run launcher:build"));
+  assert.ok(governance.indexOf("run: npm run launcher:build") < governance.indexOf("run: npm test"));
+  assert.match(governance, /BASE_COMMIT:.*pull_request.base.sha.*github.event.before/);
+  assert.equal((governance.match(/if: steps.scope.outputs.source_changed == 'true'/g) ?? []).length, 3);
+  assert.doesNotMatch(governance, /run:.*installer:build/);
+  assert.ok(release.indexOf("release-contract.mjs check-source") < release.indexOf("run: npm run launcher:build"));
+  assert.equal((release.match(/run: npm test/g) ?? []).length, 1);
+});
 
 test("runtime release packaging excludes PowerShell and uses native launcher shortcuts", () => {
   const release = fs.readFileSync(path.join(ROOT, "tools", "release.mjs"), "utf8");
