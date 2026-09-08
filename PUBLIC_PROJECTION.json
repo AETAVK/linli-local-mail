@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "8da4f42dce2458eaea7977a350f86ad99804f548",
+  "canonicalCommit": "00eb084caf1d695ec3fb040cc843dfbbee8a70f8",
   "packageVersion": "0.11.11",
   "releaseVersion": "0.11.11",
   "files": [
@@ -12,8 +12,8 @@
     },
     {
       "path": ".github/release-notes/v0.11.11.md",
-      "gitBlob": "96c34d0c85eb2a9046d0f82c36733a6662789d05",
-      "sha256": "3cb1e8d7b71d350256ab21356e2e5569e926d49f8f394ebb8e7d5d5e097530e0"
+      "gitBlob": "c69546b7567e7be7bca307fe481e81846649fbdb",
+      "sha256": "e3bd55cef6106fb9586d6ed3af6f7f049cfd153150ceef213829bb8d7069de9e"
     },
     {
       "path": ".github/scripts/publish-gitee-release.mjs",
