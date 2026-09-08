@@ -34,7 +34,13 @@
     lettersModal: { mode: "export", items: [], selected: {}, busy: false },
     remoteImport: { checked: false, checking: false, candidate: false, running: false, pollTimer: null, lastStatus: null, retryAfter: 0 },
     remotePromptSettings: null,
-    update: { autoStarted: false, checking: false, applying: false, result: null },
+    update: {
+      autoStarted: false, checking: false, applying: false, result: null,
+      phase: "idle", error: null, operation: null, preferences: null, preferenceSaving: false,
+      preferenceError: "", timer: null, tickInFlight: false, statusInFlight: null,
+      nextCheckAt: 0, failures: 0, epoch: 0, readId: 0, disposed: false,
+      open: false, anchor: null, route: null, controllers: []
+    },
     settingsSync: {
       store: null,
       unsubscribe: null,
@@ -749,6 +755,36 @@
       ".lm-update-release-name{min-width:0;overflow:hidden;color:var(--tp-text-tertiary,#7d818c);font-size:11px;text-align:right;text-overflow:ellipsis;white-space:nowrap}",
       ".lm-update-release-date{margin-top:3px;color:var(--tp-text-tertiary,#7d818c);font-size:10px}",
       ".lm-update-release-notes{margin-top:6px;color:var(--tp-text-secondary,#a1a5ad);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word}",
+      ".lm-update-entry{position:fixed;z-index:45;display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;background:transparent;cursor:pointer;-webkit-app-region:no-drag;pointer-events:auto}",
+      ".lm-update-entry[hidden],.lm-update-popover[hidden],.lm-update-popover [hidden]{display:none!important}",
+      ".lm-update-circle{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;border:1px solid #648675;background:#27372f;color:#a9d9c0}",
+      ".lm-update-entry:hover .lm-update-circle{background:#354b3e;border-color:#a9d9c0}",
+      ".lm-update-entry:focus-visible,.lm-update-popover button:focus-visible,.lm-update-popover summary:focus-visible{outline:2px solid #a9d9c0;outline-offset:3px}",
+      ".lm-update-entry[data-phase='preparing'] .lm-update-circle{color:#d8d1c5;border-color:#777166;background:#32312e}",
+      ".lm-update-entry[data-phase='preparing'] svg{animation:lm-update-spin 1.2s linear infinite}",
+      ".lm-update-entry[data-phase='failed'] .lm-update-circle{color:#e3ba8f;border-color:#967652;background:#392f25}",
+      "@keyframes lm-update-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.lm-update-entry[data-phase='preparing'] svg{animation:none}}",
+      ".lm-update-tooltip{display:none;position:absolute;top:48px;right:0;min-width:190px;padding:7px 10px;border-radius:7px;background:#242528;color:#e8e9eb;border:1px solid #424347;font-size:12px;line-height:1.5;white-space:nowrap;pointer-events:none}",
+      ".lm-update-entry[aria-expanded='false']:hover .lm-update-tooltip,.lm-update-entry[aria-expanded='false']:focus-visible .lm-update-tooltip{display:block}",
+      ".lm-update-popover{position:fixed;z-index:11000;width:330px;max-width:calc(100vw - 24px);box-sizing:border-box;overflow-y:auto;padding:20px;background:#242528;color:#e8e9eb;border:1px solid #424347;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.32);font-family:inherit;-webkit-app-region:no-drag;pointer-events:auto;color-scheme:dark}",
+      ".lm-update-popover .lm-update-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}",
+      ".lm-update-popover h3{font-size:17px;line-height:1.5;font-weight:600;margin:0}",
+      ".lm-update-close{width:30px;height:30px;flex-shrink:0;display:grid;place-items:center;background:transparent;border:0;border-radius:50%;color:#a1a5ad;cursor:pointer}",
+      ".lm-update-close:hover{background:#37383c;color:#e8e9eb}",
+      ".lm-update-popover .lm-update-version{display:block;margin-top:6px;padding:0;border:0;border-radius:0;background:none;color:#a1a5ad;font-size:13px;font-weight:400}",
+      ".lm-update-popover .lm-update-copy{font-size:14px;line-height:1.7;margin:18px 0 10px;color:#d5d7dc;overflow-wrap:anywhere}",
+      ".lm-update-popover .lm-update-meta{font-size:12px;line-height:1.5;margin-bottom:14px;color:#a1a5ad}",
+      ".lm-update-popover .lm-update-releases{padding:0;margin:0 0 16px;border:0;background:none;font-size:13px}",
+      ".lm-update-popover summary{cursor:pointer;color:#d8d1c5;line-height:1.7}",
+      ".lm-update-popover .lm-update-release-list{max-height:220px;overflow:auto;margin-top:10px}",
+      ".lm-update-popover .lm-update-release{border:0;border-top:1px solid #3c3d41;border-radius:0;padding:10px 0;background:none}",
+      ".lm-update-popover .lm-update-release-head{display:block;font-size:13px}.lm-update-popover .lm-update-release-date{font-size:12px}",
+      ".lm-update-popover .lm-update-warning{font-size:12px;line-height:1.7;color:#a1a5ad;background:none;border:0;padding:0;margin:0 0 16px}",
+      ".lm-update-popover .lm-modal-status{margin:0 0 12px;font-size:12px;line-height:1.7;overflow-wrap:anywhere}",
+      ".lm-update-primary{display:block;width:100%;padding:10px 12px;border:1px solid #eee9df;border-radius:20px;background:#eee9df;color:#262621;font:inherit;font-size:14px;font-weight:600;cursor:pointer}",
+      ".lm-update-primary:hover{background:#fffaf0}.lm-update-primary:disabled{cursor:default;opacity:.65}",
+      ".lm-update-later{display:block;margin:9px auto 0;padding:6px 12px;border:0;background:transparent;color:#a1a5ad;font:inherit;font-size:13px;cursor:pointer}",
+      ".lm-update-preference{margin:10px 0 6px}.lm-update-setting-state{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}",
       "#local-mail-local-navigation{position:fixed;top:18px;left:18px;z-index:45;display:flex;align-items:center;gap:5px;padding:5px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(28,29,33,.94);box-shadow:0 8px 24px rgba(0,0,0,.24);color-scheme:dark;backdrop-filter:blur(10px);-webkit-app-region:no-drag;pointer-events:auto}",
       "#local-mail-local-navigation[hidden]{display:none!important}",
       ".lm-local-nav-button{display:flex;align-items:center;gap:6px;height:42px;padding:0 18px;border:0;border-radius:8px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:16px;font-weight:600;cursor:pointer;white-space:nowrap;-webkit-app-region:no-drag;pointer-events:auto}",
@@ -822,6 +858,28 @@
     document.head.appendChild(style);
   }
 
+  // Icon nodes copied from Lucide 1.8.0 (ISC; Download/X also Feather MIT).
+  // See THIRD_PARTY_NOTICES.md. No icon runtime or network dependency.
+  var UPDATE_ICONS = {
+    download: [["path", { d: "M12 15V3" }], ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }], ["path", { d: "m7 10 5 5 5-5" }]],
+    preparing: [["path", { d: "M21 12a9 9 0 1 1-6.219-8.56" }]],
+    scheduled: [["circle", { cx: "12", cy: "12", r: "10" }], ["path", { d: "M12 6v6h4" }]],
+    failed: [["circle", { cx: "12", cy: "12", r: "10" }], ["line", { x1: "12", x2: "12", y1: "8", y2: "12" }], ["line", { x1: "12", x2: "12.01", y1: "16", y2: "16" }]],
+    close: [["path", { d: "M18 6 6 18" }], ["path", { d: "m6 6 12 12" }]]
+  };
+  var UPDATE_ENTRY_ID = "local-mail-update-entry";
+  var UPDATE_INTERVAL_MS = 60 * 60 * 1000;
+  var UPDATE_STATUS_INTERVAL_MS = 60 * 1000;
+
+  function updateIcon(name) {
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      (UPDATE_ICONS[name] || UPDATE_ICONS.download).map(function (node) {
+        return "<" + node[0] + " " + Object.keys(node[1]).map(function (key) {
+          return key + '="' + node[1][key] + '"';
+        }).join(" ") + "></" + node[0] + ">";
+      }).join("") + "</svg>";
+  }
+
   function formatUpdateBytes(value) {
     var bytes = Number(value);
     if (!Number.isFinite(bytes) || bytes < 0) return "大小未知";
@@ -836,227 +894,495 @@
     return "公开发布源";
   }
 
-  function ensureUpdateModal() {
-    var backdrop = document.getElementById(UPDATE_MODAL_ID);
-    if (backdrop) return backdrop;
+  async function updateRequest(path, options, timeoutMs) {
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    var timer = null;
+    if (controller) {
+      state.update.controllers.push(controller);
+      timer = window.setTimeout(function () { controller.abort(); }, timeoutMs || 10000);
+    }
+    try {
+      return await callApi(path, Object.assign({}, options || {}, controller ? { signal: controller.signal } : {}));
+    } finally {
+      if (timer !== null) window.clearTimeout(timer);
+      if (controller) state.update.controllers = state.update.controllers.filter(function (item) { return item !== controller; });
+    }
+  }
+
+  function updatePreparing() {
+    return state.update.applying || state.update.phase === "preparing";
+  }
+
+  function updateEntryKind() {
+    if (updatePreparing()) return "preparing";
+    if (state.update.phase === "scheduled") return "scheduled";
+    if (state.update.error && state.update.error.stage === "prepare") return "failed";
+    return "download";
+  }
+
+  function updateEntryLabel() {
+    var kind = updateEntryKind();
+    if (kind === "preparing") return "正在下载并校验更新";
+    if (kind === "scheduled") return "更新已准备 · 等待退出后安装";
+    if (kind === "failed") return "更新准备失败 · 查看详情";
+    return "发现补丁更新 · 查看详情";
+  }
+
+  function ensureUpdateEntry() {
+    var entry = document.getElementById(UPDATE_ENTRY_ID);
+    if (entry) return entry;
     installStyles();
-    backdrop = document.createElement("div");
-    backdrop.id = UPDATE_MODAL_ID;
-    backdrop.className = "lm-modal-backdrop";
-    backdrop.hidden = true;
-    backdrop.innerHTML =
-      '<div class="lm-modal lm-update-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-update-title">' +
-      '<div class="lm-update-heading"><div class="lm-modal-title" id="lm-update-title" data-role="update-title">检查补丁更新</div></div>' +
-      '<div class="lm-update-copy" data-role="update-copy"></div>' +
-      '<div class="lm-update-version" data-role="update-version" hidden>' +
-      '<span class="lm-update-version-current" data-role="update-current"></span>' +
-      '<span class="lm-update-version-arrow">→</span>' +
-      '<span class="lm-update-version-latest" data-role="update-latest"></span></div>' +
+    entry = document.createElement("button");
+    entry.id = UPDATE_ENTRY_ID;
+    entry.type = "button";
+    entry.className = "lm-update-entry";
+    entry.hidden = true;
+    entry.setAttribute("aria-haspopup", "dialog");
+    entry.setAttribute("aria-controls", UPDATE_MODAL_ID);
+    entry.innerHTML = '<span class="lm-update-circle"></span><span class="lm-update-tooltip" role="tooltip"></span>';
+    entry.addEventListener("click", function () {
+      if (state.update.open && state.update.anchor === entry) closeUpdateModal();
+      else openUpdateDetails(entry);
+    });
+    document.body.appendChild(entry);
+    return entry;
+  }
+
+  function ensureUpdateModal() {
+    var modal = document.getElementById(UPDATE_MODAL_ID);
+    if (modal) return modal;
+    installStyles();
+    modal = document.createElement("section");
+    modal.id = UPDATE_MODAL_ID;
+    modal.className = "lm-update-popover";
+    modal.hidden = true;
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "false");
+    modal.setAttribute("aria-labelledby", "lm-update-title");
+    modal.innerHTML =
+      '<div class="lm-update-heading"><h3 id="lm-update-title" data-role="update-title"></h3>' +
+      '<button class="lm-update-close" type="button" aria-label="收起更新详情" data-update-action="close">' + updateIcon("close") + '</button></div>' +
+      '<div class="lm-update-version" data-role="update-version"><span data-role="update-current"></span><span> → </span><span data-role="update-latest"></span></div>' +
+      '<p class="lm-update-copy" data-role="update-copy"></p>' +
       '<div class="lm-update-meta" data-role="update-meta"></div>' +
-      '<div class="lm-update-releases" data-role="update-releases" hidden>' +
-      '<div class="lm-update-releases-title">未更新版本的更新说明</div>' +
-      '<div class="lm-update-release-list" data-role="update-release-list"></div></div>' +
-      '<div class="lm-update-warning" data-role="update-warning" hidden></div>' +
-      '<div class="lm-modal-actions"><span class="lm-modal-status" data-role="update-status"></span>' +
-      '<button class="lm-button" type="button" data-update-action="close">稍后</button>' +
-      '<button class="lm-button lm-button-primary" type="button" data-update-action="apply" hidden>更新到最新版</button></div>' +
-      '</div>';
-    backdrop.addEventListener("click", function (event) {
+      '<details class="lm-update-releases" data-role="update-releases"><summary>查看更新说明</summary><div class="lm-update-release-list" data-role="update-release-list"></div></details>' +
+      '<p class="lm-update-warning" data-role="update-warning"></p>' +
+      '<div class="lm-modal-status" data-role="update-status" aria-live="polite"></div>' +
+      '<button class="lm-update-primary" type="button" data-update-action="apply">下载并在退出后安装</button>' +
+      '<button class="lm-update-later" type="button" data-update-action="close" data-role="update-later">稍后</button>';
+    modal.addEventListener("click", function (event) {
       var button = event.target.closest("[data-update-action]");
-      if (button) {
-        if (button.dataset.updateAction === "close") closeUpdateModal();
-        else if (button.dataset.updateAction === "apply") applyUpdate();
-        return;
+      if (!button) return;
+      if (button.dataset.updateAction === "close") closeUpdateModal();
+      else if (button.dataset.updateAction === "apply") applyUpdate();
+    });
+    document.addEventListener("pointerdown", function (event) {
+      if (!state.update.open || modal.contains(event.target) || (state.update.anchor && state.update.anchor.contains(event.target))) return;
+      closeUpdateModal(false);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && state.update.open) {
+        event.preventDefault();
+        closeUpdateModal();
       }
-      if (event.target === backdrop) closeUpdateModal();
     });
-    backdrop.addEventListener("keydown", function (event) {
-      if (event.key === "Escape") closeUpdateModal();
-    });
-    document.body.appendChild(backdrop);
-    return backdrop;
+    document.body.appendChild(modal);
+    return modal;
   }
 
   function renderUpdateReleaseNotes(modal, result) {
     var section = modal.querySelector('[data-role="update-releases"]');
     var list = modal.querySelector('[data-role="update-release-list"]');
-    if (!section || !list) return;
-    list.textContent = "";
     var releases = result && Array.isArray(result.pendingReleases) ? result.pendingReleases : [];
-    if (!releases.length) {
-      section.hidden = true;
-      return;
-    }
+    var signature = JSON.stringify(releases);
+    if (section.__linliReleaseSignature === signature) return;
+    section.__linliReleaseSignature = signature;
+    list.textContent = "";
+    section.hidden = !releases.length;
+    if (!releases.length) section.open = false;
     releases.forEach(function (release) {
       var card = document.createElement("div");
       card.className = "lm-update-release";
       var head = document.createElement("div");
       head.className = "lm-update-release-head";
-      var version = document.createElement("span");
-      version.className = "lm-update-release-version";
-      version.textContent = "v" + String(release.version || "");
-      var name = document.createElement("span");
-      name.className = "lm-update-release-name";
-      name.textContent = String(release.name || release.tag || "");
-      head.appendChild(version);
-      head.appendChild(name);
-      card.appendChild(head);
-      if (release.publishedAt) {
-        var date = document.createElement("div");
-        date.className = "lm-update-release-date";
-        var parsedDate = new Date(release.publishedAt);
-        date.textContent = Number.isNaN(parsedDate.getTime())
-          ? String(release.publishedAt)
-          : parsedDate.toLocaleDateString();
-        card.appendChild(date);
-      }
+      head.textContent = "v" + String(release.version || "") + " · " + String(release.name || release.tag || "");
+      var date = document.createElement("div");
+      date.className = "lm-update-release-date";
+      var parsedDate = new Date(release.publishedAt);
+      date.textContent = release.publishedAt && !Number.isNaN(parsedDate.getTime()) ? parsedDate.toLocaleDateString() : "";
       var notes = document.createElement("div");
       notes.className = "lm-update-release-notes";
       notes.textContent = String(release.notes || "该版本未提供更新说明。");
+      card.appendChild(head);
+      card.appendChild(date);
       card.appendChild(notes);
       list.appendChild(card);
     });
-    section.hidden = false;
   }
 
-  function renderUpdateModal(kind, result, errorMessage) {
-    var modal = ensureUpdateModal();
-    var title = modal.querySelector('[data-role="update-title"]');
-    var copy = modal.querySelector('[data-role="update-copy"]');
-    var version = modal.querySelector('[data-role="update-version"]');
-    var current = modal.querySelector('[data-role="update-current"]');
-    var latest = modal.querySelector('[data-role="update-latest"]');
-    var meta = modal.querySelector('[data-role="update-meta"]');
-    var releases = modal.querySelector('[data-role="update-releases"]');
-    var warning = modal.querySelector('[data-role="update-warning"]');
-    var status = modal.querySelector('[data-role="update-status"]');
-    var close = modal.querySelector('[data-update-action="close"]');
-    var apply = modal.querySelector('[data-update-action="apply"]');
-    current.textContent = "";
-    latest.textContent = "";
-    version.hidden = true;
-    releases.querySelector('[data-role="update-release-list"]').textContent = "";
-    releases.hidden = true;
-    warning.textContent = "";
-    warning.hidden = true;
-    status.textContent = "";
-    status.dataset.kind = "";
-    meta.textContent = "";
-    apply.hidden = true;
-    apply.disabled = false;
-    apply.textContent = "更新到最新版";
-    close.hidden = false;
-    close.disabled = false;
-    close.textContent = "关闭";
-
-    if (kind === "checking") {
-      title.textContent = "检查补丁更新";
-      copy.textContent = "正在连接公开发布源，请稍候……";
-      close.textContent = "取消显示";
-    } else if (kind === "available") {
-      title.textContent = "发现补丁更新";
-      copy.textContent = "检测到新的林离本地回信补丁。确认后会在本机下载并校验安装包，再启动更新程序。";
-      current.textContent = "v" + result.currentVersion;
-      latest.textContent = "v" + result.latestVersion;
-      version.hidden = false;
-      meta.textContent = updateSourceLabel(result.source) + " · " + formatUpdateBytes(result.installer && result.installer.size);
-      renderUpdateReleaseNotes(modal, result);
-      warning.textContent = "更新会停止本地回信服务。安装完成前请勿寄信；安装成功后需要重新启动游戏。";
-      warning.hidden = false;
-      close.textContent = "稍后";
-      apply.hidden = false;
-      apply.disabled = false;
-      apply.textContent = "更新到最新版";
-    } else if (kind === "current") {
-      title.textContent = "补丁已是最新版本";
-      copy.textContent = "当前安装的是 v" + result.currentVersion + "，公开发布源没有更高的稳定版本。";
-      meta.textContent = "检查时间：" + new Date(result.checkedAt).toLocaleString();
-    } else if (kind === "failed") {
-      title.textContent = "检查更新失败";
-      copy.textContent = "暂时无法完成补丁更新检查。现有本地回信功能不会受到影响。";
-      status.textContent = errorMessage || "请稍后重试";
-      status.dataset.kind = "error";
-    } else if (kind === "applying") {
-      title.textContent = "正在准备更新";
-      copy.textContent = "正在下载安装包并进行 SHA-256 完整性校验，可能需要几分钟。请保持网络连接。";
-      if (result) {
-        current.textContent = "v" + result.currentVersion;
-        latest.textContent = "v" + result.latestVersion;
-        version.hidden = false;
-      }
-      warning.textContent = "校验通过前不会运行安装包。请不要关闭游戏或本地回信服务。";
-      warning.hidden = false;
-      close.disabled = true;
-      close.textContent = "正在处理";
-    } else if (kind === "launched") {
-      var deferred = Boolean(result && (result.deferred || result.scheduled));
-      title.textContent = deferred ? "更新已准备" : "更新程序已启动";
-      copy.textContent = deferred
-        ? "更新已准备，完全退出游戏后会自动安装。"
-        : "安装程序已经打开，本地回信服务将自动退出。请按安装程序提示完成更新，然后重新启动游戏。";
-      warning.textContent = deferred
-        ? "请完全退出游戏；退出后更新程序会自动安装准备好的版本。"
-        : "如果安装窗口被其他窗口遮挡，请在任务栏中查找“林离本地回信”安装程序。";
-      warning.hidden = false;
-      status.textContent = "目标版本：v" + (result && result.version ? result.version : "");
-      status.dataset.kind = "success";
+  function positionUpdatePopover() {
+    var modal = document.getElementById(UPDATE_MODAL_ID);
+    if (!modal || modal.hidden) return;
+    var anchor = state.update.anchor;
+    if (!anchor || !anchor.isConnected || anchor.hidden) {
+      closeUpdateModal(false);
+      return;
     }
-    modal.hidden = false;
+    var rect = anchor.getBoundingClientRect();
+    var width = Math.min(330, Math.max(0, (window.innerWidth || 1024) - 24));
+    var left = Math.max(12, Math.min(Number(rect.left) || 12, (window.innerWidth || 1024) - width - 12));
+    var top = Math.max(12, (Number(rect.bottom) || 62) + 10);
+    var availableHeight = (window.innerHeight || 768) - top - 12;
+    if (availableHeight < 160 && rect.top > 200) {
+      top = 12;
+      availableHeight = Math.max(160, rect.top - 24);
+    }
+    setLocalNavigationStyle(modal, "left", left + "px");
+    setLocalNavigationStyle(modal, "top", top + "px");
+    setLocalNavigationStyle(modal, "width", width + "px");
+    setLocalNavigationStyle(modal, "max-height", Math.max(100, availableHeight) + "px");
   }
 
-  function closeUpdateModal() {
-    if (state.update.applying) return;
+  function renderUpdateModal() {
+    var modal = document.getElementById(UPDATE_MODAL_ID);
+    if (!state.update.open) {
+      if (modal && !modal.hidden) modal.hidden = true;
+      return;
+    }
+    modal = ensureUpdateModal();
+    var result = state.update.result;
+    var phase = updatePreparing() ? "preparing" : state.update.phase;
+    var error = state.update.error;
+    var checking = state.update.checking;
+    var signature = JSON.stringify([phase, result, error, checking, state.update.operation]);
+    if (modal.__linliUpdateSignature !== signature) {
+      modal.__linliUpdateSignature = signature;
+      var title = modal.querySelector('[data-role="update-title"]');
+      var copy = modal.querySelector('[data-role="update-copy"]');
+      var version = modal.querySelector('[data-role="update-version"]');
+      var current = modal.querySelector('[data-role="update-current"]');
+      var latest = modal.querySelector('[data-role="update-latest"]');
+      var warning = modal.querySelector('[data-role="update-warning"]');
+      var status = modal.querySelector('[data-role="update-status"]');
+      var meta = modal.querySelector('[data-role="update-meta"]');
+      var apply = modal.querySelector('[data-update-action="apply"]');
+      var later = modal.querySelector('[data-role="update-later"]');
+      var available = Boolean(result && result.updateAvailable);
+      version.hidden = !available;
+      current.textContent = available ? "v" + result.currentVersion : "";
+      latest.textContent = available ? "v" + result.latestVersion : "";
+      status.textContent = error ? error.message : "";
+      status.dataset.kind = error ? "error" : "";
+      status.hidden = !error;
+      meta.textContent = available ? updateSourceLabel(result.source) + " · " + formatUpdateBytes(result.installer && result.installer.size) : "";
+      warning.textContent = "";
+      warning.hidden = true;
+      apply.hidden = !available;
+      apply.disabled = checking || phase === "preparing" || phase === "scheduled";
+      apply.textContent = error && error.stage === "prepare" ? "重试准备更新" : "下载并在退出后安装";
+      later.textContent = "稍后";
+      renderUpdateReleaseNotes(modal, available ? result : null);
+      if (phase === "preparing") {
+        title.textContent = "正在准备更新";
+        copy.textContent = "正在下载并校验更新包…";
+        warning.textContent = "请暂时保持游戏和本地服务运行。可以收起此面板，准备完成后按钮会变为时钟。";
+        apply.textContent = "正在准备…";
+        later.textContent = "收起";
+        status.hidden = true;
+      } else if (phase === "scheduled") {
+        title.textContent = "更新已准备";
+        copy.textContent = "安装包已校验，正在等待游戏和启动器退出。";
+        warning.textContent = "按平常方式完全退出游戏和启动器，随后按安装程序提示完成更新。";
+        meta.textContent = "目标版本：v" + (state.update.operation && state.update.operation.version || result && result.latestVersion || "");
+        apply.hidden = true;
+        later.textContent = "知道了";
+        status.hidden = true;
+      } else if (checking) {
+        title.textContent = "检查补丁更新";
+        copy.textContent = "正在连接公开发布源…";
+        status.hidden = true;
+      } else if (error && error.stage === "prepare") {
+        title.textContent = "更新准备失败";
+        copy.textContent = "更新尚未排队。现有游戏和本地回信功能仍可使用。";
+      } else if (available) {
+        title.textContent = "发现补丁更新";
+        copy.textContent = result.releaseName || "有新的林离本地回信补丁可用。";
+        warning.textContent = "下载并校验完成后，完全退出游戏和启动器即可进入安装流程。";
+      } else if (error) {
+        title.textContent = "检查更新失败";
+        copy.textContent = "暂时无法完成检查，现有本地回信功能不会受到影响。";
+        later.textContent = "关闭";
+      } else if (result) {
+        title.textContent = "补丁已是最新版本";
+        copy.textContent = "当前安装的是 v" + result.currentVersion + "，公开发布源没有更高的稳定版本。";
+        meta.textContent = "检查时间：" + new Date(result.checkedAt).toLocaleString();
+        later.textContent = "关闭";
+      } else {
+        title.textContent = "补丁更新";
+        copy.textContent = "尚未检查更新。";
+      }
+      warning.hidden = !warning.textContent;
+    }
+    if (modal.hidden) modal.hidden = false;
+    positionUpdatePopover();
+  }
+
+  function closeUpdateModal(restoreFocus) {
+    state.update.open = false;
     var modal = document.getElementById(UPDATE_MODAL_ID);
     if (modal) modal.hidden = true;
+    if (state.update.anchor) state.update.anchor.setAttribute("aria-expanded", "false");
+    if (restoreFocus !== false && state.update.anchor && state.update.anchor.isConnected && typeof state.update.anchor.focus === "function") state.update.anchor.focus();
+  }
+
+  function openUpdateDetails(anchor) {
+    state.update.anchor = anchor || document.querySelector('[data-action="check-update"]');
+    state.update.open = true;
+    state.update.anchor && state.update.anchor.setAttribute("aria-expanded", "true");
+    renderUpdateModal();
+    var close = document.querySelector("#" + UPDATE_MODAL_ID + " .lm-update-close");
+    if (close && typeof close.focus === "function") close.focus();
+  }
+
+  function renderUpdateSettings() {
+    var section = document.getElementById(PATCH_VERSION_SECTION_ID);
+    if (!section) return;
+    var toggle = section.querySelector('[data-role="automatic-update-check"]');
+    var text = section.querySelector('[data-role="update-check-state"]');
+    var message = section.querySelector('[data-role="update-preference-status"]');
+    var view = section.querySelector('[data-action="view-update"]');
+    if (toggle) {
+      toggle.disabled = !state.update.preferences || state.update.preferenceSaving;
+      toggle.checked = Boolean(state.update.preferences && state.update.preferences.automaticCheck);
+    }
+    var summary = state.update.checking ? "正在检查…" : state.update.phase === "scheduled" ? "更新已准备，等待退出后安装" :
+      updatePreparing() ? "正在下载并校验更新…" :
+      state.update.result && state.update.result.updateAvailable ? "可更新至 v" + state.update.result.latestVersion :
+      state.update.result ? "最近检查：" + new Date(state.update.result.checkedAt).toLocaleString() : "尚未检查更新";
+    if (state.update.error && state.update.error.stage === "check") summary += " · 最近检查失败";
+    if (text && text.textContent !== summary) text.textContent = summary;
+    if (message && message.textContent !== state.update.preferenceError) message.textContent = state.update.preferenceError;
+    if (view) view.hidden = !(state.update.result && state.update.result.updateAvailable || updatePreparing() || state.update.phase === "scheduled");
+  }
+
+  function mountUpdateEntry() {
+    if (state.update.disposed) return;
+    var entry = document.getElementById(UPDATE_ENTRY_ID);
+    var navigation = document.getElementById(LOCAL_NAVIGATION_ID);
+    var path = currentLocalRoutePath();
+    if (state.update.route !== null && state.update.route !== path) closeUpdateModal(false);
+    state.update.route = path;
+    var targetRoute = path === LOCAL_NAVIGATION_ROUTES.mail || path === LOCAL_NAVIGATION_ROUTES.music;
+    var show = isMainRenderer() && targetRoute && navigation && !navigation.hidden &&
+      (state.update.result && state.update.result.updateAvailable || updatePreparing() || state.update.phase === "scheduled");
+    if (show && !entry) entry = ensureUpdateEntry();
+    if (entry) {
+      if (entry.hidden === Boolean(show)) entry.hidden = !show;
+      if (show) {
+        var rect = navigation.getBoundingClientRect();
+        var left = Math.min((Number(rect.right) || 192) + 12, (window.innerWidth || 1024) - 56);
+        var top = (Number(rect.top) || 18) + Math.max(0, ((Number(rect.height) || 52) - 44) / 2);
+        setLocalNavigationStyle(entry, "left", Math.max(12, left) + "px");
+        setLocalNavigationStyle(entry, "top", top + "px");
+        var kind = updateEntryKind();
+        if (entry.dataset.phase !== kind) {
+          entry.dataset.phase = kind;
+          entry.querySelector(".lm-update-circle").innerHTML = updateIcon(kind);
+        }
+        var label = updateEntryLabel();
+        if (entry.getAttribute("aria-label") !== label) entry.setAttribute("aria-label", label);
+        var tip = entry.querySelector(".lm-update-tooltip");
+        if (tip.textContent !== label) tip.textContent = label;
+        var expanded = String(state.update.open && state.update.anchor === entry);
+        if (entry.getAttribute("aria-expanded") !== expanded) entry.setAttribute("aria-expanded", expanded);
+      }
+    }
+    renderUpdateSettings();
+    renderUpdateModal();
+  }
+
+  function receiveUpdateStatus(snapshot) {
+    if (!snapshot || state.update.disposed) return;
+    if (!state.update.preferenceSaving && snapshot.preferences && typeof snapshot.preferences.automaticCheck === "boolean") {
+      state.update.preferences = snapshot.preferences;
+    }
+    state.update.result = snapshot.lastCheck || null;
+    if (!state.update.applying || snapshot.phase === "preparing" || snapshot.phase === "scheduled") {
+      state.update.phase = snapshot.phase || "idle";
+      state.update.error = snapshot.error || null;
+      state.update.operation = snapshot.operation || null;
+    }
+    mountUpdateEntry();
+  }
+
+  async function refreshUpdateStatus() {
+    if (state.update.statusInFlight) return state.update.statusInFlight;
+    var readId = ++state.update.readId;
+    var epoch = state.update.epoch;
+    var promise = updateRequest("/api/update/status").then(function (snapshot) {
+      if (readId === state.update.readId && epoch === state.update.epoch && !state.update.disposed) receiveUpdateStatus(snapshot);
+      return snapshot;
+    }).finally(function () {
+      if (state.update.statusInFlight === promise) state.update.statusInFlight = null;
+    });
+    state.update.statusInFlight = promise;
+    return promise;
+  }
+
+  function scheduleUpdateTick(delay) {
+    if (state.update.timer !== null) window.clearTimeout(state.update.timer);
+    state.update.timer = null;
+    if (state.update.disposed || !state.update.autoStarted || !isMainRenderer()) return;
+    state.update.timer = window.setTimeout(function () { state.update.timer = null; void updateTick(); }, delay);
+  }
+
+  async function updateTick() {
+    if (state.update.disposed || !isMainRenderer()) return;
+    if (state.update.tickInFlight) { scheduleUpdateTick(2000); return; }
+    state.update.tickInFlight = true;
+    var epoch = state.update.epoch;
+    try {
+      await refreshUpdateStatus();
+      if (epoch !== state.update.epoch || state.update.disposed) return;
+      if (state.update.preferences && state.update.preferences.automaticCheck &&
+          !state.update.checking && !updatePreparing() && state.update.phase !== "scheduled" &&
+          Date.now() >= state.update.nextCheckAt) await checkForUpdate(false);
+    } catch (error) {
+      // A local-service outage must not be reported as "already current".
+    } finally {
+      state.update.tickInFlight = false;
+      if (epoch === state.update.epoch) scheduleUpdateTick(updatePreparing() ? 2000 : UPDATE_STATUS_INTERVAL_MS);
+    }
   }
 
   async function checkForUpdate(manual) {
-    if (state.update.checking || state.update.applying) {
-      if (manual && state.update.checking) renderUpdateModal("checking");
-      return;
-    }
+    if (state.update.disposed) return;
+    if (manual) openUpdateDetails(document.querySelector('[data-action="check-update"]'));
+    if (state.update.checking || updatePreparing() || state.update.phase === "scheduled") return;
+    if (!manual && (!state.update.preferences || !state.update.preferences.automaticCheck)) return;
     state.update.checking = true;
-    if (manual) renderUpdateModal("checking");
+    state.update.readId += 1;
+    var epoch = state.update.epoch;
+    mountUpdateEntry();
     try {
-      var result = await callApi("/api/update/check", { params: { force: manual ? 1 : 0 } });
+      var result = await updateRequest("/api/update/check", { params: { force: manual ? 1 : 0 } }, 50000);
+      if (state.update.disposed || epoch !== state.update.epoch) return;
       state.update.result = result;
-      if (result.updateAvailable) renderUpdateModal("available", result);
-      else if (manual) renderUpdateModal("current", result);
+      state.update.phase = result.updateAvailable ? "available" : "current";
+      state.update.error = null;
+      state.update.failures = 0;
+      state.update.nextCheckAt = Date.now() + UPDATE_INTERVAL_MS * (0.9 + Math.random() * 0.2);
     } catch (error) {
-      if (manual) renderUpdateModal("failed", null, error.message);
+      if (state.update.disposed || epoch !== state.update.epoch) return;
+      state.update.failures += 1;
+      state.update.nextCheckAt = Date.now() + Math.min(60, 15 * Math.pow(2, state.update.failures - 1)) * 60000;
+      state.update.error = { stage: "check", message: error.message };
+      if (!state.update.result) state.update.phase = "failed";
     } finally {
       state.update.checking = false;
+      if (!state.update.disposed) mountUpdateEntry();
     }
   }
 
   async function applyUpdate() {
     var result = state.update.result;
-    if (!result || !result.updateAvailable || state.update.applying) return;
+    if (!result || !result.updateAvailable || updatePreparing() || state.update.phase === "scheduled") return;
     state.update.applying = true;
-    renderUpdateModal("applying", result);
+    state.update.readId += 1;
+    state.update.phase = "preparing";
+    state.update.error = null;
+    mountUpdateEntry();
+    scheduleUpdateTick(2000);
     try {
-      var applied = await callApi("/api/update/apply", {
-        method: "POST",
-        body: { version: result.latestVersion }
-      });
-      state.update.applying = false;
-      renderUpdateModal("launched", applied);
+      var applied = await updateRequest("/api/update/apply", { method: "POST", body: { version: result.latestVersion } }, 16 * 60 * 1000);
+      if (state.update.disposed) return;
+      state.update.phase = "scheduled";
+      state.update.operation = applied;
     } catch (error) {
+      if (state.update.disposed) return;
+      // The response may be lost after the helper was queued. Reconcile before allowing retry.
       state.update.applying = false;
-      renderUpdateModal("available", result);
-      var modal = document.getElementById(UPDATE_MODAL_ID);
-      var status = modal && modal.querySelector('[data-role="update-status"]');
-      if (status) {
-        status.textContent = "更新失败：" + error.message;
-        status.dataset.kind = "error";
+      state.update.readId += 1;
+      try {
+        var snapshot = await updateRequest("/api/update/status");
+        receiveUpdateStatus(snapshot);
+        if (snapshot.phase !== "preparing" && snapshot.phase !== "scheduled" && !snapshot.error) {
+          state.update.phase = "failed";
+          state.update.error = { stage: "prepare", message: error.message };
+        }
+      } catch (statusError) {
+        state.update.phase = "preparing";
+        state.update.error = null;
+        // Status polling will recover the authoritative operation when the service returns.
+      }
+    } finally {
+      state.update.applying = false;
+      if (!state.update.disposed) {
+        mountUpdateEntry();
+        scheduleUpdateTick(state.update.phase === "preparing" ? 2000 : UPDATE_STATUS_INTERVAL_MS);
       }
     }
   }
 
+  async function saveAutomaticUpdatePreference(enabled) {
+    if (state.update.preferenceSaving || !state.update.preferences) return;
+    state.update.preferenceSaving = true;
+    state.update.preferenceError = "";
+    state.update.epoch += 1;
+    state.update.readId += 1;
+    if (state.update.timer !== null) window.clearTimeout(state.update.timer);
+    state.update.timer = null;
+    renderUpdateSettings();
+    try {
+      state.update.preferences = await updateRequest("/api/update/preferences", {
+        method: "POST", body: { automaticCheck: enabled }
+      });
+      if (enabled) state.update.nextCheckAt = 0;
+    } catch (error) {
+      state.update.preferenceError = "自动检查设置保存失败：" + error.message;
+    } finally {
+      state.update.preferenceSaving = false;
+      if (!state.update.disposed) {
+        renderUpdateSettings();
+        scheduleUpdateTick(state.update.preferences.automaticCheck ? 8000 : UPDATE_STATUS_INTERVAL_MS);
+      }
+    }
+  }
+
+  function stopAutomaticUpdateCheck() {
+    state.update.disposed = true;
+    state.update.epoch += 1;
+    state.update.readId += 1;
+    if (state.update.timer !== null) window.clearTimeout(state.update.timer);
+    state.update.timer = null;
+    state.update.controllers.forEach(function (controller) { controller.abort(); });
+    state.update.controllers = [];
+    closeUpdateModal(false);
+  }
+
   function scheduleAutomaticUpdateCheck() {
-    if (state.update.autoStarted) return;
+    if (state.update.disposed || !isMainRenderer()) return;
+    if (state.update.autoStarted) {
+      if (state.update.timer === null && !state.update.tickInFlight) scheduleUpdateTick(UPDATE_STATUS_INTERVAL_MS);
+      return;
+    }
     state.update.autoStarted = true;
-    window.setTimeout(function () { checkForUpdate(false); }, 8000);
+    scheduleUpdateTick(8000);
+    if (state.update.listenersBound) return;
+    state.update.listenersBound = true;
+    window.addEventListener("pagehide", stopAutomaticUpdateCheck);
+    window.addEventListener("beforeunload", stopAutomaticUpdateCheck);
+    window.addEventListener("pageshow", function (event) {
+      if (!event.persisted) return;
+      state.update.disposed = false;
+      state.update.autoStarted = false;
+      scheduleAutomaticUpdateCheck();
+    });
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden || state.update.disposed || !state.update.autoStarted) return;
+      // Read state promptly after background throttling; nextCheckAt still gates remote requests.
+      scheduleUpdateTick(0);
+    });
   }
 
   function mailboxImportModalHtml() {
@@ -2337,7 +2663,11 @@
       '<div class="lm-card-head"><div class="lm-card-title">补丁版本</div>' +
       '<div class="lm-actions"><span class="lm-patch-version" data-role="service-version">正在读取…</span>' +
       '<button class="lm-button lm-button-small" type="button" data-action="check-update">检查更新</button></div></div>' +
-      '<div class="lm-note">当前本地回信服务版本；点击“检查更新”后会查询公开发布源。</div>' +
+      '<label class="lm-check lm-update-preference"><input type="checkbox" data-role="automatic-update-check" disabled>自动检查更新</label>' +
+      '<div class="lm-note">启动后检查，并在游戏运行期间约每小时检查一次。有新版时显示更新按钮，确认后才下载。</div>' +
+      '<div class="lm-update-setting-state"><span class="lm-note" data-role="update-check-state">尚未检查更新</span>' +
+      '<button class="lm-button lm-button-small" type="button" data-action="view-update" hidden>查看更新</button></div>' +
+      '<div class="lm-modal-status" data-kind="error" data-role="update-preference-status" aria-live="polite"></div>' +
       '</div>';
   }
 
@@ -2352,7 +2682,20 @@
     var button = section.querySelector('[data-action="check-update"]');
     if (!button) return;
     section.dataset.updateBound = "true";
+    button.setAttribute("aria-haspopup", "dialog");
+    button.setAttribute("aria-controls", UPDATE_MODAL_ID);
     button.addEventListener("click", function () { checkForUpdate(true); });
+    section.querySelector('[data-action="view-update"]').addEventListener("click", function (event) {
+      openUpdateDetails(event.currentTarget || event.target);
+    });
+    section.querySelector('[data-role="automatic-update-check"]').addEventListener("change", function (event) {
+      void saveAutomaticUpdatePreference(event.target.checked);
+    });
+    renderUpdateSettings();
+    refreshUpdateStatus().catch(function () {
+      state.update.preferenceError = "无法读取自动检查设置，请稍后重新打开设置。";
+      renderUpdateSettings();
+    });
   }
 
   function sectionHtml() {
@@ -7323,6 +7666,7 @@ function createCustomSongDiagnostics(options) {
       mountMusicEnhancements();
       mountCustomSongTools();
       mountMailboxTools();
+      mountUpdateEntry();
       scheduleAutomaticUpdateCheck();
     });
   }
@@ -7331,6 +7675,17 @@ function createCustomSongDiagnostics(options) {
     var hook = window.__LOCAL_MAIL_TEST_HOOK__;
     if (!hook || typeof hook !== "object") return;
     hook.renderUpdateModal = renderUpdateModal;
+    hook.updateState = state.update;
+    hook.checkForUpdate = checkForUpdate;
+    hook.updateTick = updateTick;
+    hook.refreshUpdateStatus = refreshUpdateStatus;
+    hook.mountUpdateEntry = mountUpdateEntry;
+    hook.openUpdateDetails = openUpdateDetails;
+    hook.closeUpdateModal = closeUpdateModal;
+    hook.applyUpdate = applyUpdate;
+    hook.saveAutomaticUpdatePreference = saveAutomaticUpdatePreference;
+    hook.scheduleAutomaticUpdateCheck = scheduleAutomaticUpdateCheck;
+    hook.stopAutomaticUpdateCheck = stopAutomaticUpdateCheck;
     hook.mountSettingsSection = mountSettingsSection;
     hook.patchVersionSectionHtml = patchVersionSectionHtml;
     hook.sectionHtml = sectionHtml;

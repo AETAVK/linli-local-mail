@@ -20,6 +20,7 @@ import { SecretStore } from "./src/secrets.mjs";
 import { extractSharedLetters } from "./src/share-import.mjs";
 import { normalizeHttpUrl, readJsonBody, safeErrorMessage } from "./src/utils.mjs";
 import { UpdateManager } from "./src/updater.mjs";
+import { getUpdatePreferences, setUpdatePreferences } from "./src/update-preferences.mjs";
 import { VideoAssetStore, parseByteRange } from "./src/video-assets.mjs";
 import { CustomSongCatalog } from "./src/custom-songs.mjs";
 import { MAPPING_MAX_BYTES } from "./src/custom-song-mappings.mjs";
@@ -629,6 +630,14 @@ const server = http.createServer(async (req, res) => {
         ok(req, res, database.reorderMusicPlaylistItemsExact(playlistId, await readJsonBody(req)));
         return;
       }
+    }
+    if (req.method === "GET" && url.pathname === "/api/update/status") {
+      ok(req, res, { ...updateManager.getStatus(), preferences: getUpdatePreferences(database) });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/update/preferences") {
+      ok(req, res, setUpdatePreferences(database, await readJsonBody(req, { maximumBytes: 4096 })));
+      return;
     }
     if (req.method === "GET" && url.pathname === "/api/update/check") {
       ok(req, res, await updateManager.check({ force: url.searchParams.get("force") === "1" }));

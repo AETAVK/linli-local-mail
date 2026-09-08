@@ -19,7 +19,11 @@
       '<div class="lm-card-head"><div class="lm-card-title">补丁版本</div>' +
       '<div class="lm-actions"><span class="lm-patch-version" data-role="service-version">正在读取…</span>' +
       '<button class="lm-button lm-button-small" type="button" data-action="check-update">检查更新</button></div></div>' +
-      '<div class="lm-note">当前本地回信服务版本；点击“检查更新”后会查询公开发布源。</div>' +
+      '<label class="lm-check lm-update-preference"><input type="checkbox" data-role="automatic-update-check" disabled>自动检查更新</label>' +
+      '<div class="lm-note">启动后检查，并在游戏运行期间约每小时检查一次。有新版时显示更新按钮，确认后才下载。</div>' +
+      '<div class="lm-update-setting-state"><span class="lm-note" data-role="update-check-state">尚未检查更新</span>' +
+      '<button class="lm-button lm-button-small" type="button" data-action="view-update" hidden>查看更新</button></div>' +
+      '<div class="lm-modal-status" data-kind="error" data-role="update-preference-status" aria-live="polite"></div>' +
       '</div>';
   }
 
@@ -34,7 +38,20 @@
     var button = section.querySelector('[data-action="check-update"]');
     if (!button) return;
     section.dataset.updateBound = "true";
+    button.setAttribute("aria-haspopup", "dialog");
+    button.setAttribute("aria-controls", UPDATE_MODAL_ID);
     button.addEventListener("click", function () { checkForUpdate(true); });
+    section.querySelector('[data-action="view-update"]').addEventListener("click", function (event) {
+      openUpdateDetails(event.currentTarget || event.target);
+    });
+    section.querySelector('[data-role="automatic-update-check"]').addEventListener("change", function (event) {
+      void saveAutomaticUpdatePreference(event.target.checked);
+    });
+    renderUpdateSettings();
+    refreshUpdateStatus().catch(function () {
+      state.update.preferenceError = "无法读取自动检查设置，请稍后重新打开设置。";
+      renderUpdateSettings();
+    });
   }
 
   function sectionHtml() {

@@ -250,6 +250,23 @@ function publicCheck(candidate, currentVersion, checkedAt, candidates) {
   };
 }
 
+function cloneState(value) {
+  return value == null ? value : structuredClone(value);
+}
+
+function publicUpdateError(error, stage) {
+  const fallback = stage === "check" ? "暂时无法连接补丁更新源" : "更新准备失败";
+  const message = String(error?.message || fallback)
+    .replace(/https?:\/\/[^\s)]+/gi, "[外部地址]")
+    .replace(/[A-Za-z]:\\[^\s"']+/g, "[本地路径]")
+    .replace(/\b(?:pid|process(?:\s+id)?)\s*[:=]?\s*\d+\b/gi, "进程编号");
+  return {
+    stage,
+    code: String(error?.code || "update_error"),
+    message
+  };
+}
+
 function responseUrl(response, requestedUrl) {
   return String(response?.url || requestedUrl || "");
 }
@@ -302,6 +319,25 @@ export class UpdateManager {
     this.cacheExpiresAt = 0;
     this.applying = false;
     this.handoffScheduled = false;
+    this.preparing = false;
+    this.checkFlight = null;
+    this.stablePhase = "idle";
+    this.statusError = null;
+    this.operation = null;
+  }
+
+  getStatus() {
+    let phase = this.stablePhase;
+    if (this.handoffScheduled) phase = "scheduled";
+    else if (this.applying || this.preparing) phase = "preparing";
+    return {
+      currentVersion: this.currentVersion,
+      checking: Boolean(this.checkFlight),
+      phase,
+      lastCheck: cloneState(this.cachedPublicCheck),
+      error: cloneState(this.statusError),
+      operation: cloneState(this.operation)
+    };
   }
 
   async fetchJson(url, options = {}) {
@@ -351,12 +387,8 @@ export class UpdateManager {
       .filter(Boolean);
   }
 
-  async check({ force = false } = {}) {
+  async performCheck() {
     const timestamp = this.now();
-    if (!force && this.cachedPublicCheck && timestamp < this.cacheExpiresAt) {
-      return this.cachedPublicCheck;
-    }
-
     const settled = await Promise.allSettled([this.queryGitee(), this.queryGitHub()]);
     const candidates = settled
       .filter((item) => item.status === "fulfilled" && item.value)
@@ -385,10 +417,65 @@ export class UpdateManager {
     if (githubDigest) candidate.expectedSha256 = githubDigest.slice("sha256:".length);
 
     const checkedAt = new Date(timestamp).toISOString();
-    this.cachedCandidate = candidate;
-    this.cachedPublicCheck = publicCheck(candidate, this.currentVersion, checkedAt, candidates);
+    this.cachedCandidate = cloneState(candidate);
+    this.cachedPublicCheck = publicCheck(this.cachedCandidate, this.currentVersion, checkedAt, candidates);
     this.cacheExpiresAt = timestamp + this.cacheMilliseconds;
-    return this.cachedPublicCheck;
+    this.stablePhase = this.cachedPublicCheck.updateAvailable ? "available" : "current";
+    this.statusError = null;
+    return {
+      publicCheck: cloneState(this.cachedPublicCheck),
+      candidate: cloneState(this.cachedCandidate)
+    };
+  }
+
+  async ensureCheck({ force = false, internal = false } = {}) {
+    if (!internal && (this.preparing || this.handoffScheduled)) {
+      if (this.cachedPublicCheck) {
+        return {
+          publicCheck: cloneState(this.cachedPublicCheck),
+          candidate: cloneState(this.cachedCandidate)
+        };
+      }
+      throw new UpdateError("补丁更新已经在处理中", { status: 409, code: "update_busy" });
+    }
+    if (!internal && this.applying) {
+      if (this.checkFlight) return this.checkFlight.promise;
+      if (this.cachedPublicCheck) {
+        return {
+          publicCheck: cloneState(this.cachedPublicCheck),
+          candidate: cloneState(this.cachedCandidate)
+        };
+      }
+      throw new UpdateError("补丁更新已经在处理中", { status: 409, code: "update_busy" });
+    }
+    // A force check already in progress wins over a still-valid cache. Every
+    // caller observes that single flight, including an internal apply check.
+    if (this.checkFlight) return this.checkFlight.promise;
+    const timestamp = this.now();
+    if (!force && this.cachedPublicCheck && timestamp < this.cacheExpiresAt) {
+      return {
+        publicCheck: cloneState(this.cachedPublicCheck),
+        candidate: cloneState(this.cachedCandidate)
+      };
+    }
+    const flight = { promise: null };
+    this.checkFlight = flight;
+    flight.promise = this.performCheck()
+      .catch((error) => {
+        this.statusError = publicUpdateError(error, "check");
+        this.stablePhase = "failed";
+        throw error;
+      })
+      .finally(() => {
+        // Multiple callers share this promise; never clear a newer flight.
+        if (this.checkFlight === flight) this.checkFlight = null;
+      });
+    return flight.promise;
+  }
+
+  async check({ force = false } = {}) {
+    const result = await this.ensureCheck({ force: Boolean(force) });
+    return cloneState(result.publicCheck);
   }
 
   async resolveExpectedSha256(candidate) {
@@ -555,18 +642,36 @@ export class UpdateManager {
     }
     this.applying = true;
     try {
-      const status = await this.check();
-      if (!status.updateAvailable || !this.cachedCandidate) {
+      // The internal result contains a matching candidate snapshot. Capture it
+      // before the next await so later checks cannot change this apply attempt.
+      const checked = await this.ensureCheck({ internal: true });
+      const status = checked.publicCheck;
+      const candidate = cloneState(checked.candidate);
+      if (!status.updateAvailable || !candidate) {
         throw new UpdateError("当前已经是最新补丁版本", { status: 409, code: "already_latest" });
       }
       const requested = parseStableVersion(version);
-      if (!requested || requested.text !== this.cachedCandidate.version) {
+      if (!requested || requested.text !== candidate.version) {
         throw new UpdateError("请求安装的版本与最新检查结果不一致，请重新检查", { status: 409, code: "stale_update_request" });
       }
-      const expectedSha256 = await this.resolveExpectedSha256(this.cachedCandidate);
-      const prepared = await this.downloadInstaller(this.cachedCandidate, expectedSha256);
+      this.preparing = true;
+      this.statusError = null;
+      this.operation = {
+        version: candidate.version,
+        deferred: true,
+        scheduled: false,
+        restartRequired: true
+      };
+      const expectedSha256 = await this.resolveExpectedSha256(candidate);
+      const prepared = await this.downloadInstaller(candidate, expectedSha256);
       const handoff = this.launchInstaller(prepared.installerPath, expectedSha256);
       this.handoffScheduled = true;
+      this.operation = {
+        version: candidate.version,
+        deferred: true,
+        scheduled: true,
+        restartRequired: true
+      };
       return {
         // Keep the legacy field, but make its meaning explicit: the Inno setup
         // process is deferred; only the detached handoff helper has started.
@@ -575,15 +680,23 @@ export class UpdateManager {
         handoffPid: handoff.handoffPid,
         deferred: true,
         scheduled: true,
-        version: this.cachedCandidate.version,
-        source: this.cachedCandidate.source,
+        version: candidate.version,
+        source: candidate.source,
         sha256: expectedSha256,
         reusedDownload: prepared.reused,
         restartRequired: true,
         message: "更新包已校验并排队；退出游戏和启动器后将自动停止本地服务并安装。"
       };
+    } catch (error) {
+      if (this.preparing && !this.handoffScheduled) {
+        this.statusError = publicUpdateError(error, "prepare");
+        this.stablePhase = "failed";
+        this.operation = null;
+      }
+      throw error;
     } finally {
       this.applying = false;
+      this.preparing = false;
     }
   }
 }
