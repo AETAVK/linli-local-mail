@@ -1,9 +1,9 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "53fc2bdb7088c7c37e2d6cc91429dbc5ad1ad8f3",
-  "packageVersion": "0.11.10",
-  "releaseVersion": "0.11.10",
+  "canonicalCommit": "00eb084caf1d695ec3fb040cc843dfbbee8a70f8",
+  "packageVersion": "0.11.11",
+  "releaseVersion": "0.11.11",
   "files": [
     {
       "path": ".gitattributes",
@@ -11,9 +11,9 @@
       "sha256": "4ee8456f0a011f74e2e8fc1cf155849f19756f076c3851d647f02d974851f66f"
     },
     {
-      "path": ".github/release-notes/v0.11.10.md",
-      "gitBlob": "e2649e2085e1aec64f1e69dc06ea9daf11d79cb0",
-      "sha256": "4393285235e81bfa5c8dee223d455c516c030e2e3d61aee7aeacfcab56eea49e"
+      "path": ".github/release-notes/v0.11.11.md",
+      "gitBlob": "c69546b7567e7be7bca307fe481e81846649fbdb",
+      "sha256": "e3bd55cef6106fb9586d6ed3af6f7f049cfd153150ceef213829bb8d7069de9e"
     },
     {
       "path": ".github/scripts/publish-gitee-release.mjs",
@@ -52,18 +52,18 @@
     },
     {
       "path": "frontend-src/local-mail-poc/01-core-styles.js",
-      "gitBlob": "feba77b53d9570ed2a223ba45dad379af7fd88e1",
-      "sha256": "372fb55f894e0100411f5ec44e1f24ebaf59781265d4e6287732099af8cb7bf8"
+      "gitBlob": "7fe04aa62a670f2d7ef916bc258a6c1893e25153",
+      "sha256": "678461cd177af614cdf018697fbb4a7dc9516d60792bd33b4ad10a14aa2dc923"
     },
     {
       "path": "frontend-src/local-mail-poc/02-mail-import-updater.js",
-      "gitBlob": "be3a7a2ceb652ac5302ace77038fa6a834b227a4",
-      "sha256": "0fc49fc9a5aed24d262c5b2643e2d406f6e1a9ffe6cf3cf1ef315bd24cedf53b"
+      "gitBlob": "bfad67eb50fcab334b3fcbda4f1dc3ca7cf5b883",
+      "sha256": "28a707809880734f5a738229a4e84a13169e0bb2722efe6d2dd1caef20ac125d"
     },
     {
       "path": "frontend-src/local-mail-poc/03-settings.js",
-      "gitBlob": "8ad7c286b72c04fac8b71de823e998169ceb9119",
-      "sha256": "b5efb46a666fe9a90a4159fb9117afa56d0d6b54630446aa6f0509ab1a73589e"
+      "gitBlob": "45f61b4a9241d4d6741d202cff200c6f4cb69d80",
+      "sha256": "66bc91c132d1098bee98925e36f79b9ffeb8afa0e9f2035e849526624d4a846a"
     },
     {
       "path": "frontend-src/local-mail-poc/04-vue-pinia-navigation.js",
@@ -92,13 +92,13 @@
     },
     {
       "path": "frontend-src/local-mail-poc/06-bootstrap.js",
-      "gitBlob": "391681a6d41d19ab650193f0194c0c9442c6c419",
-      "sha256": "11038f83d3fe361b3fb57c46e7511bb8a623e226083b790cf5d27c03fc736de9"
+      "gitBlob": "4854d059b5c968c37078b0ecb06d8d9462302dd3",
+      "sha256": "bccc49cf7f3cce6fa53b9adb5597b74b344e42fb3ecd56c19222cedee83807a9"
     },
     {
       "path": "frontend/local-mail-poc.js",
-      "gitBlob": "9acb4c013be1a1b1590f93e5b21f02dca50373cb",
-      "sha256": "c53bcc0dc0c4352414087529a39a12d50a6e0c8d77025cbaed978536340b0d72"
+      "gitBlob": "eafc66b9c44a2117bb75c6fc4ed975538bf86882",
+      "sha256": "4de9b78c66697bca0c276612f74f3d67751931df17deba2a531740c56a32bf33"
     },
     {
       "path": "Install.cmd",
@@ -132,13 +132,13 @@
     },
     {
       "path": "package.json",
-      "gitBlob": "13354f6f75cd0354e55a9dce8443c89df7a20daa",
-      "sha256": "4f5eeb95cef8b5a96bf21085ce2266befe3ae51a79b5072c485903eb0d0cdadc"
+      "gitBlob": "d0ab799179e0e7237c4babb07290c1cda78be948",
+      "sha256": "af47ea8d185d7ac63771c3958bf8a364e07f48ea5f194e319a4ef637fd8754a7"
     },
     {
       "path": "README.md",
-      "gitBlob": "0ab8d07f904590f6b37ca43aeff06e5ea5b9c024",
-      "sha256": "f70cb328c76aae316a8efbb0d15def2a23d1dbfc8b45931cc464d70cefa3f845"
+      "gitBlob": "6dbbee8765003e79ba5e5321eec4736f425cedd6",
+      "sha256": "dc7c70f14ce5393c6c0d37549e4625353278e5d8bb6003c3d3540f44a6cd3446"
     },
     {
       "path": "repo-role.json",
@@ -147,13 +147,13 @@
     },
     {
       "path": "server.mjs",
-      "gitBlob": "944154df8e2ef4dfed2858ba5df7e849063583bd",
-      "sha256": "2d7bd4dc48efd9b619c1b6012641f584fcb7887191f4d712091f75edb172bb03"
+      "gitBlob": "d254c18689e491d073cd7ab05bff0a963d1f1e8b",
+      "sha256": "985a0b8b8d1d444ffdfe88feba8668a9c1dd9ffa92a8c5d532f23800e27f4b67"
     },
     {
       "path": "SOURCE_CODE.md",
-      "gitBlob": "0375c40313cf85b9db4d806b6203dd8cd603088d",
-      "sha256": "a0f3db7f27131f9b920d3486579d0da0f18a149ab4f00dd0d259e5f904c1fd75"
+      "gitBlob": "553891b4696ed51c830547ed8d70a0f8290b61ff",
+      "sha256": "7d2ed41a3b9cd69aea83ae40cbfd7417ed71abbbfb33e8d7219b4379c2265de8"
     },
     {
       "path": "src/character.mjs",
@@ -167,8 +167,8 @@
     },
     {
       "path": "src/constants.mjs",
-      "gitBlob": "601e311801f801605d8ecac4f4cace2b682c566b",
-      "sha256": "ca416d1d0267df6992ff768fc8c21a5a8e2703f2f8dfff81b1fe4369a2603995"
+      "gitBlob": "5a2845c8e4b8cde582d910c45201edcf37ebe1c4",
+      "sha256": "d0e049774fc51c9441dd7e22dcab9317f2268126de95a9a6a25d23eb4e263b47"
     },
     {
       "path": "src/context-budget.mjs",
@@ -286,9 +286,14 @@
       "sha256": "3ec8f8d6d369c8397a691313addebee0b283b7be848aa4a54fe879635841c54e"
     },
     {
+      "path": "src/update-preferences.mjs",
+      "gitBlob": "eb3525d6494ca93ac8b3627bd06008477c74336f",
+      "sha256": "a37c547d94dffe47b059613f56e5150f941032eeca24beeef282948c65112c47"
+    },
+    {
       "path": "src/updater.mjs",
-      "gitBlob": "81ceb7e49692a8aebabc0c2e9f74a629ae37ee1f",
-      "sha256": "81ef60db10d3555351c443fe8e37350db4a993382799c35f1d1d24fe856c9fb5"
+      "gitBlob": "43687fc80dbb02e8eb15ef8ff62620def19977a8",
+      "sha256": "516aabe05324d65db74b31f365860da3eb4d6cd47c873ad67580865435652564"
     },
     {
       "path": "src/utils.mjs",
@@ -312,8 +317,8 @@
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
-      "gitBlob": "f209f4d1dae70c2658509a4889a9911b8a55ae50",
-      "sha256": "4d7fc7ca1bcba7898b9e628768d5a70c3fa5641fce479a25f4f6ffb82b47d2d3"
+      "gitBlob": "04da0f1900e889fd87bfaff69a9e9b6d522ab5d2",
+      "sha256": "05090a7669adb45f4ca306bde192e710cdd986f742b46073cad4391d5df8a8d1"
     },
     {
       "path": "tools/backup.mjs",

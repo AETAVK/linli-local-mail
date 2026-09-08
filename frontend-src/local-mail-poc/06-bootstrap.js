@@ -58,6 +58,7 @@
       mountMusicEnhancements();
       mountCustomSongTools();
       mountMailboxTools();
+      mountUpdateEntry();
       scheduleAutomaticUpdateCheck();
     });
   }
@@ -66,6 +67,17 @@
     var hook = window.__LOCAL_MAIL_TEST_HOOK__;
     if (!hook || typeof hook !== "object") return;
     hook.renderUpdateModal = renderUpdateModal;
+    hook.updateState = state.update;
+    hook.checkForUpdate = checkForUpdate;
+    hook.updateTick = updateTick;
+    hook.refreshUpdateStatus = refreshUpdateStatus;
+    hook.mountUpdateEntry = mountUpdateEntry;
+    hook.openUpdateDetails = openUpdateDetails;
+    hook.closeUpdateModal = closeUpdateModal;
+    hook.applyUpdate = applyUpdate;
+    hook.saveAutomaticUpdatePreference = saveAutomaticUpdatePreference;
+    hook.scheduleAutomaticUpdateCheck = scheduleAutomaticUpdateCheck;
+    hook.stopAutomaticUpdateCheck = stopAutomaticUpdateCheck;
     hook.mountSettingsSection = mountSettingsSection;
     hook.patchVersionSectionHtml = patchVersionSectionHtml;
     hook.sectionHtml = sectionHtml;
