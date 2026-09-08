@@ -56,6 +56,7 @@
       mountSettingsSection();
       mountMusicBehaviorSetting();
       mountMusicEnhancements();
+      mountCustomSongTools();
       mountMailboxTools();
       scheduleAutomaticUpdateCheck();
     });
@@ -101,6 +102,7 @@
   window.addEventListener("hashchange", queueMount);
   window.addEventListener("linli-music-view-ready", queueMount);
   window.addEventListener("linli-custom-songs-changed", invalidateCustomSongList);
+  document.addEventListener("visibilitychange", mountCustomSongTools);
   window.addEventListener("resize", queueMount);
   window.addEventListener("scroll", queueMount, true);
   if (document.head) hideWatermark();

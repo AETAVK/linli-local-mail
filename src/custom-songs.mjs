@@ -6,6 +6,8 @@ import { scanCustomSongs } from "./custom-song-scan.mjs";
 import { inspectVideo } from "./custom-song-media-facts.mjs";
 import { ScanDiagnostics } from "./custom-song-diagnostics.mjs";
 import { SERVICE_VERSION } from "./constants.mjs";
+import { CustomSongMappings, mappingKey } from "./custom-song-mappings.mjs";
+import { CustomSongRefresh } from "./custom-song-refresh.mjs";
 
 const NAME_KEY = /^midi_[0-9]+_[0-9]+$/;
 const PERIODS = ["TOD12", "TOD1730", "TOD20"];
@@ -58,12 +60,14 @@ async function mp4Duration(filePath) {
 }
 
 export class CustomSongCatalog {
-  constructor({ db, baseUrl, mediaRoot, logRoot, scan = scanCustomSongs, clock = () => Date.now() }) {
+  constructor({ db, baseUrl, mediaRoot, logRoot, mappingPath, scan = scanCustomSongs, clock = () => Date.now(), refreshOptions }) {
     this.db = db;
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.defaultRoot = mediaRoot || path.join(os.homedir(), "Music", "miHoYo", "Olivia-steam", "cache", "studiovideo");
     this.logRoot = logRoot ?? path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "miHoYo", "Olivia-steam", "logs");
     this.scan = scan;
+    this.mappings = mappingPath ? new CustomSongMappings(mappingPath) : null;
+    this.mappingMutation = false;
     this.logRootSource = logRoot == null ? "default" : "environment";
     this.lastDiagnostics = null;
     this.inFlight = null;
@@ -80,6 +84,7 @@ export class CustomSongCatalog {
       metadata_source TEXT NOT NULL, media_token TEXT NOT NULL UNIQUE,
       available INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL
     )`);
+    this.refresh = this.mappings ? new CustomSongRefresh(this, refreshOptions) : null;
   }
 
   root(input, detectedRoot) {
@@ -111,7 +116,7 @@ export class CustomSongCatalog {
       mediaRoot: result.mediaRoot, warnings: structuredClone(result.warnings), missingPeriods: result.missingPeriods };
   }
 
-  async assemblePresentation(root) {
+  async assemblePresentation(root, warnings = this.lastWarnings) {
     const rows = this.db.prepare("SELECT * FROM custom_songs WHERE available=1 AND root=? ORDER BY name_key").all(root);
     const songs = [];
     for (const row of rows) {
@@ -119,7 +124,7 @@ export class CustomSongCatalog {
       if (song) songs.push(song);
     }
     const result = { list: songs, total: songs.length, mediaRoot: root,
-      warnings: structuredClone(this.lastWarnings), missingPeriods: songs.filter((song) => song.fallbackPeriods.length).length };
+      warnings: structuredClone(warnings), missingPeriods: songs.filter((song) => song.fallbackPeriods.length).length };
     const bytes = Buffer.byteLength(JSON.stringify(result), "utf8");
     return { result, cacheable: songs.length <= PRESENTATION_CACHE_MAX_SONGS && bytes <= PRESENTATION_CACHE_MAX_BYTES };
   }
@@ -153,30 +158,112 @@ export class CustomSongCatalog {
     return this.pagePresentation(await fill.promise, paging);
   }
 
-  async rebuild({ mediaRoot } = {}) {
+  savedPresentation(root, entries, priorJson) {
+    let prior = { list: [], warnings: [] };
+    try { if (priorJson) prior = JSON.parse(priorJson); } catch { /* optional derived cache */ }
+    const previous = new Map(prior.list.map((song) => [song.nameKey, song]));
+    const table = new Map(entries.map((entry) => [mappingKey(entry.fileName), entry]));
+    const groups = new Map();
+    for (const entry of table.values()) {
+      const key = entry.filePath.split("/")[0];
+      if (!NAME_KEY.test(key) || !this.validFileName(entry.fileName)) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(entry);
+    }
+    const allRows = this.db.prepare("SELECT * FROM custom_songs WHERE root=? ORDER BY name_key").all(root);
+    const rows = new Map(allRows.filter((row) => row.available).map((row) => [row.name_key, row]));
+    const known = new Set(allRows.map((row) => row.name_key));
+    // An imported table can populate the first list even before any scan has
+    // run. Register only safe relative media names; media() still resolves the
+    // real path and checks availability before serving a single byte.
+    if (!this.inFlight) {
+      const insert = this.db.prepare(`INSERT INTO custom_songs
+        (name_key,song_id,name,root,files_json,metadata_source,media_token,available,updated_at)
+        VALUES(?,?,?,?,?,'mapping',?,1,?) ON CONFLICT(name_key) DO UPDATE SET
+        name=excluded.name,custom_name=NULL,root=excluded.root,files_json=excluded.files_json,
+        overrides_json='{}',metadata_source='mapping',available=1,updated_at=excluded.updated_at`);
+      let transaction = false;
+      try { for (const [key, mapped] of groups) {
+        if (known.has(key)) continue;
+        if (!transaction) { this.db.exec("BEGIN IMMEDIATE"); transaction = true; }
+        const existing = this.db.prepare("SELECT * FROM custom_songs WHERE name_key=?").get(key);
+        const files = mapped.map((entry) => ({ ...(entry.automatic || {}), fileName: entry.fileName,
+          ...(entry.automatic ? {} : { tod: entry.tod, view: entry.view, evidence: entry.tod ? "mapping" : "unknown" }) }));
+        insert.run(key, existing?.song_id || `local-${key}`, mapped.find((entry) => entry.name)?.name || key,
+          root, JSON.stringify(files), existing?.media_token || crypto.randomBytes(24).toString("hex"), Date.now());
+        rows.set(key, this.db.prepare("SELECT * FROM custom_songs WHERE name_key=?").get(key));
+      } if (transaction) this.db.exec("COMMIT"); }
+      catch (error) { if (transaction) this.db.exec("ROLLBACK"); throw error; }
+    }
+    const songs = [];
+    for (const row of [...rows.values()].sort((a, b) => a.name_key < b.name_key ? -1 : a.name_key > b.name_key ? 1 : 0)) {
+      const raw = [...new Map(JSON.parse(row.files_json).map((file) => [mappingKey(file.fileName), file])).values()];
+      const overrides = JSON.parse(row.overrides_json);
+      const old = previous.get(row.name_key);
+      let name = row.custom_name || row.name;
+      const files = raw.map((file) => {
+        const candidate = table.get(mappingKey(file.fileName));
+        const mapped = candidate && (!candidate.filePath || candidate.filePath.toLowerCase() === `${row.name_key}/${file.fileName}`.toLowerCase()) ? candidate : null;
+        if (mapped?.name) name = mapped.name;
+        const manual = mapped ? mapped.manualUnknown || (mapped.tod && Object.hasOwn(overrides, file.fileName)
+          && overrides[file.fileName] === mapped.tod) : Object.hasOwn(overrides, file.fileName);
+        const tod = mapped ? mapped.tod || (mapped.manualUnknown ? null : file.tod) : manual ? overrides[file.fileName]
+          : file.mappingManual ? file.mappingTod : file.tod;
+        const evidence = manual ? "manual" : mapped?.tod && mapped.tod !== file.tod ? "mapping" : file.evidence || "unknown";
+        return { fileName: file.fileName, tod: PERIODS.includes(tod) ? tod : null,
+          view: mapped ? ((mapped.tod || mapped.manualUnknown ? mapped.view : null) ?? file.view ?? null)
+            : file.mappingView ?? file.view ?? null, evidence,
+          automaticTod: PERIODS.includes(file.tod) ? file.tod : null,
+          automaticEvidence: file.evidence || "unknown", conflict: Boolean(file.conflict),
+          evidenceNote: "已载入保存的映射，文件可用性正在后台核对。", provenance: file.provenance || [],
+          ...(old?.localFiles?.find((value) => value.fileName === file.fileName)?.fileRevision
+            ? { fileRevision: old.localFiles.find((value) => value.fileName === file.fileName).fileRevision } : {}),
+          url: `${this.baseUrl}/custom-song-media/${row.media_token}/${encodeURIComponent(file.fileName)}` };
+      }).filter((file) => this.validFileName(file.fileName));
+      const duration = old?.duration || raw.find((file) => file.mediaFacts?.duration > 0)?.mediaFacts.duration || 0;
+      const song = this.songPresentation({ ...row, name, custom_name: null }, files, duration);
+      if (song) songs.push({ ...song, localVerificationPending: true });
+    }
+    return { list: songs, total: songs.length, mediaRoot: root, warnings: prior.warnings || [],
+      missingPeriods: songs.filter((song) => song.fallbackPeriods.length).length };
+  }
+
+  async rebuild({ mediaRoot } = {}, internal = {}) {
+    if (this.mappingMutation) throw fail("正在保存歌曲映射，请稍后再试", 409);
     const root = this.root(mediaRoot);
+    this.refresh?.selectRoot(root);
     if (this.inFlight) {
       if (this.inFlight.root !== root) {
         this.invalidatePresentationCache();
         throw fail("正在扫描另一个曲目目录，请稍后再试", 409);
       }
-      return this.inFlight.promise;
+      return this.rebuildPage(await this.inFlight.promise);
     }
     this.invalidatePresentationCache();
-    const promise = this.rebuildRoot(root);
+    const promise = this.rebuildRoot(root, internal.inputs);
     this.inFlight = { root, promise };
-    try { return await promise; } finally {
+    try { return this.rebuildPage(await promise); } finally {
       this.invalidatePresentationCache();
       this.inFlight = null;
     }
   }
 
-  async rebuildRoot(root) {
+  rebuildPage(result) {
+    return { ...this.pagePresentation(result, { cursor: 0, pageSize: 200 }), diagnostics: result.diagnostics };
+  }
+
+  async rebuildRoot(root, inputSnapshot) {
     const diagnostics = new ScanDiagnostics({ mediaRoot: root, logRoot: this.logRoot,
       logRootSource: this.logRootSource, patchVersion: SERVICE_VERSION });
     this.lastDiagnostics = null;
     try {
-      const result = await this.rebuildWithDiagnostics(root, diagnostics);
+      const epoch = this.refresh?.epoch;
+      const before = this.refresh ? inputSnapshot || await this.refresh.inputs(root) : null;
+      const result = await this.rebuildWithDiagnostics(root, diagnostics, epoch);
+      if (this.refresh && !this.refresh.closed && this.refresh.root === root && this.refresh.epoch === epoch) {
+        const after = await this.refresh.inputs(root);
+        if (!this.refresh.closed && this.refresh.root === root && this.refresh.epoch === epoch) this.refresh.save(root, result, before, after);
+      }
       diagnostics.finish();
       this.lastDiagnostics = diagnostics.snapshot();
       return { ...result, diagnostics: this.lastDiagnostics };
@@ -200,7 +287,7 @@ export class CustomSongCatalog {
     return structuredClone(exportOnly ? snapshot.report : snapshot);
   }
 
-  async rebuildWithDiagnostics(root, diagnostics) {
+  async rebuildWithDiagnostics(root, diagnostics, epoch) {
     try {
       if (!(await fs.promises.stat(root)).isDirectory()) throw fail("曲目下载路径不是文件夹");
     } catch (error) {
@@ -209,8 +296,19 @@ export class CustomSongCatalog {
     }
     const previousSongs = this.db.prepare("SELECT name_key,files_json FROM custom_songs WHERE root=?").all(root)
       .map((row) => ({ nameKey: row.name_key, files: JSON.parse(row.files_json) }));
-    const result = await this.scan({ mediaRoot: root, logRoot: this.logRoot, previousSongs, diagnostics });
+    const previousRows = this.mappings ? this.db.prepare("SELECT * FROM custom_songs").all() : null;
+    const previousRoot = this.db.prepare("SELECT value FROM settings WHERE key='customSongs.mediaRoot'").get();
+    if (this.mappings && !fs.existsSync(this.mappings.filePath)) {
+      const saved = this.savedPresentation(root, []);
+      await this.persistMappings(root, new Map(saved.list.map((song) => [song.nameKey, song])),
+        { epoch, mappingHash: this.refresh?.mappingHash([]) });
+    }
+    const mappingState = this.refresh?.mapping();
+    const mappingEntries = mappingState?.entries || this.mappings?.read();
+    const tableByFile = new Map((mappingEntries || []).map((entry) => [mappingKey(entry.fileName), entry]));
+    const result = await this.scan({ mediaRoot: root, logRoot: this.logRoot, previousSongs, diagnostics, mappingEntries });
     if (!Array.isArray(result.songs)) throw fail("曲目扫描返回无效数据", 500);
+    this.assertCurrentScan(root, epoch, mappingState?.hash);
     const now = Date.now();
     const counts = { indexedSongs: 0, unindexedSongs: 0, recoveredNames: 0,
       retainedNames: 0, manualNames: 0, directoryNames: 0, unusableNames: 0 };
@@ -233,6 +331,23 @@ export class CustomSongCatalog {
           continue;
         }
         const old = get.get(song.nameKey);
+        if (old && this.mappings) {
+          const overrides = JSON.parse(old.overrides_json);
+          for (const file of files) {
+            const entry = tableByFile.get(mappingKey(file.fileName));
+            if (!entry || (entry.filePath && entry.filePath.toLowerCase() !== `${song.nameKey}/${file.fileName}`.toLowerCase())) continue;
+            // The JSON is authoritative, including edits made while stopped.
+            // Never let an old SQLite override rewrite newer table values.
+            if (entry.manualUnknown) overrides[file.fileName] = null;
+            else if (!entry.tod) delete overrides[file.fileName];
+            else if (Object.hasOwn(overrides, file.fileName)) overrides[file.fileName] = entry.tod;
+          }
+          this.db.prepare("UPDATE custom_songs SET overrides_json=? WHERE name_key=?").run(JSON.stringify(overrides), song.nameKey);
+        }
+        if (song.mappingName && old) {
+          this.db.prepare("UPDATE custom_songs SET custom_name=? WHERE name_key=?").run(song.mappingName, song.nameKey);
+          old.custom_name = song.mappingName;
+        }
         counts.indexedSongs += 1;
         // Explain the existing naming precedence without changing it. Manual,
         // retained and this-scan names are mutually exclusive, across all pages.
@@ -279,9 +394,129 @@ export class CustomSongCatalog {
     for (const outcome of displayOutcomes) diagnostics.noteDisplayOutcome(...outcome);
     if (counts.directoryNames) diagnostics.reason("NAME_FALLBACK", counts.directoryNames);
     if (counts.unusableNames) diagnostics.reason("UNUSABLE_NAMES", counts.unusableNames);
-    this.scannedRoot = root;
+    let assembled, writtenMappingHash;
+    try {
+      assembled = await this.assemblePresentation(root, result.warnings || []);
+      this.assertCurrentScan(root, epoch, mappingState?.hash);
+      writtenMappingHash = await this.persistMappings(root, new Map(assembled.result.list.map((song) => [song.nameKey, song])), { epoch, mappingHash: mappingState?.hash });
+    }
+    catch (error) {
+      // Do not hold SQLite's shared connection in a transaction while awaiting
+      // media checks. Restore this catalog only if its file persistence fails.
+      this.scannedRoot = null;
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        this.db.prepare("DELETE FROM custom_songs").run();
+        const restore = this.db.prepare(`INSERT INTO custom_songs
+          (name_key,song_id,name,custom_name,root,files_json,overrides_json,metadata_source,media_token,available,updated_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?)`);
+        for (const row of previousRows || []) restore.run(row.name_key,row.song_id,row.name,row.custom_name,row.root,
+          row.files_json,row.overrides_json,row.metadata_source,row.media_token,row.available,row.updated_at);
+        if (previousRoot) this.db.prepare("UPDATE settings SET value=? WHERE key='customSongs.mediaRoot'").run(previousRoot.value);
+        else this.db.prepare("DELETE FROM settings WHERE key='customSongs.mediaRoot'").run();
+        this.db.exec("COMMIT");
+      } catch (restoreError) { this.db.exec("ROLLBACK"); throw restoreError; }
+      throw error;
+    }
+    if (!this.refresh || (this.refresh.root === root && this.refresh.epoch === epoch)) this.scannedRoot = root;
     this.lastWarnings = result.warnings || [];
-    return this.list({ pageSize: 200 });
+    return { ...assembled.result, mappingHash: writtenMappingHash };
+  }
+
+  assertCurrentScan(root, epoch, mappingHash) {
+    if (!this.refresh) return;
+    if (this.refresh.closed || this.refresh.root !== root || this.refresh.epoch !== epoch) throw fail("曲目目录已变化，已忽略旧检查结果", 409);
+    if (mappingHash && this.refresh.mapping().hash !== mappingHash) throw Object.assign(fail("歌曲映射已变化，正在重新检查", 409), { code: "MAPPING_CHANGED" });
+  }
+
+  async mappingEntriesForRow(row, presentation) {
+    const song = arguments.length > 1 ? presentation : await this.present(row);
+    if (!song) return [];
+    const rawFiles = JSON.parse(row.files_json);
+    return song.localFiles.map((file) => ({ fileName: file.fileName,
+      filePath: `${row.name_key}/${file.fileName}`, name: song.name === row.name_key ? "" : song.name,
+      tod: file.tod, view: file.view,
+      ...(file.evidence === "manual" && !file.tod ? { manualUnknown: true } : {}),
+      automatic: (({ mappingTod, mappingManual, mappingView, manualUnknown, ...automatic }) => automatic)(rawFiles.find((raw) => raw.fileName === file.fileName)) }));
+  }
+
+  async persistMappings(root, presentations, guard) {
+    if (!this.mappings) return;
+    const entries = new Map(this.mappings.read().map((entry) => [mappingKey(entry.fileName), entry]));
+    for (const row of this.db.prepare("SELECT * FROM custom_songs WHERE root=? AND available=1 ORDER BY name_key").all(root)) {
+      const entriesForRow = presentations ? await this.mappingEntriesForRow(row, presentations.get(row.name_key) ?? null)
+        : await this.mappingEntriesForRow(row);
+      for (const entry of entriesForRow) {
+        const key = mappingKey(entry.fileName), old = entries.get(key);
+        if (!old?.filePath || old.filePath.toLowerCase() === entry.filePath.toLowerCase()) entries.set(key, entry);
+      }
+    }
+    if (guard) this.assertCurrentScan(root, guard.epoch, guard.mappingHash);
+    this.mappings.write([...entries.values()]);
+    return this.refresh?.mappingHash([...entries.values()]);
+  }
+
+  async exportMappings({ mediaRoot } = {}) {
+    if (!this.mappings) throw fail("歌曲映射表未配置", 503);
+    if (this.inFlight || this.mappingMutation) throw fail("正在处理歌曲映射，请稍后再试", 409);
+    // Export is a backup of the whole table, including files not on this machine.
+    if (!fs.existsSync(this.mappings.filePath)) await this.search({ mediaRoot });
+    return this.mappings.export();
+  }
+
+  async importMappings({ document } = {}) {
+    if (!this.mappings) throw fail("歌曲映射表未配置", 503);
+    if (this.inFlight || this.mappingMutation) throw fail("正在处理歌曲映射，请稍后再试", 409);
+    const merged = this.mappings.mergeImport(document);
+    const incoming = new Map(merged.incoming.map((entry) => [mappingKey(entry.fileName), entry]));
+    this.commitMappings(merged.entries, () => {
+      for (const row of this.db.prepare("SELECT * FROM custom_songs").all()) {
+        const files = JSON.parse(row.files_json), overrides = JSON.parse(row.overrides_json);
+        let changed = false, name = row.custom_name || row.name;
+        for (let index = 0; index < files.length; index += 1) {
+          const file = files[index], entry = incoming.get(mappingKey(file.fileName));
+          if (!entry) continue;
+          if (entry.filePath && entry.filePath.toLowerCase() !== `${row.name_key}/${file.fileName}`.toLowerCase()) continue;
+          delete overrides[file.fileName];
+          name = entry.name || row.name_key;
+          if (entry.tod || entry.manualUnknown) overrides[file.fileName] = entry.tod;
+          if (entry.view) file.mappingView = entry.view;
+          else delete file.mappingView;
+          changed = true;
+        }
+        if (changed) this.db.prepare("UPDATE custom_songs SET name=?,custom_name=NULL,files_json=?,overrides_json=? WHERE name_key=?")
+          .run(name, JSON.stringify(files), JSON.stringify(overrides), row.name_key);
+      }
+    });
+    this.scannedRoot = null;
+    this.invalidatePresentationCache();
+    this.refresh?.invalidate();
+    return { imported: merged.imported, overwritten: merged.overwritten, total: merged.entries.length };
+  }
+
+  commitMappings(entries, updateCatalog) {
+    const existed = this.mappings && fs.existsSync(this.mappings.filePath);
+    const previous = this.mappings?.read();
+    let written = false;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      updateCatalog();
+      if (this.mappings) { this.mappings.write(entries); written = true; }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      try { this.db.exec("ROLLBACK"); } catch {}
+      if (written) {
+        try {
+          if (existed) this.mappings.write(previous);
+          else fs.rmSync(this.mappings.filePath, { force: true });
+        } catch {
+          this.scannedRoot = null;
+          this.invalidatePresentationCache();
+          throw fail("歌曲映射文件已保存，但目录提交和备份恢复失败；请导出当前映射备份后重新读取曲目", 500);
+        }
+      }
+      throw error;
+    }
   }
 
   validFileName(name) {
@@ -336,7 +571,9 @@ export class CustomSongCatalog {
       for (const source of inference.originals) {
         const original = originalFiles.find((entry) => entry.fileName === source.fileName);
         if (original?.evidence !== "original" || original.tod !== source.tod || original.view !== source.view || original.conflict
-          || (Object.hasOwn(overrides, source.fileName) && overrides[source.fileName] !== source.tod)) invalidInference.add(file.fileName);
+          || (Object.hasOwn(overrides, source.fileName) && overrides[source.fileName] !== source.tod)
+          || (original?.mappingView && original.mappingView !== source.view)
+          || (original?.mappingManual && original.mappingTod !== source.tod)) invalidInference.add(file.fileName);
       }
       for (const dependency of inference.files) {
         try {
@@ -366,22 +603,28 @@ export class CustomSongCatalog {
       const automaticEvidence = invalidInference.has(file.fileName) ? "unknown"
         : file.evidence === "log" ? "legacy" : file.evidence || "unknown";
       const manual = Object.hasOwn(overrides, file.fileName);
-      const tod = manual ? overrides[file.fileName] : automaticTod;
-      const evidence = manual ? "manual" : automaticEvidence;
+      const tod = manual ? overrides[file.fileName] : file.manualUnknown ? null
+        : file.mappingManual ? file.mappingTod : automaticTod;
+      const evidence = manual || file.mappingManual || file.manualUnknown ? "manual" : automaticEvidence;
       const source = file.provenance?.[0];
       const evidenceNote = invalidInference.has(file.fileName) ? "旧推定的文件或映射依据已变化，请重新扫描或手工确认。"
         : evidence === "original" ? `原始日志记录：${source?.logFile ?? "已存记录"}${source?.line ? ` 第 ${source.line} 行` : ""}；不代表已核对实际画面。`
         : evidence === "inferred" ? "由两条原始时段记录及三份不同视频排除推定；以同组、同视角为前提，未核对实际画面。"
         : evidence === "legacy" ? "旧映射缺少可复核来源，保留供校正，不计为原始确认。"
         : evidence === "manual" ? "此文件采用手工设置；选择自动识别可撤销该覆盖。"
+        : evidence === "mapping" ? "采用歌曲映射表中的时段；可在此校正。"
         : "没有可靠时段映射；播放可暂时复用其他视频。";
       files.push({ fileName: file.fileName, tod: PERIODS.includes(tod) ? tod : null,
-        view: file.view ?? null, evidence, automaticTod: PERIODS.includes(automaticTod) ? automaticTod : null,
+        view: file.mappingView ?? file.view ?? null, evidence, automaticTod: PERIODS.includes(automaticTod) ? automaticTod : null,
         automaticEvidence, evidenceNote, conflict: Boolean(file.conflict), provenance: file.provenance ?? [],
         ...(file.inference ? { inference: file.inference } : {}),
         fileRevision,
         url: `${this.baseUrl}/custom-song-media/${row.media_token}/${encodeURIComponent(file.fileName)}` });
     }
+    return this.songPresentation(row, files, duration);
+  }
+
+  songPresentation(row, files, duration) {
     if (!files.length) return null;
     const fallback = files.find((file) => file.tod === "TOD12") || files[0];
     // Missing time-of-day variants replay a verified file. Unknown files are
@@ -403,7 +646,7 @@ export class CustomSongCatalog {
 
   async list({ cursor = 0, pageSize = 100 } = {}) {
     ({ cursor, pageSize } = this.paging({ cursor, pageSize }));
-    const root = this.root();
+    const root = this.refresh?.root || this.root();
     const rows = this.db.prepare("SELECT * FROM custom_songs WHERE available=1 AND root=? ORDER BY name_key").all(root);
     const songs = [];
     for (const row of rows) {
@@ -417,7 +660,9 @@ export class CustomSongCatalog {
   }
 
   async search(input = {}) {
-    const root = this.root(input.mediaRoot, input.detectedRoot);
+    const root = input.mediaRoot ? this.root(input.mediaRoot) : this.refresh?.root || this.root(undefined, input.detectedRoot);
+    if (input.cached === true && this.refresh) return this.refresh.quick(root, this.paging(input));
+    this.refresh?.selectRoot(root);
     if (input.cached === true) {
       const paging = this.paging(input);
       if (this.scannedRoot !== root) await this.rebuild({ mediaRoot: root });
@@ -428,12 +673,20 @@ export class CustomSongCatalog {
   }
 
   async update({ nameKey, name, mappings } = {}) {
+    if (this.inFlight || this.mappingMutation) throw fail("正在处理歌曲映射，请稍后再试", 409);
+    this.mappingMutation = true;
+    try { return await this.updateMapping({ nameKey, name, mappings }); }
+    finally { this.mappingMutation = false; }
+  }
+
+  async updateMapping({ nameKey, name, mappings } = {}) {
     if (!NAME_KEY.test(String(nameKey))) throw fail("曲目编号无效");
     const row = this.db.prepare("SELECT * FROM custom_songs WHERE name_key=?").get(nameKey);
     if (!row) throw fail("找不到曲目", 404);
     const nextName = name === undefined ? row.custom_name : String(name).trim();
     if (name !== undefined && (!nextName || nextName.length > 240)) throw fail("曲名应为 1～240 个字符");
     const override = JSON.parse(row.overrides_json);
+    const originalFiles = JSON.parse(row.files_json);
     if (mappings !== undefined) {
       if (!Array.isArray(mappings) || mappings.length > 12) throw fail("视频时段设置无效");
       const files = JSON.parse(row.files_json);
@@ -450,16 +703,34 @@ export class CustomSongCatalog {
             throw fail("视频文件已变化或丢失，请刷新后重试", 409);
           }
         }
-        if (entry.reset === true && !Object.hasOwn(entry, "tod")) delete override[entry.fileName];
+        if (entry.reset === true && !Object.hasOwn(entry, "tod")) {
+          delete override[entry.fileName];
+          const original = originalFiles.find((file) => file.fileName === entry.fileName);
+          delete original.mappingTod; delete original.mappingManual; delete original.mappingView; delete original.manualUnknown;
+          if (["manual", "mapping"].includes(original.evidence)) {
+            original.evidence = "unknown"; original.tod = null;
+          }
+        }
         else if (entry.reset === undefined && (entry.tod === null || PERIODS.includes(entry.tod))) override[entry.fileName] = entry.tod;
         else throw fail("视频时段设置无效");
       }
-      const proposed = await this.present({ ...row, overrides_json: JSON.stringify(override) });
+      const proposed = await this.present({ ...row, files_json: JSON.stringify(originalFiles), overrides_json: JSON.stringify(override) });
       const assigned = (proposed?.localFiles ?? []).map((file) => file.tod).filter(Boolean);
       if (new Set(assigned).size !== assigned.length) throw fail("每个时段只能对应一个视频");
     }
-    this.db.prepare("UPDATE custom_songs SET custom_name=?,overrides_json=?,updated_at=? WHERE name_key=?").run(nextName, JSON.stringify(override), Date.now(), nameKey);
+    let nextEntries;
+    if (this.mappings) {
+      const entries = new Map(this.mappings.read().map((entry) => [mappingKey(entry.fileName), entry]));
+      const proposed = { ...row, custom_name: nextName, files_json: JSON.stringify(originalFiles), overrides_json: JSON.stringify(override) };
+      for (const entry of await this.mappingEntriesForRow(proposed)) entries.set(mappingKey(entry.fileName), entry);
+      nextEntries = [...entries.values()];
+    }
+    this.commitMappings(nextEntries, () => this.db.prepare("UPDATE custom_songs SET custom_name=?,files_json=?,overrides_json=?,updated_at=? WHERE name_key=?")
+      .run(nextName, JSON.stringify(originalFiles), JSON.stringify(override), Date.now(), nameKey));
     this.invalidatePresentationCache();
+    this.refresh?.invalidate();
     return this.present(this.db.prepare("SELECT * FROM custom_songs WHERE name_key=?").get(nameKey));
   }
+
+  async close() { await this.refresh?.close(); }
 }

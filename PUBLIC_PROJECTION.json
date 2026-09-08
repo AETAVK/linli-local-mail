@@ -1,9 +1,9 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "b7799147e2827f736461f019b4d260b296e025d7",
-  "packageVersion": "0.11.8",
-  "releaseVersion": "0.11.8",
+  "canonicalCommit": "53fc2bdb7088c7c37e2d6cc91429dbc5ad1ad8f3",
+  "packageVersion": "0.11.10",
+  "releaseVersion": "0.11.10",
   "files": [
     {
       "path": ".gitattributes",
@@ -11,9 +11,9 @@
       "sha256": "4ee8456f0a011f74e2e8fc1cf155849f19756f076c3851d647f02d974851f66f"
     },
     {
-      "path": ".github/release-notes/v0.11.8.md",
-      "gitBlob": "010027e0f463384cd8ae1a998eb17069e7e9c510",
-      "sha256": "8110d62c92bb47da1ae8e2b307448928ea14402a98ebf16b8f815302e38fd54b"
+      "path": ".github/release-notes/v0.11.10.md",
+      "gitBlob": "e2649e2085e1aec64f1e69dc06ea9daf11d79cb0",
+      "sha256": "4393285235e81bfa5c8dee223d455c516c030e2e3d61aee7aeacfcab56eea49e"
     },
     {
       "path": ".github/scripts/publish-gitee-release.mjs",
@@ -82,18 +82,23 @@
     },
     {
       "path": "frontend-src/local-mail-poc/05-music.js",
-      "gitBlob": "3e71a16ac1882247ca63fe45a3a7dfc225ac755a",
-      "sha256": "b2bc03aac7017cb595eaf0d5e1347ab5e6804d737f21aaa0d06804ecce1ebbd4"
+      "gitBlob": "1d5407649b84bc9232fcd8c011748f6c845462a2",
+      "sha256": "050e9cdf343e6ea1659b265f19384d9acae7dd239179c62f148d84bdb6ba094b"
+    },
+    {
+      "path": "frontend-src/local-mail-poc/05a-music-diagnostics.js",
+      "gitBlob": "6d49ff297a4bf371c1c57dab9620e086042a8775",
+      "sha256": "bfa253e22cd8e2a3673e65cc00c5dd3697b6b8fd20e9e3d203746a8dde1a273e"
     },
     {
       "path": "frontend-src/local-mail-poc/06-bootstrap.js",
-      "gitBlob": "3f3110cb414dcb49852a895e03de7b93a534b7e3",
-      "sha256": "338e52b7a14ae70f38f41845f32fbbc48dcd4cc1f41a538519405e716f1fae7a"
+      "gitBlob": "391681a6d41d19ab650193f0194c0c9442c6c419",
+      "sha256": "11038f83d3fe361b3fb57c46e7511bb8a623e226083b790cf5d27c03fc736de9"
     },
     {
       "path": "frontend/local-mail-poc.js",
-      "gitBlob": "616451bf92d3d3b8eb17612acfdc43f3a7a83af8",
-      "sha256": "cda212844186c7ceb16fb57b5e9a393336e46956296753572c632cf31de9f7db"
+      "gitBlob": "9acb4c013be1a1b1590f93e5b21f02dca50373cb",
+      "sha256": "c53bcc0dc0c4352414087529a39a12d50a6e0c8d77025cbaed978536340b0d72"
     },
     {
       "path": "Install.cmd",
@@ -127,13 +132,13 @@
     },
     {
       "path": "package.json",
-      "gitBlob": "a953f789bc26889aa85415e6064a9caa8e74466c",
-      "sha256": "4967668c4f2ee3ebf0ead304927051593e4bf0137cebe3a0060343d92a793e22"
+      "gitBlob": "13354f6f75cd0354e55a9dce8443c89df7a20daa",
+      "sha256": "4f5eeb95cef8b5a96bf21085ce2266befe3ae51a79b5072c485903eb0d0cdadc"
     },
     {
       "path": "README.md",
-      "gitBlob": "c4db17c21dbb06865477411bb5d865b9b55b12b6",
-      "sha256": "6fd7f7384a66c79342a445a3d7902790a35b4e4163355c26c4cf4eca173ae9b7"
+      "gitBlob": "0ab8d07f904590f6b37ca43aeff06e5ea5b9c024",
+      "sha256": "f70cb328c76aae316a8efbb0d15def2a23d1dbfc8b45931cc464d70cefa3f845"
     },
     {
       "path": "repo-role.json",
@@ -142,13 +147,13 @@
     },
     {
       "path": "server.mjs",
-      "gitBlob": "257f6cf36bea6a2ee9c8e2fe7e1b9553b23da618",
-      "sha256": "f602b7063e048cb446ae71f0f155e371c744e0f0e0aadc1133b6d31a138bdb0b"
+      "gitBlob": "944154df8e2ef4dfed2858ba5df7e849063583bd",
+      "sha256": "2d7bd4dc48efd9b619c1b6012641f584fcb7887191f4d712091f75edb172bb03"
     },
     {
       "path": "SOURCE_CODE.md",
-      "gitBlob": "2f1a51e087a1afecd0b0aad744ee4240c6f9fb20",
-      "sha256": "debf41e9bfcde8409f714085c7968c77566d59c45ea3d23b92b79d7265b6cd2b"
+      "gitBlob": "0375c40313cf85b9db4d806b6203dd8cd603088d",
+      "sha256": "a0f3db7f27131f9b920d3486579d0da0f18a149ab4f00dd0d259e5f904c1fd75"
     },
     {
       "path": "src/character.mjs",
@@ -162,8 +167,8 @@
     },
     {
       "path": "src/constants.mjs",
-      "gitBlob": "828a3c25aa442c7e33cd38e12751a10280669207",
-      "sha256": "2ffe76f39be243988080e5d9fe5a3d7823c1663e6a1d4ee7a13f121fa4943a15"
+      "gitBlob": "601e311801f801605d8ecac4f4cace2b682c566b",
+      "sha256": "ca416d1d0267df6992ff768fc8c21a5a8e2703f2f8dfff81b1fe4369a2603995"
     },
     {
       "path": "src/context-budget.mjs",
@@ -176,19 +181,34 @@
       "sha256": "75bc624df16ae74edc13c597244e480f5b15dbada530d77103eb3804be4c3e9b"
     },
     {
+      "path": "src/custom-song-inputs.mjs",
+      "gitBlob": "6419cffa0057c522b51160fe6d10708243a73b59",
+      "sha256": "be2a2ca8d4c1abb23baedde49efb650c16887b3576764133754e997e8973ccce"
+    },
+    {
+      "path": "src/custom-song-mappings.mjs",
+      "gitBlob": "7f2bd38c35cf9ac1c546cf267491f489d876cc14",
+      "sha256": "2253c2d4f8389807df0a9df9101d9c0a6f0340711b5c308a4f998aa3a311954e"
+    },
+    {
       "path": "src/custom-song-media-facts.mjs",
       "gitBlob": "afcdd181cdc7c3b6d2e367de75a6fa57cce281ae",
       "sha256": "f37cf71215553cb6fa2b78e179c9b5fbb711aae400a1d94e5e9bd89877b03fcc"
     },
     {
+      "path": "src/custom-song-refresh.mjs",
+      "gitBlob": "242cff217c1a0447500ca1b0d87f89b27c37143c",
+      "sha256": "6625d79b74204a5973f95b9075e70292d6e48db76ed73d01ca95d5714913b5a5"
+    },
+    {
       "path": "src/custom-song-scan.mjs",
-      "gitBlob": "fb9dadc4f871ec5f95ccb2139629a073f9b737d5",
-      "sha256": "9df21b70ff97fb75c11ef7c8a520a474c10b254cdbc9cdf0ed5b50f094e358b6"
+      "gitBlob": "67ff780002493e4ec4d1428c6e300bb5981a454f",
+      "sha256": "83f6d776df9b0704bd083feeae37ca87f893ccbc8aba5b6650f651586ded63f5"
     },
     {
       "path": "src/custom-songs.mjs",
-      "gitBlob": "d35596cd2a5ff71a819df07372364e9e8f9f3113",
-      "sha256": "8296cd6b33b06cbdb9d5bcf745fbf224b552ee73e6a850c8bd8092900aae29f9"
+      "gitBlob": "cee6ee0886e9fdf20e245988cbba348e4a3efb79",
+      "sha256": "c5e020182b0c62079f4a9b10d618340f2521ec0b448c26169b992089d67b9933"
     },
     {
       "path": "src/database.mjs",
@@ -337,8 +357,8 @@
     },
     {
       "path": "tools/frontend-source.mjs",
-      "gitBlob": "14f7fcb82b0e825f2c789f8f63c9682937c3520d",
-      "sha256": "ea91bb80b7ddafa1b34edec5d641716ec115a16127ed5dbed33b4c6ddc4d0833"
+      "gitBlob": "c64f3322fd8ae449fb2964142efe3520e277aefc",
+      "sha256": "1718e701bbc2d46fdc71c1960caf0981fbae3d31521dc16f800bf1c4e0196de5"
     },
     {
       "path": "tools/generate-runtime-manifest.mjs",

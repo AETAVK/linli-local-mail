@@ -22,6 +22,7 @@ import { normalizeHttpUrl, readJsonBody, safeErrorMessage } from "./src/utils.mj
 import { UpdateManager } from "./src/updater.mjs";
 import { VideoAssetStore, parseByteRange } from "./src/video-assets.mjs";
 import { CustomSongCatalog } from "./src/custom-songs.mjs";
+import { MAPPING_MAX_BYTES } from "./src/custom-song-mappings.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 // LINLI_MAIL_PORT / LINLI_MAIL_DB_PATH 仅用于并行冒烟测试；日常启动保持默认 27149 与项目数据库。
@@ -94,7 +95,8 @@ const database = new MailDatabase(DB_PATH, LEGACY_JSON_PATH);
 const customSongs = new CustomSongCatalog({
   db: database.db, baseUrl: `http://${HOST}:${PORT}`,
   mediaRoot: process.env.LINLI_CUSTOM_SONG_ROOT,
-  logRoot: process.env.LINLI_CUSTOM_SONG_LOG_ROOT
+  logRoot: process.env.LINLI_CUSTOM_SONG_LOG_ROOT,
+  mappingPath: path.join(path.dirname(DB_PATH), "custom-song-mappings.json")
 });
 const secretStore = new SecretStore(SECRETS_PATH);
 const worker = new GenerationWorker({ database, configRoot: CONFIG_ROOT, secretStore });
@@ -540,6 +542,12 @@ const server = http.createServer(async (req, res) => {
       ok(req, res, await customSongs.search(await readJsonBody(req)));
       return;
     }
+    if (req.method === "POST" && url.pathname === "/api/custom-songs/status") {
+      const input = await readJsonBody(req);
+      const root = customSongs.root(input.mediaRoot);
+      ok(req, res, customSongs.refresh?.status(root) || { mediaRoot: root, revision: "", refreshing: false, error: "" });
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/custom-songs/scan") {
       ok(req, res, await customSongs.rebuild(await readJsonBody(req)));
       return;
@@ -550,6 +558,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/custom-songs/update") {
       ok(req, res, await customSongs.update(await readJsonBody(req)));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/custom-songs/mappings/export") {
+      ok(req, res, await customSongs.exportMappings(await readJsonBody(req)));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/custom-songs/mappings/import") {
+      ok(req, res, await customSongs.importMappings(await readImportDraftBody(req, MAPPING_MAX_BYTES + 1024)));
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/music-library") {
@@ -908,7 +924,8 @@ function closeAndExit(exitCode = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
   worker.stop();
-  server.close(() => {
+  server.close(async () => {
+    await customSongs.close();
     removeServicePidRecordIfOwned();
     database.close();
     process.exit(exitCode);
