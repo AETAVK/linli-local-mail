@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { inspectVideo } from './custom-song-media-facts.mjs';
 import { ScanDiagnostics } from './custom-song-diagnostics.mjs';
+import { mappingKey } from './custom-song-mappings.mjs';
 
 const SONG_DIRECTORY = /^midi_[0-9]+_[0-9]+$/;
 const LOG_FILE = /^Olivia(?:\.\d+)?\.log$/;
@@ -22,19 +23,28 @@ const DEFAULT_LIMITS = Object.freeze({
  * frozen public arguments so callers can make the safety bounds tighter.
  */
 export async function scanCustomSongs({ mediaRoot, logRoot, limits, previousSongs = [], inspectMedia = inspectVideo,
-  diagnostics, logRootSource = 'default', patchVersion, io } = {}) {
+  diagnostics, logRootSource = 'default', patchVersion, io, mappingEntries } = {}) {
   const ownedDiagnostics = !diagnostics;
   const scanDiagnostics = diagnostics ?? new ScanDiagnostics({ mediaRoot, logRoot, logRootSource, patchVersion });
   const fileSystem = { lstat, readdir, createReadStream, ...(io && typeof io === 'object' ? io : {}) };
   const options = normaliseLimits(limits);
   const warnings = new WarningList();
   try {
-    const metadata = await readLogMetadata(logRoot, options, warnings, scanDiagnostics, fileSystem);
+    let metadata = new Map(), logsRead = false;
+    const getMetadata = async () => {
+      if (!logsRead) {
+        metadata = await readLogMetadata(logRoot, options, warnings, scanDiagnostics, fileSystem);
+        logsRead = true;
+      }
+      return metadata;
+    };
+    if (!mappingEntries) await getMetadata();
     const previous = new Map(previousSongs.map((song) => [song.nameKey, song]));
     const budget = { remainingBytes: positiveInteger(limits?.maxHashBytes, 32 * 1024 ** 3) };
     const songs = await readMedia(mediaRoot, metadata, options, warnings,
-      { previous, budget, inspectMedia, diagnostics: scanDiagnostics, io: fileSystem });
-    finishScanDiagnostics(scanDiagnostics, metadata, songs);
+      { previous, budget, inspectMedia, diagnostics: scanDiagnostics, io: fileSystem,
+        getMetadata, mappingEntries: mappingEntries ? new Map(mappingEntries.map((entry) => [mappingKey(entry.fileName), entry])) : null });
+    if (logsRead) finishScanDiagnostics(scanDiagnostics, metadata, songs);
     if (ownedDiagnostics) scanDiagnostics.finish();
     return { songs, warnings: warnings.values(), diagnostics: scanDiagnostics.snapshot() };
   } catch (error) {
@@ -140,9 +150,16 @@ async function readMedia(mediaRoot, metadata, limits, warnings, evidenceOptions)
     }
     matchedDirectories.add(entry.name);
     const files = await readSongFiles(folderPath, entry.name, limits, warnings, diagnostics, evidenceOptions.io);
-    const record = metadata.get(entry.name);
+    const mapped = files.map((fileName) => {
+      const item = evidenceOptions.mappingEntries?.get(mappingKey(fileName));
+      return item && (!item.filePath || item.filePath.toLowerCase() === `${entry.name}/${fileName}`.toLowerCase()) ? item : null;
+    });
+    const mappedName = mapped.find((item) => item?.name && item.name !== entry.name)?.name;
+    const complete = files.length > 0 && mappedName && mapped.every((item) => item?.filePath && (item.tod || item.manualUnknown));
+    if (!complete) metadata = await evidenceOptions.getMetadata();
+    const record = complete ? null : metadata.get(entry.name);
     const mapping = record ? record.mapping : new Map();
-    diagnostics.match(entry.name, usableName(record?.name, entry.name), { recordPresent: Boolean(record) });
+    diagnostics.match(entry.name, Boolean(mappedName) || usableName(record?.name, entry.name), { recordPresent: Boolean(record) });
 
     warnForMappingConflicts(entry.name, mapping, warnings);
     warnForDuplicateTods(entry.name, files, mapping, warnings);
@@ -150,12 +167,25 @@ async function readMedia(mediaRoot, metadata, limits, warnings, evidenceOptions)
 
     const result = {
       id: record?.id ?? `local-${entry.name}`,
-      name: record?.name || entry.name,
+      name: mappedName || record?.name || entry.name,
+      ...(mappedName ? { mappingName: mappedName } : {}),
       nameKey: entry.name,
       files: files.map((fileName) => fileResult(fileName, mapping)),
-      metadataSource: record ? 'log' : 'directory',
+      metadataSource: mappedName ? 'mapping' : record ? 'log' : 'directory',
       evidenceVersion: 1,
     };
+    // Apply table fields before inference so imported values cannot be replaced
+    // or misrepresented as new official-log evidence.
+    result.files = result.files.map((file, index) => {
+      const item = mapped[index];
+      if (!item || (!item.tod && !item.manualUnknown)) return file;
+      const saved = item.automatic;
+      if (saved && saved.fileName === file.fileName) return { ...structuredClone(saved),
+        ...(item.view && saved.view !== item.view ? { mappingView: item.view } : {}),
+        ...(saved.tod !== item.tod || item.manualUnknown ? { mappingTod: item.tod, mappingManual: true } : {}) };
+      return { fileName: file.fileName, tod: item.tod, view: item.view,
+        evidence: item.manualUnknown ? 'manual' : 'mapping', ...(item.manualUnknown ? { manualUnknown: true } : {}) };
+    });
     const allCandidates = [...mapping.values()].flat();
     const repeatedTod = result.files.filter((file) => file.tod && result.files.some((other) =>
       other !== file && other.tod === file.tod && other.view === file.view));
@@ -165,7 +195,9 @@ async function readMedia(mediaRoot, metadata, limits, warnings, evidenceOptions)
     result.recovery = { status: 'unknown', reason: null };
     if (mixed) warnings.add(`[SOURCE_VERSION_CONFLICT] 歌曲 ${entry.name} 的原始记录来自不同资源组或版本，不推定。`);
     const prior = evidenceOptions.previous.get(entry.name);
-    await inferMissingPeriod(result, { folderPath, files, missing, mixed, prior, ...evidenceOptions, warnings });
+    if (!complete && !result.files.some((file) => file.manualUnknown || (file.mappingManual && file.mappingTod === null))) {
+      await inferMissingPeriod(result, { folderPath, files, missing, mixed, prior, ...evidenceOptions, warnings });
+    }
     songs.push(result);
   }
 
