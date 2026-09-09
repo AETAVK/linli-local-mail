@@ -1,10 +1,17 @@
 import crypto from 'node:crypto';
+import { evidenceType, inspectFieldShape, inspectRequestStructure, jsonErrorEvidence, leadingStructureType } from './custom-song-structure.mjs';
 
 const MAX_REPORT_BYTES = 64 * 1024;
 const MAX_LOG_FILES = 64;
 const MAX_SAMPLES = 32;
 const MAX_ISSUES = 64;
 const MAX_KEYS = 10_000;
+const ACTIONS = ['checkLocalSongs', 'startSongDownload'];
+const TYPES = ['missing', 'null', 'string', 'object', 'array', 'number', 'boolean', 'other'];
+const MAX_TYPE_SAMPLES = 8;
+const MAX_STRUCTURE_SAMPLES = 12;
+const MAX_RECORD_SAMPLES = 16;
+const typeCounts = () => Object.fromEntries(TYPES.map(type => [type, 0]));
 
 const COUNTER_NAMES = Object.freeze([
   'logFilesDiscovered', 'logFilesSupported', 'logFilesRead', 'logFilesSkipped',
@@ -18,6 +25,7 @@ const COUNTER_NAMES = Object.freeze([
   'unknownActions', 'requestTypeFailures', 'innerJsonParsed', 'innerJsonFailures',
   'prefixAttempts', 'prefixRecoveredEvents', 'prefixEmptyEvents', 'eventsWithoutNameKey',
   'recordKeysObserved', 'missingNameRecords', 'invalidNameRecords', 'mergedNameLosses',
+  'mappingMatchedNames', 'logMatchedNames', 'unattributedMatchedNames',
 ]);
 
 const ROOT_STATUSES = new Set(['unread', 'missing', 'invalid', 'readable', 'denied', 'error']);
@@ -106,6 +114,18 @@ export class ScanDiagnostics {
   #fileOrdinal = 0;
   #sampleOrdinal = 0;
   #namedRecords = new Set();
+  #recordOrdinal = 0;
+  #directoryCoverage = 'unavailable';
+  #typeBuckets = new Set();
+  #structureBuckets = new Map();
+  #requestEvidence = {
+    scope: 'recognized-song-events-only',
+    byAction: Object.fromEntries(ACTIONS.map(action => [action, {
+      events: 0, requestTypes: typeCounts(), responseTypes: typeCounts(), typePairs: {},
+    }])),
+    typeSamples: [], structureSamples: [],
+    structureEvents: 0, omittedTypeSamples: 0, omittedStructureSamples: 0,
+  };
 
   constructor({ mediaRoot, logRoot, logRootSource = 'default', patchVersion } = {}) {
     this.#mediaRoot = typeof mediaRoot === 'string' ? mediaRoot : null;
@@ -197,9 +217,12 @@ export class ScanDiagnostics {
     if (INCOMPLETE_REASONS.has(normalized)) this.#markIncomplete();
   }
 
-  match(nameKey, hasName, { recordPresent } = {}) {
+  match(nameKey, hasName, { recordPresent, mappingName, logName } = {}) {
     this.increment('songDirectories');
-    if (hasName === true) this.increment('matchedNames');
+    if (hasName === true) {
+      this.increment('matchedNames');
+      this.increment(mappingName === true ? 'mappingMatchedNames' : logName === true ? 'logMatchedNames' : 'unattributedMatchedNames');
+    }
     const ordinal = ++this.#sampleOrdinal;
     if (typeof nameKey !== 'string' || nameKey.length > 256 || this.#directoryFacts.size >= MAX_KEYS) return;
     const fact = this.#recordFacts.get(nameKey);
@@ -239,6 +262,75 @@ export class ScanDiagnostics {
     }
   }
 
+  observeRequestFields(action, attributes, context) {
+    if (!ACTIONS.includes(action) || !attributes || typeof attributes !== 'object') return;
+    const requestType = evidenceType(attributes?.['query.request'], Object.hasOwn(attributes, 'query.request'));
+    const responseType = evidenceType(attributes?.['query.response'], Object.hasOwn(attributes, 'query.response'));
+    const counts = this.#requestEvidence.byAction[action];
+    counts.events++; counts.requestTypes[requestType]++; counts.responseTypes[responseType]++;
+    const pair = `${requestType}/${responseType}`;
+    counts.typePairs[pair] = (counts.typePairs[pair] || 0) + 1;
+    if (requestType === 'string') return;
+    const bucket = `${action}:${pair}`;
+    if (this.#typeBuckets.has(bucket) || this.#requestEvidence.typeSamples.length >= MAX_TYPE_SAMPLES) {
+      this.#requestEvidence.omittedTypeSamples++; return;
+    }
+    this.#typeBuckets.add(bucket);
+    this.#requestEvidence.typeSamples.push({ action, requestType, responseType,
+      ...(['object', 'array'].includes(requestType) ? { shape: inspectFieldShape(attributes['query.request']) } : {}),
+      source: this.source(context, 'request', 'REQUEST_TYPE_INVALID') });
+  }
+
+  observeRequestStructure(request, context, { error = null, parsed = false, parsedValue, prefixRecords = 0 } = {}) {
+    if (typeof request !== 'string' || !ACTIONS.includes(context?.action)) return;
+    const parseStatus = error ? parsed ? 'record-walk-failed' : 'json-failed' : 'parsed-no-records';
+    const jsonError = jsonErrorEvidence(error, request.length);
+    const lead = leadingStructureType(request);
+    const bucket = `${context.action}:${parseStatus}:${jsonError.category}:${lead}:${prefixRecords > 0}`;
+    this.#requestEvidence.structureEvents++;
+    const used = this.#structureBuckets.get(bucket) || 0;
+    // Reserve eight places for failures even if valid empty/wrapped input arrives first.
+    const ordinaryFull = !error && this.#requestEvidence.structureSamples.filter(item => item.parseStatus === 'parsed-no-records').length >= 4;
+    if (used >= 2 || ordinaryFull || this.#requestEvidence.structureSamples.length >= MAX_STRUCTURE_SAMPLES) {
+      this.#requestEvidence.omittedStructureSamples++; return;
+    }
+    this.#structureBuckets.set(bucket, used + 1);
+    // Only admitted representatives incur a structural walk; no second log read.
+    const structure = inspectRequestStructure(request);
+    this.#requestEvidence.structureSamples.push({ action: context.action, parseStatus,
+      jsonError, prefixRecoveredRecords: numericSize(prefixRecords),
+      parsedRootType: parsed ? evidenceType(parsedValue) : 'unknown',
+      decodedContainerCandidate: parsed && typeof parsedValue === 'string' ? leadingStructureType(parsedValue) : 'unknown',
+      structure, source: this.source(context, error ? 'inner' : 'prefix', error ? 'INNER_JSON_FAILED'
+        : prefixRecords > 0 ? 'NAME_REASON_UNCERTAIN' : 'PREFIX_NO_RECORDS') });
+  }
+
+  noteDirectoryCoverage(directories, complete) {
+    this.#directoryCoverage = complete ? 'complete' : 'partial';
+    for (const [key, fact] of this.#recordFacts) {
+      fact.directoryMatch = directories.has(key) ? 'observed' : complete ? 'not-observed' : 'unknown';
+    }
+  }
+
+  #recordKeyEvidence() {
+    const counts = { trackedUniqueKeys: this.#recordFacts.size, validDirectoryKeys: 0, otherKeys: 0,
+      observedDirectoryKeys: 0, notObservedDirectoryKeys: 0, unknownDirectoryKeys: 0 };
+    const samples = [];
+    for (const [key, fact] of this.#recordFacts) {
+      const keyFormat = /^midi_[0-9]+_[0-9]+$/.test(key) ? 'midi-directory' : 'other';
+      const directoryMatch = fact.directoryMatch || (this.#directoryFacts.has(key) ? 'observed' : 'unknown');
+      counts[keyFormat === 'midi-directory' ? 'validDirectoryKeys' : 'otherKeys']++;
+      counts[directoryMatch === 'observed' ? 'observedDirectoryKeys' : directoryMatch === 'not-observed' ? 'notObservedDirectoryKeys' : 'unknownDirectoryKeys']++;
+      samples.push({ keyId: `${this.#scanId.slice(0, 8)}-k${fact.ordinal}`, keyFormat, directoryMatch,
+        usableNameObserved: fact.usable, observations: fact.observations,
+        sources: [fact.invalidSource, fact.usableSource].filter(Boolean).map(source => ({ ...source })) });
+    }
+    samples.sort((a, b) => keySamplePriority(a) - keySamplePriority(b));
+    return { scope: 'retained-log-keys-vs-scanned-eligible-media-directories', directoryCoverage: this.#directoryCoverage,
+      ...counts, omittedKeyObservations: this.#omitted.recordKeys,
+      samples: samples.slice(0, MAX_RECORD_SAMPLES), omittedSamples: Math.max(0, samples.length - MAX_RECORD_SAMPLES) };
+  }
+
   finish(errorCode) {
     if (this.#finishedAt) return this.snapshot();
     if (errorCode !== undefined && errorCode !== null) {
@@ -252,7 +344,7 @@ export class ScanDiagnostics {
 
   snapshot() {
     const report = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       patchVersion: this.#patchVersion,
       scanId: this.#scanId,
       startedAt: this.#startedAt,
@@ -269,6 +361,8 @@ export class ScanDiagnostics {
       },
       logFiles: this.#logFiles.map((item) => ({ ...item, stages: { ...item.stages } })),
       issues: this.#issues.map(item => ({ ...item })),
+      requestEvidence: structuredClone(this.#requestEvidence),
+      recordKeys: this.#recordKeyEvidence(),
       samples: [...this.#directoryFacts.values()].sort((a, b) => (a.displaySource === 'unindexed' ? 2 : Number(a.displayHasName))
         - (b.displaySource === 'unindexed' ? 2 : Number(b.displayHasName))
         || a.ordinal - b.ordinal).slice(0, MAX_SAMPLES).map(item => ({ ...item,
@@ -317,7 +411,8 @@ export class ScanDiagnostics {
       this.#omitted.recordKeys++;
       return;
     }
-    const fact = this.#recordFacts.get(nameKey) ?? { usable: false };
+    const fact = this.#recordFacts.get(nameKey) ?? { usable: false, ordinal: ++this.#recordOrdinal, observations: 0 };
+    fact.observations++;
     const source = this.source(context, prefix ? 'prefix' : 'fields', reasonCode);
     if (reasonCode === 'NAME_AVAILABLE') { fact.usable = true; fact.usableSource = source; }
     else fact.invalidSource = source;
@@ -354,8 +449,22 @@ function normalizeErrorCode(error) {
   return ERROR_CODES.has(code) ? code : 'UNKNOWN';
 }
 
+function keySamplePriority(sample) {
+  return sample.directoryMatch === 'observed' ? 2 : sample.usableNameObserved ? 0 : 1;
+}
+
 function capReport(report) {
   const bytes = () => Buffer.byteLength(JSON.stringify(report), 'utf8');
+  // Independently bound new sections before considering the existing report.
+  while (Buffer.byteLength(JSON.stringify(report.requestEvidence), 'utf8') > 12 * 1024 && report.requestEvidence.structureSamples.length) {
+    report.requestEvidence.structureSamples.pop(); report.requestEvidence.omittedStructureSamples++;
+  }
+  while (Buffer.byteLength(JSON.stringify(report.requestEvidence), 'utf8') > 12 * 1024 && report.requestEvidence.typeSamples.length) {
+    report.requestEvidence.typeSamples.pop(); report.requestEvidence.omittedTypeSamples++;
+  }
+  while (Buffer.byteLength(JSON.stringify(report.recordKeys), 'utf8') > 8 * 1024 && report.recordKeys.samples.length) {
+    report.recordKeys.samples.pop(); report.recordKeys.omittedSamples++;
+  }
   // Keep diagnostic issues and the highest-priority missing-name samples for
   // as long as possible. Dropped file metadata is accounted for explicitly.
   while (bytes() > MAX_REPORT_BYTES && report.logFiles.length) {
@@ -368,7 +477,10 @@ function capReport(report) {
     report.samples.pop(); report.omitted.samples++;
   }
   const retainedFiles = new Set(report.logFiles.map(file => file.fileId));
-  for (const source of [...report.issues, ...report.samples.flatMap(sample => sample.sources)]) {
+  for (const source of [...report.issues, ...report.samples.flatMap(sample => sample.sources),
+    ...report.requestEvidence.typeSamples.map(sample => sample.source),
+    ...report.requestEvidence.structureSamples.map(sample => sample.source),
+    ...report.recordKeys.samples.flatMap(sample => sample.sources)]) {
     if (source.fileId && !retainedFiles.has(source.fileId)) {
       source.fileId = null;
       source.fileOmitted = true;
@@ -378,5 +490,11 @@ function capReport(report) {
   // Dropping metadata may add fileOmitted flags, so recheck after normalization.
   while (bytes() > MAX_REPORT_BYTES && report.issues.length) report.omitted.issues += report.issues.pop().count;
   while (bytes() > MAX_REPORT_BYTES && report.samples.length) { report.samples.pop(); report.omitted.samples++; }
+  while (bytes() > MAX_REPORT_BYTES && report.requestEvidence.structureSamples.length) {
+    report.requestEvidence.structureSamples.pop(); report.requestEvidence.omittedStructureSamples++;
+  }
+  while (bytes() > MAX_REPORT_BYTES && report.recordKeys.samples.length) {
+    report.recordKeys.samples.pop(); report.recordKeys.omittedSamples++;
+  }
   return report;
 }

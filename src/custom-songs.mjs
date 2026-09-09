@@ -5,6 +5,9 @@ import path from "node:path";
 import { scanCustomSongs } from "./custom-song-scan.mjs";
 import { inspectVideo } from "./custom-song-media-facts.mjs";
 import { ScanDiagnostics } from "./custom-song-diagnostics.mjs";
+import { SongDebugPackageManager } from "./custom-song-debug-package.mjs";
+import { VisionTaskService } from "./custom-song-vision-jobs.mjs";
+import { revisionForResolvedFile, isVisionFile, validVisionFile } from "./custom-song-vision-evidence.mjs";
 import { SERVICE_VERSION } from "./constants.mjs";
 import { CustomSongMappings, mappingKey } from "./custom-song-mappings.mjs";
 import { CustomSongRefresh } from "./custom-song-refresh.mjs";
@@ -70,6 +73,7 @@ export class CustomSongCatalog {
     this.mappingMutation = false;
     this.logRootSource = logRoot == null ? "default" : "environment";
     this.lastDiagnostics = null;
+    this.debugPackages = new SongDebugPackageManager();
     this.inFlight = null;
     this.scannedRoot = null;
     this.lastWarnings = [];
@@ -85,6 +89,7 @@ export class CustomSongCatalog {
       available INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL
     )`);
     this.refresh = this.mappings ? new CustomSongRefresh(this, refreshOptions) : null;
+    this.visionTasks = new VisionTaskService(this, { clock });
   }
 
   root(input, detectedRoot) {
@@ -207,15 +212,16 @@ export class CustomSongCatalog {
         if (mapped?.name) name = mapped.name;
         const manual = mapped ? mapped.manualUnknown || (mapped.tod && Object.hasOwn(overrides, file.fileName)
           && overrides[file.fileName] === mapped.tod) : Object.hasOwn(overrides, file.fileName);
-        const tod = mapped ? mapped.tod || (mapped.manualUnknown ? null : file.tod) : manual ? overrides[file.fileName]
+        let tod = mapped ? mapped.tod || (mapped.manualUnknown ? null : file.tod) : manual ? overrides[file.fileName]
           : file.mappingManual ? file.mappingTod : file.tod;
-        const evidence = manual ? "manual" : mapped?.tod && mapped.tod !== file.tod ? "mapping" : file.evidence || "unknown";
+        let evidence = manual ? "manual" : mapped?.tod && mapped.tod !== file.tod ? "mapping" : file.evidence || "unknown";
+        if (isVisionFile(file) && !manual) { tod = null; evidence = 'vision-pending'; }
         return { fileName: file.fileName, tod: PERIODS.includes(tod) ? tod : null,
           view: mapped ? ((mapped.tod || mapped.manualUnknown ? mapped.view : null) ?? file.view ?? null)
             : file.mappingView ?? file.view ?? null, evidence,
-          automaticTod: PERIODS.includes(file.tod) ? file.tod : null,
+          automaticTod: isVisionFile(file) ? null : PERIODS.includes(file.tod) ? file.tod : null,
           automaticEvidence: file.evidence || "unknown", conflict: Boolean(file.conflict),
-          evidenceNote: "已载入保存的映射，文件可用性正在后台核对。", provenance: file.provenance || [],
+          evidenceNote: isVisionFile(file) ? "画面推测：正在核对文件版本，暂不作为有效时段。" : "已载入保存的映射，文件可用性正在后台核对。", provenance: file.provenance || [],
           ...(old?.localFiles?.find((value) => value.fileName === file.fileName)?.fileRevision
             ? { fileRevision: old.localFiles.find((value) => value.fileName === file.fileName).fileRevision } : {}),
           url: `${this.baseUrl}/custom-song-media/${row.media_token}/${encodeURIComponent(file.fileName)}` };
@@ -285,6 +291,17 @@ export class CustomSongCatalog {
       throw fail("扫描报告已更新，请刷新诊断后再导出", 409);
     }
     return structuredClone(exportOnly ? snapshot.report : snapshot);
+  }
+
+  debugPackage(action, input = {}) {
+    const mediaRoot = this.root(input.mediaRoot);
+    if (action === 'start') {
+      if (this.inFlight || this.mappingMutation) throw fail('正在扫描或保存映射，请稍后再收集排障材料', 409);
+      // Deliberately bypass rebuild/search: no SQLite, mapping persistence, or playback mutations.
+      return this.debugPackages.start({ mediaRoot, logRoot: this.logRoot, logRootSource: this.logRootSource, mappingEntries: structuredClone(this.mappings?.read() || []) });
+    }
+    if (!['status', 'download', 'cancel'].includes(action)) throw fail('未知排障操作', 404);
+    return this.debugPackages[action]({ ...input, mediaRoot });
   }
 
   async rebuildWithDiagnostics(root, diagnostics, epoch) {
@@ -369,10 +386,10 @@ export class CustomSongCatalog {
         // hints, never as new original evidence or input to exclusion inference.
         for (const file of files) {
           const previous = oldFiles.find((entry) => entry.fileName === file.fileName);
-          if (!file.tod && previous?.tod && previous.evidence !== "inferred") {
+          if (!file.tod && previous?.tod && previous.evidence !== "inferred" && !isVisionFile(previous)) {
             file.legacyMapping = { tod: previous.tod, view: previous.view ?? null };
           }
-          if (!file.conflict && !file.tod && previous?.tod && previous.evidence !== "inferred"
+          if (!file.conflict && !file.tod && previous?.tod && previous.evidence !== "inferred" && !isVisionFile(previous)
             && (song.metadataSource === "directory" || song.evidenceVersion === 1)) {
             file.tod = previous.tod;
             file.view = previous.view ?? null;
@@ -482,6 +499,7 @@ export class CustomSongCatalog {
           if (entry.tod || entry.manualUnknown) overrides[file.fileName] = entry.tod;
           if (entry.view) file.mappingView = entry.view;
           else delete file.mappingView;
+          if (isVisionFile(file)) { delete file.vision; file.evidence = 'unknown'; file.tod = null; }
           changed = true;
         }
         if (changed) this.db.prepare("UPDATE custom_songs SET name=?,custom_name=NULL,files_json=?,overrides_json=? WHERE name_key=?")
@@ -539,16 +557,7 @@ export class CustomSongCatalog {
   }
 
   fileRevision(resolved) {
-    const stat = resolved.stat;
-    const metadata = {
-      path: resolved.path,
-      size: String(stat.size),
-      mtimeNs: stat.mtimeNs === undefined ? String(stat.mtimeMs) : String(stat.mtimeNs),
-      ctimeNs: stat.ctimeNs === undefined ? String(stat.ctimeMs) : String(stat.ctimeNs),
-      ino: String(stat.ino),
-      dev: String(stat.dev)
-    };
-    return `v1:${crypto.createHash("sha256").update(JSON.stringify(metadata)).digest("hex")}`;
+    return revisionForResolvedFile(resolved);
   }
 
   async media(token, fileName) {
@@ -599,8 +608,9 @@ export class CustomSongCatalog {
         }
         duration = this.durationCache.get(key);
       }
-      const automaticTod = invalidInference.has(file.fileName) ? null : file.tod;
-      const automaticEvidence = invalidInference.has(file.fileName) ? "unknown"
+      const staleVision = isVisionFile(file) && !validVisionFile(file, fileRevision);
+      const automaticTod = invalidInference.has(file.fileName) || staleVision ? null : file.tod;
+      const automaticEvidence = invalidInference.has(file.fileName) || staleVision ? "unknown"
         : file.evidence === "log" ? "legacy" : file.evidence || "unknown";
       const manual = Object.hasOwn(overrides, file.fileName);
       const tod = manual ? overrides[file.fileName] : file.manualUnknown ? null
@@ -608,6 +618,8 @@ export class CustomSongCatalog {
       const evidence = manual || file.mappingManual || file.manualUnknown ? "manual" : automaticEvidence;
       const source = file.provenance?.[0];
       const evidenceNote = invalidInference.has(file.fileName) ? "旧推定的文件或映射依据已变化，请重新扫描或手工确认。"
+        : staleVision ? "旧画面推测的文件或策略版本已变化，当前时段未知。"
+        : evidence === "vision" ? "画面推测：由本地城市窗景规则判定，不是官方记录或概率保证。"
         : evidence === "original" ? `原始日志记录：${source?.logFile ?? "已存记录"}${source?.line ? ` 第 ${source.line} 行` : ""}；不代表已核对实际画面。`
         : evidence === "inferred" ? "由两条原始时段记录及三份不同视频排除推定；以同组、同视角为前提，未核对实际画面。"
         : evidence === "legacy" ? "旧映射缺少可复核来源，保留供校正，不计为原始确认。"
@@ -618,6 +630,7 @@ export class CustomSongCatalog {
         view: file.mappingView ?? file.view ?? null, evidence, automaticTod: PERIODS.includes(automaticTod) ? automaticTod : null,
         automaticEvidence, evidenceNote, conflict: Boolean(file.conflict), provenance: file.provenance ?? [],
         ...(file.inference ? { inference: file.inference } : {}),
+        ...(file.vision ? { vision: { algorithm: file.vision.algorithm, policy: file.vision.policy, batchId: file.vision.batchId, savedAt: file.vision.savedAt } } : {}),
         fileRevision,
         url: `${this.baseUrl}/custom-song-media/${row.media_token}/${encodeURIComponent(file.fileName)}` });
     }
@@ -732,5 +745,5 @@ export class CustomSongCatalog {
     return this.present(this.db.prepare("SELECT * FROM custom_songs WHERE name_key=?").get(nameKey));
   }
 
-  async close() { await this.refresh?.close(); }
+  async close() { this.visionTasks.close(); this.debugPackages.clear(); await this.refresh?.close(); }
 }

@@ -23,6 +23,8 @@ import { UpdateManager } from "./src/updater.mjs";
 import { getUpdatePreferences, setUpdatePreferences } from "./src/update-preferences.mjs";
 import { VideoAssetStore, parseByteRange } from "./src/video-assets.mjs";
 import { CustomSongCatalog } from "./src/custom-songs.mjs";
+import { createSongFolderPicker } from "./src/song-folder-picker.mjs";
+const chooseSongFolder = createSongFolderPicker();
 import { MAPPING_MAX_BYTES } from "./src/custom-song-mappings.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -543,6 +545,13 @@ const server = http.createServer(async (req, res) => {
       ok(req, res, await customSongs.search(await readJsonBody(req)));
       return;
     }
+    if (req.method === 'POST' && url.pathname === '/api/custom-songs/choose-folder') {
+      const input = await readJsonBody(req), controller = new AbortController();
+      const abort = () => controller.abort(); res.once('close', abort);
+      try { ok(req, res, await chooseSongFolder({ initialRoot: customSongs.root(input.mediaRoot), signal: controller.signal })); }
+      finally { res.off('close', abort); }
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/custom-songs/status") {
       const input = await readJsonBody(req);
       const root = customSongs.root(input.mediaRoot);
@@ -555,6 +564,16 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && ["/api/custom-songs/diagnostics", "/api/custom-songs/diagnostics/export"].includes(url.pathname)) {
       ok(req, res, customSongs.getDiagnostics(await readJsonBody(req), url.pathname.endsWith("/export")));
+      return;
+    }
+    const debugPackageAction = url.pathname.match(/^\/api\/custom-songs\/debug-package\/(start|status|download|cancel)$/);
+    if (req.method === "POST" && debugPackageAction) {
+      ok(req, res, customSongs.debugPackage(debugPackageAction[1], await readJsonBody(req)));
+      return;
+    }
+    const visionAction = url.pathname.match(/^\/api\/custom-songs\/vision\/(start|status|claim|heartbeat|submit|control|undo|locate)$/);
+    if (req.method === 'POST' && visionAction) {
+      ok(req, res, await customSongs.visionTasks[visionAction[1]](await readJsonBody(req)));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/custom-songs/update") {
@@ -590,7 +609,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/music-library/preferences") {
-      ok(req, res, database.updateMusicLibraryPreferences(await readJsonBody(req)));
+      const input = await readJsonBody(req);
+      if (input?.visionAutoFillEnabled === false) customSongs.visionTasks.setAutoPermission(false);
+      const preferences = database.updateMusicLibraryPreferences(input);
+      if (input?.visionAutoFillEnabled === true) customSongs.visionTasks.setAutoPermission(true);
+      ok(req, res, preferences);
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/music-library/playlists") {

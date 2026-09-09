@@ -63,7 +63,11 @@ export class CustomSongMappings {
     } finally { fs.rmSync(temporary, { force: true }); }
   }
 
-  export() { return { schemaVersion: 1, entries: validateMappingDocument({ schemaVersion: 1, entries: this.read() }) }; }
+  export() {
+    const local = this.read(), entries = validateMappingDocument({ schemaVersion: 1, entries: local });
+    return { schemaVersion: 1, entries: entries.map((entry, index) => ({ ...entry,
+      ...(local[index].automatic?.evidence === 'vision' ? { source: 'vision', sourceNote: '画面推测；再次导入时作为用户明确导入的映射，不继承自动或原始权威。' } : {}) })) };
+  }
 
   mergeImport(document) {
     const incoming = validateMappingDocument(document);
@@ -80,7 +84,7 @@ export class CustomSongMappings {
     for (const [key, entry] of imported) {
       if (entries.has(key)) overwritten += 1;
       const old = entries.get(key);
-      entries.set(key, { ...entry, ...(old?.automatic && entry.filePath && old.filePath?.toLowerCase() === entry.filePath.toLowerCase()
+      entries.set(key, { ...entry, ...(old?.automatic && old.automatic.evidence !== 'vision' && entry.filePath && old.filePath?.toLowerCase() === entry.filePath.toLowerCase()
         ? { automatic: old.automatic } : {}) });
     }
     const merged = [...entries.values()];

@@ -1,10 +1,11 @@
 import { createReadStream } from 'node:fs';
-import { lstat, readdir } from 'node:fs/promises';
+import { lstat, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { inspectVideo } from './custom-song-media-facts.mjs';
 import { ScanDiagnostics } from './custom-song-diagnostics.mjs';
 import { mappingKey } from './custom-song-mappings.mjs';
+import { isVisionFile, validVisionFile, revisionForResolvedFile } from './custom-song-vision-evidence.mjs';
 
 const SONG_DIRECTORY = /^midi_[0-9]+_[0-9]+$/;
 const LOG_FILE = /^Olivia(?:\.\d+)?\.log$/;
@@ -26,7 +27,7 @@ export async function scanCustomSongs({ mediaRoot, logRoot, limits, previousSong
   diagnostics, logRootSource = 'default', patchVersion, io, mappingEntries } = {}) {
   const ownedDiagnostics = !diagnostics;
   const scanDiagnostics = diagnostics ?? new ScanDiagnostics({ mediaRoot, logRoot, logRootSource, patchVersion });
-  const fileSystem = { lstat, readdir, createReadStream, ...(io && typeof io === 'object' ? io : {}) };
+  const fileSystem = { lstat, readdir, realpath, createReadStream, ...(io && typeof io === 'object' ? io : {}) };
   const options = normaliseLimits(limits);
   const warnings = new WarningList();
   try {
@@ -38,7 +39,7 @@ export async function scanCustomSongs({ mediaRoot, logRoot, limits, previousSong
       }
       return metadata;
     };
-    if (!mappingEntries) await getMetadata();
+    if (!mappingEntries || scanDiagnostics.observeLogLine) await getMetadata();
     const previous = new Map(previousSongs.map((song) => [song.nameKey, song]));
     const budget = { remainingBytes: positiveInteger(limits?.maxHashBytes, 32 * 1024 ** 3) };
     const songs = await readMedia(mediaRoot, metadata, options, warnings,
@@ -134,6 +135,8 @@ async function readMedia(mediaRoot, metadata, limits, warnings, evidenceOptions)
 
   const songs = [];
   const matchedDirectories = new Set();
+  // Exact-limit enumeration is conservatively partial; no extra filesystem pass.
+  let directoryCoverageComplete = rootEntries.length < limits.maxDirectoryEntries;
   for (const entry of rootEntries) {
     if (!entry.isDirectory() || entry.isSymbolicLink() || !SONG_DIRECTORY.test(entry.name)) {
       continue;
@@ -142,24 +145,37 @@ async function readMedia(mediaRoot, metadata, limits, warnings, evidenceOptions)
     const folderPath = path.join(mediaRoot, entry.name);
     try {
       const folderInfo = await evidenceOptions.io.lstat(folderPath);
-      if (!folderInfo.isDirectory() || folderInfo.isSymbolicLink()) continue;
+      if (!folderInfo.isDirectory() || folderInfo.isSymbolicLink()) { directoryCoverageComplete = false; continue; }
     } catch (error) {
+      directoryCoverageComplete = false;
       warnings.add(formatPathAccessWarning(`song directory ${entry.name}`, folderPath, error));
       diagnostics.reason(reasonForAccessError(error));
       continue;
     }
     matchedDirectories.add(entry.name);
     const files = await readSongFiles(folderPath, entry.name, limits, warnings, diagnostics, evidenceOptions.io);
+    diagnostics.observeDirectory?.(entry.name, files);
     const mapped = files.map((fileName) => {
       const item = evidenceOptions.mappingEntries?.get(mappingKey(fileName));
       return item && (!item.filePath || item.filePath.toLowerCase() === `${entry.name}/${fileName}`.toLowerCase()) ? item : null;
     });
+    let hasVision = false;
+    for (let index = 0; index < mapped.length; index++) {
+      const item = mapped[index];
+      if (!isVisionFile(item?.automatic)) continue;
+      hasVision = true;
+      try {
+        const target = path.join(folderPath, files[index]), stat = await evidenceOptions.io.lstat(target), real = await evidenceOptions.io.realpath(target);
+        if (!validVisionFile(item.automatic, revisionForResolvedFile({ path: real, stat }))) mapped[index] = { ...item, tod: null, automatic: undefined };
+      } catch { mapped[index] = { ...item, tod: null, automatic: undefined }; }
+    }
     const mappedName = mapped.find((item) => item?.name && item.name !== entry.name)?.name;
-    const complete = files.length > 0 && mappedName && mapped.every((item) => item?.filePath && (item.tod || item.manualUnknown));
+    const complete = !hasVision && files.length > 0 && mappedName && mapped.every((item) => item?.filePath && (item.tod || item.manualUnknown));
     if (!complete) metadata = await evidenceOptions.getMetadata();
     const record = complete ? null : metadata.get(entry.name);
     const mapping = record ? record.mapping : new Map();
-    diagnostics.match(entry.name, Boolean(mappedName) || usableName(record?.name, entry.name), { recordPresent: Boolean(record) });
+    diagnostics.match(entry.name, Boolean(mappedName) || usableName(record?.name, entry.name), {
+      recordPresent: Boolean(record), mappingName: Boolean(mappedName), logName: usableName(record?.name, entry.name) });
 
     warnForMappingConflicts(entry.name, mapping, warnings);
     warnForDuplicateTods(entry.name, files, mapping, warnings);
@@ -180,6 +196,8 @@ async function readMedia(mediaRoot, metadata, limits, warnings, evidenceOptions)
       const item = mapped[index];
       if (!item || (!item.tod && !item.manualUnknown)) return file;
       const saved = item.automatic;
+      if (isVisionFile(saved) && (file.conflict || (mapping.get(file.fileName)?.length || 0) > 1)) return { ...file, conflict: true };
+      if (isVisionFile(saved) && file.evidence === 'original' && file.tod && !file.conflict) return file;
       if (saved && saved.fileName === file.fileName) return { ...structuredClone(saved),
         ...(item.view && saved.view !== item.view ? { mappingView: item.view } : {}),
         ...(saved.tod !== item.tod || item.manualUnknown ? { mappingTod: item.tod, mappingManual: true } : {}) };
@@ -202,6 +220,7 @@ async function readMedia(mediaRoot, metadata, limits, warnings, evidenceOptions)
   }
 
   let unmatched = 0;
+  diagnostics.noteDirectoryCoverage?.(matchedDirectories, directoryCoverageComplete);
   for (const [nameKey, record] of metadata) {
     if (usableName(record?.name, nameKey) && !matchedDirectories.has(nameKey)) unmatched += 1;
   }
@@ -417,7 +436,8 @@ async function readLogMetadata(logRoot, limits, warnings, diagnostics, io) {
           fileStatus = 'partial';
           continue;
         }
-        const records = parseLogLine(item.line, { logFile: logFile.name, fileId: logFile.fileId, line: lineNumber }, warnings, diagnostics);
+        const context = { logFile: logFile.name, fileId: logFile.fileId, line: lineNumber };
+        const records = parseLogLine(item.line, context, warnings, diagnostics);
         for (const record of records) {
           if (record.nameKey) {
             fileRecords.set(record.nameKey, fileRecords.has(record.nameKey)
@@ -496,6 +516,16 @@ async function* boundedLines(filePath, maxLineBytes, io = { createReadStream }) 
   }
 }
 
+// Data-only replay boundary: the same parser and prefix recovery as a real scan.
+// Raw records remain internal to the caller; never serialize this return value as a report.
+export function inspectSongEventForReplay(line) {
+  const diagnostics = new ScanDiagnostics();
+  const records = parseLogLine(line, { logFile: 'Olivia.log', line: 1 }, new WarningList(), diagnostics);
+  const report = diagnostics.snapshot().report;
+  return { records, stages: report.stages, reasons: report.reasons.map(item => item.code).sort(),
+    errors: report.requestEvidence.structureSamples.map(item => item.jsonError.category) };
+}
+
 function parseLogLine(line, context, warnings, diagnostics) {
   if (line.trim()) diagnostics.increment('nonEmptyLines', 1, context.fileId);
   if (line.includes('\ufeff')) diagnostics.increment('bomLines', 1, context.fileId);
@@ -505,12 +535,14 @@ function parseLogLine(line, context, warnings, diagnostics) {
   }
   const marker = line.indexOf('[OTEL Logger]');
   if (marker < 0) {
+    diagnostics.observeLogLine?.(line, context);
     diagnostics.increment('linesWithoutMarker', 1, context.fileId);
     return [];
   }
   diagnostics.increment('markerLines', 1, context.fileId);
   const start = line.indexOf('{', marker + '[OTEL Logger]'.length);
   if (start < 0) {
+    diagnostics.observeLogLine?.(line, context);
     diagnostics.increment('unclassifiedOuterFailures', 1, context.fileId);
     diagnostics.issue(context, 'outer', 'UNCLASSIFIED_OUTER_JSON');
     return [];
@@ -520,10 +552,12 @@ function parseLogLine(line, context, warnings, diagnostics) {
   try {
     outer = JSON.parse(line.slice(start));
   } catch {
+    diagnostics.observeLogLine?.(line, context);
     diagnostics.increment('unclassifiedOuterFailures', 1, context.fileId);
     diagnostics.issue(context, 'outer', 'UNCLASSIFIED_OUTER_JSON');
     return [];
   }
+  diagnostics.observeLogLine?.(line, context, outer);
   diagnostics.increment('outerJsonParsed', 1, context.fileId);
   const attributes = outer?.attributes && typeof outer.attributes === 'object' ? outer.attributes : outer;
   const action = attributes?.['query.action'];
@@ -533,6 +567,7 @@ function parseLogLine(line, context, warnings, diagnostics) {
     return [];
   }
   diagnostics.increment('relevantEvents', 1, context.fileId);
+  diagnostics.observeRequestFields?.(action, attributes, context);
   const request = attributes?.['query.request'];
   if (typeof request !== 'string') {
     diagnostics.increment('parseFailures', 1, context.fileId);
@@ -558,22 +593,27 @@ function parseLogLine(line, context, warnings, diagnostics) {
 }
 
 function parseRequestRecords(request, context, diagnostics) {
+  let value, parsed = false;
   try {
-    const value = JSON.parse(request);
+    value = JSON.parse(request);
+    parsed = true;
     diagnostics.increment('innerJsonParsed', 1, context.fileId);
     const records = [];
     collectObjectRecords(value, records, context, diagnostics);
     if (records.length > 0) return markParsedEvent(records);
-    return markParsedEvent(observePrefix(request, context, diagnostics, false));
-  } catch {
+    const partial = observePrefix(request, context, diagnostics, false);
+    diagnostics.observeRequestStructure?.(request, context, { parsed, parsedValue: value, prefixRecords: partial.length });
+    return markParsedEvent(partial);
+  } catch (error) {
     diagnostics.increment('innerJsonFailures', 1, context.fileId);
     diagnostics.issue(context, 'inner', 'INNER_JSON_FAILED');
     if (/\[(?:truncated|cut|partial)\]\s*$/i.test(request)) {
       diagnostics.increment('truncatedRequests', 1, context.fileId);
       diagnostics.issue(context, 'inner', 'REQUEST_TRUNCATED');
     }
-    // The service deliberately truncates query.request; recover the ordered prefix below.
+    // Preserve ordered-prefix recovery; a failure alone does not prove truncation.
     const partial = observePrefix(request, context, diagnostics, true);
+    diagnostics.observeRequestStructure?.(request, context, { error, parsed, parsedValue: value, prefixRecords: partial.length });
     if (partial.length > 0) {
       return markParsedEvent(markParseFailure(partial));
     }

@@ -376,7 +376,7 @@ var customSongFrameReader = (function () {
         if (!readyForPixels(video)) throw makeError("FrameStateError", "The video is not ready for capture");
         context.drawImage(video, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
         var imageData = context.getImageData(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-        var thumbnail = canvas.toDataURL("image/jpeg", 0.72);
+        var thumbnail = options.thumbnail === false ? null : canvas.toDataURL("image/jpeg", 0.72);
         var payload = {
           imageData: imageData,
           time: proof.time,
@@ -434,5 +434,5 @@ var customSongFrameReader = (function () {
     });
   }
 
-  return { capture: capture };
+  return { capture: capture, isBusy: function () { return busy; } };
 })();
