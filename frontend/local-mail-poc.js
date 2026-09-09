@@ -626,6 +626,18 @@
       ".lm-modal{width:min(680px,92vw);max-height:86vh;overflow:auto;padding:20px;border:1px solid rgba(255,255,255,.12);border-radius:14px;background:var(--tp-surface-1,#232529);color:var(--tp-text-body,#ced2d4);box-shadow:0 18px 48px rgba(0,0,0,.45)}",
       ".lm-modal-title{font-size:16px;font-weight:600;color:var(--tp-text-title,#e8e9eb);margin-bottom:14px}",
       ".lm-modal-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:16px}",
+      ".lm-song-manager{display:flex;flex-direction:column;box-sizing:border-box;width:min(760px,94vw);height:min(780px,calc(100vh - 32px));max-height:calc(100vh - 32px);padding:0;overflow:hidden}",
+      ".lm-song-manager-header{flex:none;padding:18px 22px 12px;border-bottom:1px solid rgba(255,255,255,.1)}.lm-song-manager-header .lm-modal-title{margin:0;font-size:20px}",
+      ".lm-song-manager-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:18px 22px;scrollbar-width:thin;scrollbar-color:#646870 transparent}.lm-song-manager-body label{display:block}.lm-song-manager-body .lm-modal-actions{flex-wrap:wrap;margin-top:10px}",
+      ".lm-song-manager-footer{flex:none;padding:12px 22px;border-top:1px solid rgba(255,255,255,.12);background:var(--tp-surface-1,#232529);display:flex;align-items:center;gap:12px}.lm-song-manager-footer .lm-modal-actions{margin:0;flex:none}.lm-song-feedback{flex:1;min-width:0;max-height:96px;overflow:auto}.lm-song-feedback p{margin:2px 0;font-size:12px}.lm-song-feedback [hidden]{display:none}",
+      ".lm-song-inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.lm-song-fill{padding:14px 0}.lm-song-disclosure{border-top:1px solid rgba(255,255,255,.1);margin-top:12px;padding-top:10px}.lm-song-disclosure summary{cursor:pointer;padding:6px 0;color:var(--tp-text-title,#e8e9eb)}.lm-song-group{padding:12px 0}.lm-song-group h3{font-size:14px;margin:8px 0}",
+      ".lm-song-help{display:inline-flex;align-items:center;justify-content:center;border:1px solid #73777c;background:transparent;color:inherit;border-radius:50%;width:23px;height:23px;min-width:23px;cursor:help;padding:0;font-size:13px}.lm-song-help:focus-visible,.lm-song-disclosure summary:focus-visible{outline:2px solid #ced2d4;outline-offset:3px}",
+      ".lm-song-tooltip{position:fixed;z-index:10002;box-sizing:border-box;max-width:min(280px,calc(100vw - 16px));padding:10px 12px;background:#34373d;color:#e8e9eb;border:1px solid #646870;border-radius:8px;box-shadow:0 4px 18px #0008;font-size:13px;line-height:1.6;overflow-wrap:anywhere;pointer-events:none}.lm-song-tooltip[hidden]{display:none}",
+      ".lm-song-export-backdrop{z-index:10001}.lm-song-export-dialog{box-sizing:border-box;max-height:calc(100vh - 24px)}.lm-song-export-dialog .lm-modal-actions{flex-wrap:wrap}.lm-song-export-dialog [hidden]{display:none}.lm-song-warning{font-size:13px;line-height:1.7;color:#e1c89f}.lm-song-export-dialog [role=status]{overflow-wrap:anywhere}",
+      "@media(max-height:480px){.lm-song-manager-header{padding:10px 16px}.lm-song-manager-footer{padding:8px 16px}.lm-song-feedback{max-height:54px}.lm-song-manager-body{padding:12px 16px}}@media(max-width:480px){.lm-song-manager-footer{flex-wrap:wrap;gap:6px}.lm-song-feedback{flex-basis:100%;max-height:48px}.lm-song-manager-footer .lm-modal-actions{margin-left:auto}}",
+      ".lm-song-feedback{max-height:none;overflow:visible;overflow-wrap:anywhere}.lm-song-feedback [data-song-unsaved]{display:block;color:#e1c89f}.lm-song-feedback [data-song-unsaved][hidden]{display:none}.lm-song-manager [hidden]{display:none}",
+      ".lm-song-manager-header{display:flex;align-items:center;gap:14px}.lm-song-home-section{padding:16px 0;border-bottom:1px solid rgba(255,255,255,.1)}.lm-song-home-section:first-child{padding-top:4px}.lm-song-home-section h3{font-size:15px;margin:0 0 8px;font-weight:500}.lm-song-path-row{display:flex;align-items:center;gap:12px}.lm-song-path{min-width:0;flex:1;padding:9px 12px;border:1px solid rgba(255,255,255,.08);border-radius:8px;overflow-wrap:anywhere;font-size:13px}.lm-song-path-row button{flex:none;margin-left:auto}.lm-song-auto-row,.lm-song-mapping-row{display:flex;align-items:center;justify-content:space-between;gap:16px}.lm-song-auto-row p{margin:0;font-size:13px}.lm-song-home .lm-modal-actions{margin:0}.lm-song-home [data-song-home-notice]{color:#dbc49b;margin-top:16px}.lm-song-list-row{display:flex;align-items:center;gap:14px;padding:16px 0;border-bottom:1px solid rgba(255,255,255,.08)}.lm-song-list-row>span{flex:1;min-width:0;overflow-wrap:anywhere}.lm-song-list-toolbar{display:flex;align-items:center;gap:14px;margin-bottom:10px}.lm-song-list-toolbar input{flex:1}.lm-song-list-toolbar span{white-space:nowrap}.lm-song-manager-footer{flex-wrap:wrap}.lm-song-manager-footer>.lm-modal-actions{margin-left:auto;flex-wrap:wrap}.lm-song-manager-footer [data-custom-diagnostic-export]{font-size:13px}.lm-song-manager-footer .lm-song-feedback:empty{display:none}",
+      "@media(max-width:600px){.lm-song-manager-footer{gap:8px}.lm-song-manager-footer .lm-button{font-size:13px;padding:7px 12px}.lm-song-path-row{gap:8px}.lm-song-path-row button{font-size:12px;padding:7px 10px}.lm-song-mapping-row{gap:8px}}",
       ".lm-modal-status{min-width:0;margin-right:auto;font-size:12px;line-height:1.45;white-space:pre-line;color:var(--tp-text-secondary,#a1a5ad)}",
       ".lm-modal-status[data-kind='error']{color:#e5aaa5}",
       ".lm-modal-status[data-kind='success']{color:#a9d9c0}",
@@ -3703,6 +3715,11 @@
       key: "desktopClearEnabled",
       label: "音乐桌面清空开关",
       description: "控制音乐桌面的清空按钮，关闭不会清空播单。"
+    },
+    {
+      key: "visionAutoFillEnabled",
+      label: "本地演奏自动整理",
+      description: "首次使用默认开启，保留已有关闭选择。前端可用时识别并保存缺项，不覆盖手工设置；关闭不撤销已保存结果。"
     }
   ];
 
@@ -3724,7 +3741,7 @@
       if (!input) return;
       input.checked = typeof musicFeatureEnabled === "function"
         ? Boolean(musicFeatureEnabled(feature.key))
-        : true;
+        : feature.key !== "visionAutoFillEnabled";
       input.disabled = Boolean(saving[feature.key]);
     });
   }
@@ -4852,7 +4869,7 @@ var customSongFrameReader = (function () {
         if (!readyForPixels(video)) throw makeError("FrameStateError", "The video is not ready for capture");
         context.drawImage(video, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
         var imageData = context.getImageData(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-        var thumbnail = canvas.toDataURL("image/jpeg", 0.72);
+        var thumbnail = options.thumbnail === false ? null : canvas.toDataURL("image/jpeg", 0.72);
         var payload = {
           imageData: imageData,
           time: proof.time,
@@ -4910,12 +4927,83 @@ var customSongFrameReader = (function () {
     });
   }
 
-  return { capture: capture };
+  return { capture: capture, isBusy: function () { return busy; } };
 })();
+// Automatic-write policy is deliberately separate from the interactive hint policy.
+// Scalars are produced by the local frontend. These are heuristic gates, not probabilities or official proof.
+const VISION_ALGORITHM = 'city-window-roi1-v1';
+const VISION_POLICY = 'three-proven-frames-v1';
+const VISION_PERIODS = Object.freeze(['TOD12', 'TOD1730', 'TOD20']);
+const unknown = reason => ({ tod: null, reason });
+
+function normalizeVisionFeature(value) {
+  if (!value || value.version !== VISION_ALGORITHM || !Number.isFinite(value.aspect) || value.aspect < .1 || value.aspect > 10 ||
+    !Array.isArray(value.regions) || value.regions.length !== 3) return null;
+  const regions = [];
+  for (const region of value.regions) {
+    if (!region || !Array.isArray(region.rgb) || region.rgb.length !== 3 || region.rgb.some(n => !Number.isFinite(n) || n < 0 || n > 255) ||
+      !['lum', 'warmth', 'contrast', 'edgeRate', 'black', 'white'].every(key => Number.isFinite(region[key]))) return null;
+    const [r, g, b] = region.rgb, lum = .2126 * r + .7152 * g + .0722 * b, warmth = (r - b) / (r + g + b + 1);
+    if (Math.abs(lum - region.lum) > 0.01 || Math.abs(warmth - region.warmth) > 0.0001 || region.contrast < 0 || region.contrast > 255 ||
+      ['edgeRate', 'black', 'white'].some(key => region[key] < 0 || region[key] > 1)) return null;
+    regions.push({ rgb: [...region.rgb], lum, warmth, contrast: region.contrast, edgeRate: region.edgeRate, black: region.black, white: region.white });
+  }
+  return { version: VISION_ALGORITHM, aspect: value.aspect, regions };
+}
+
+function sky(region) {
+  const [r, g, b] = region.rgb, y = region.lum, w = region.warmth;
+  if (y >= 185 && y <= 250 && w >= -.13 && w <= .01 && b - r >= 8 && g - r >= 4) return 'TOD12';
+  if (y >= 155 && y <= 245 && w >= .012 && w <= .17 && r - g >= 6 && g - b >= -8) return 'TOD1730';
+  if (y >= 18 && y <= 88 && w >= -.65 && w <= -.10 && b - g >= 5 && g - r >= 7) return 'TOD20';
+  return null;
+}
+
+function classifyVisionFeature(value) {
+  const feature = normalizeVisionFeature(value);
+  if (!feature) return unknown('invalid-features');
+  if (Math.abs(feature.aspect - 16 / 9) > .04) return unknown('unfamiliar-scene');
+  const [a, b, city] = feature.regions;
+  if (feature.regions.every(region => region.black > .85 || region.lum < 12)) return unknown('black-frame');
+  if (feature.regions.some(region => region.white > .65 || region.black > .65)) return unknown('obscured-frame');
+  const one = sky(a), two = sky(b);
+  if (one && two && one !== two) return unknown('region-conflict');
+  if (!one || one !== two || Math.abs(a.lum - b.lum) > 28 || Math.abs(a.warmth - b.warmth) > .065) return unknown('unfamiliar-scene');
+  if (a.contrast > 80 || b.contrast > 80 || city.contrast < 6 || city.edgeRate < .004 || city.edgeRate > .65) return unknown('unfamiliar-structure');
+  const top = (a.lum + b.lum) / 2, warm = (a.warmth + b.warmth) / 2;
+  const matches = one === 'TOD12' ? city.lum >= 130 && city.lum <= 242 && city.warmth >= -.15 && city.warmth <= .035 && top - city.lum >= 5 && top - city.lum <= 100
+    : one === 'TOD1730' ? city.lum >= 115 && city.lum <= 225 && city.warmth >= .065 && city.warmth <= .30 && city.warmth - warm >= .02 && top - city.lum >= 5 && top - city.lum <= 100
+    : city.lum >= 15 && city.lum <= 95 && city.warmth >= -.60 && city.warmth <= -.05 && top - city.lum >= -12 && top - city.lum <= 45;
+  return matches ? { tod: one, reason: 'scene-match' } : unknown('region-conflict');
+}
+
+function evaluateVisionFrames(input) {
+  if (!input || input.algorithm !== VISION_ALGORITHM || input.policy !== VISION_POLICY || !Array.isArray(input.frames) || input.frames.length !== 3)
+    return { ...unknown('three-frames-required'), cacheable: false, frames: [] };
+  const frames = [];
+  for (const frame of input.frames) {
+    const feature = normalizeVisionFeature(frame?.feature);
+    if (!frame || frame.verified !== true || !Number.isFinite(frame.time) || !Number.isFinite(frame.target) || frame.time < 0 || frame.time > 86400 ||
+      frame.target < 0 || Math.abs(frame.time - frame.target) > .15 || !feature)
+      return { ...unknown('unverified-frame'), cacheable: false, frames: [] };
+    const classified = classifyVisionFeature(feature);
+    frames.push({ time: frame.time, target: frame.target, verified: true, feature, ...classified });
+  }
+  if (new Set(frames.map(frame => Math.round(frame.time * 1000))).size !== 3 || frames.some((frame, index) => index && frame.time <= frames[index - 1].time))
+    return { ...unknown('distinct-frames-required'), cacheable: false, frames: [] };
+  const known = frames.filter(frame => frame.tod), periods = new Set(known.map(frame => frame.tod));
+  let reason = 'three-frame-agreement', tod = null;
+  if (periods.size > 1 || frames.some(frame => frame.reason === 'region-conflict')) reason = 'frame-conflict';
+  else if (frames.some(frame => !frame.tod && frame.reason !== 'black-frame')) reason = 'unfamiliar-scene';
+  else if (known.length < 2 || periods.size !== 1) reason = 'unclear-frames';
+  else tod = known[0].tod;
+  return { tod, reason, cacheable: true, frames };
+}
+
 // Local-only, conservative hints for the known city-window performance scene.
 // These rules are rejection gates, not calibrated confidence probabilities.
 var customSongVision = (function () {
-  var VERSION = "city-window-roi1-v1";
+  var VERSION = VISION_ALGORITHM;
   var ROIS = [[0.44, 0.04, 0.62, 0.14], [0.72, 0.03, 0.91, 0.13], [0.43, 0.20, 0.63, 0.40]];
   var PERIODS = ["TOD12", "TOD1730", "TOD20"];
   function quantile(hist, count, ratio) {
@@ -4957,35 +5045,9 @@ var customSongVision = (function () {
     });
     return { version: VERSION, aspect: Number(sourceWidth || width) / Number(sourceHeight || height), regions: regions };
   }
-  function unknown(reason) { return { tod: null, reason: reason }; }
-  function sky(region) {
-    var r = region.rgb[0], g = region.rgb[1], b = region.rgb[2], y = region.lum, w = region.warmth;
-    if (y >= 185 && y <= 250 && w >= -0.13 && w <= 0.01 && b - r >= 8 && g - r >= 4) return "TOD12";
-    if (y >= 155 && y <= 245 && w >= 0.012 && w <= 0.17 && r - g >= 6 && g - b >= -8) return "TOD1730";
-    if (y >= 18 && y <= 88 && w >= -0.65 && w <= -0.10 && b - g >= 5 && g - r >= 7) return "TOD20";
-    return null;
-  }
   function classify(feature) {
-    if (!feature || feature.version !== VERSION || !Number.isFinite(feature.aspect) ||
-      Math.abs(feature.aspect - 16 / 9) > 0.04 || !Array.isArray(feature.regions) || feature.regions.length !== 3) return unknown("unfamiliar-scene");
-    var regions = feature.regions;
-    if (regions.some(function (r) { return !r || !Array.isArray(r.rgb) || r.rgb.length !== 3 ||
-      r.rgb.some(function (n) { return !Number.isFinite(n) || n < 0 || n > 255; }) ||
-      [r.lum, r.warmth, r.contrast, r.edgeRate, r.black, r.white].some(function (n) { return !Number.isFinite(n); }); })) return unknown("invalid-features");
-    if (regions.every(function (r) { return r.black > 0.85 || r.lum < 12; })) return unknown("black-frame");
-    if (regions.some(function (r) { return r.white > 0.65 || r.black > 0.65; })) return unknown("obscured-frame");
-    var a = regions[0], b = regions[1], city = regions[2];
-    var one = sky(a), two = sky(b);
-    if (one && two && one !== two) return unknown("region-conflict");
-    if (!one || one !== two || Math.abs(a.lum - b.lum) > 28 || Math.abs(a.warmth - b.warmth) > 0.065) return unknown("unfamiliar-scene");
-    // Require a relatively smooth sky and a structured lower city patch. Flat
-    // colour cards, noise, framing changes and unrecognised scenes are rejected.
-    if (a.contrast > 80 || b.contrast > 80 || city.contrast < 6 || city.edgeRate < 0.004 || city.edgeRate > 0.65) return unknown("unfamiliar-structure");
-    var top = (a.lum + b.lum) / 2, warm = (a.warmth + b.warmth) / 2;
-    var matches = one === "TOD12" ? city.lum >= 130 && city.lum <= 242 && city.warmth >= -0.15 && city.warmth <= 0.035 && top - city.lum >= 5 && top - city.lum <= 100
-      : one === "TOD1730" ? city.lum >= 115 && city.lum <= 225 && city.warmth >= 0.065 && city.warmth <= 0.30 && city.warmth - warm >= 0.02 && top - city.lum >= 5 && top - city.lum <= 100
-      : city.lum >= 15 && city.lum <= 95 && city.warmth >= -0.60 && city.warmth <= -0.05 && top - city.lum >= -12 && top - city.lum <= 45;
-    return matches ? { tod: one, reason: "scene-match" } : unknown("region-conflict");
+    // Injected from the same pure module that the Node write guard imports.
+    return classifyVisionFeature(feature);
   }
   function summarize(frames) {
     var selected = (frames || []).slice(0, 3);
@@ -5083,6 +5145,7 @@ async function pollCustomSongRefresh(epoch) {
     watch.value = current;
     if (customSongsState.data) customSongsState.data.refresh = current;
     if (current.revision && current.revision !== previous.revision) {
+      syncVisionTasks(current.revision);
       customSongsChanged();
     } else resumeCustomSongRefresh();
     mountCustomSongTools();
@@ -5104,6 +5167,107 @@ function trackCustomSongRefresh(data) {
   customSongRefreshWatch.sourceRoot = customSongRootKey();
   customSongRefreshWatch.failures = 0;
   resumeCustomSongRefresh();
+  syncVisionTasks(data && data.refresh && data.refresh.revision || 'catalog-loaded');
+}
+
+var visionTaskCoordinator = null, visionInputRevision='initial', visionLastCatalogRevision='', visionMutationRevision=0;
+function visionTaskRoot() { return customSongsState.data && customSongsState.data.mediaRoot || officialSongStoragePath() || ''; }
+function visionTaskHumanBusy() {
+  var modal = document.getElementById('local-mail-custom-song-modal');
+  return customSongsState.busy || Boolean(customSongVisionState.run) || Boolean(modal && !modal.hidden && (modal.__visionDirty ||
+    modal.querySelector('[data-custom-root]').value.trim() !== visionTaskRoot() || modal.__songDebugPackage && modal.__songDebugPackage.isBusy())) ||
+    Boolean(modal && modal.__songDiagnostics && modal.__songDiagnostics.isExporting());
+}
+function getVisionTaskCoordinator() {
+  if (!visionTaskCoordinator) visionTaskCoordinator = createVisionTaskController({
+    getRoot: visionTaskRoot, request: callApi, isHumanBusy: visionTaskHumanBusy,
+    environment: function () {
+      var video = document.createElement('video'), canvas = document.createElement('canvas');
+      return { visible: document.hidden !== true && document.visibilityState !== 'hidden',
+        rvfc: typeof video.requestVideoFrameCallback === 'function',
+        canvas: typeof canvas.getContext === 'function' && typeof AbortController === 'function' };
+    },
+    capture: function (options) { return customSongFrameReader.capture(options); },
+    features: function (image, width, height) { return customSongVision.features(image, width, height); },
+    setTimeout: function (fn, delay) { return window.setTimeout(fn, delay); }, clearTimeout: function (id) { window.clearTimeout(id); },
+    setInterval: function (fn, delay) { return window.setInterval(fn, delay); }, clearInterval: function (id) { window.clearInterval(id); },
+    yieldTurn: function () { return new Promise(function (resolve) { window.setTimeout(resolve, 0); }); },
+    prepareAuto: async function () { return callApi('/api/custom-songs/search', { method: 'POST', body: { mediaRoot: visionTaskRoot() || undefined, cached: true, pageSize: 1 } }); },
+    inputStatus: function(root){return callApi('/api/custom-songs/status',{method:'POST',body:{mediaRoot:root||undefined}});},
+    render: renderVisionTaskPanel,
+    onSaved: function (count, applied) {
+      var modal = document.getElementById('local-mail-custom-song-modal'), song = modal && currentCustomSong(modal);
+      if (modal && !modal.hidden && !modal.__visionDirty && song) {
+        var changed = false;
+        applied.forEach(function (item) {
+          if (item.nameKey !== song.nameKey) return;
+          var file = song.localFiles.find(function (value) { return value.fileName === item.fileName; });
+          if (!file || file.fileRevision !== item.fileRevision || ['manual','original','mapping'].indexOf(file.evidence) >= 0) return;
+          file.tod = item.tod; file.automaticTod = item.tod; file.evidence = file.automaticEvidence = 'vision';
+          file.evidenceNote = '画面推测：本地规则判定，可在任务中撤销；不是官方记录。'; changed = true;
+        });
+        if (changed) renderCustomSongEditor(modal);
+      }
+      customSongsChanged();
+    }
+  });
+  return visionTaskCoordinator;
+}
+function syncVisionTasks(signal) {
+  if (typeof createVisionTaskController !== 'function') return;
+  if(signal&&signal!==visionLastCatalogRevision){visionLastCatalogRevision=signal;visionInputRevision=signal;}
+  if (visionTaskCoordinator || musicFeatureEnabled('visionAutoFillEnabled')) getVisionTaskCoordinator().sync(musicFeatureEnabled('visionAutoFillEnabled'), visionInputRevision);
+}
+function renderVisionTaskPanel(view) {
+  var modal = document.getElementById('local-mail-custom-song-modal'); if (!modal || modal.hidden) return;
+  var job = view.job, coordinator = visionTaskCoordinator, busy = visionTaskHumanBusy() || view.busy;
+  var labels = { queued: '准备中', running: '运行中', paused: '已暂停', 'waiting-environment': '等待可用前端', interrupted: '上次任务中断，请继续', completed: '本次处理完成', stopped: '已停止，保留已保存结果', undone: '撤销处理完成' };
+  var counts = job && job.counts;
+  var summary = modal.querySelector('[data-vision-batch-status]');
+  summary.textContent = view.message || (!job ? '' :
+    (job.mode === 'auto' ? '自动补齐 · ' : '手动任务 · ') + (labels[job.status] || job.status) + '：处理 ' + (counts.totalVideos-counts.pending-counts.claimed) + '/' + counts.totalVideos +
+    ' 个视频；新增映射 ' + counts.saved + '，待确认 ' + counts.review + '，缺文件 ' + counts.missing + '，失败/跳过 ' + (counts.failed+counts.skipped) + '，复用缓存 ' + counts.cached + '，已撤销 ' + counts.undone +
+    (job.status === 'completed' && counts.review+counts.missing+counts.failed+counts.skipped ? '。仍有未补齐项，可查看曲目后手工修正。' : '。'));
+  if (modal.__managerView === 'home' && job && ['completed','undone','stopped'].indexOf(job.status)>=0 && !view.message) {
+    summary.textContent = counts.review+counts.missing+counts.failed ? '部分信息仍不完整，保留可用播放结果；需要时可手动整理。' : '';
+  }
+  if (modal.__managerHomeReady) renderCustomSongHome(modal);
+  modal.querySelector('[data-vision-batch-start]').disabled = busy || Boolean(job && job.mode === 'manual' && ['queued','running','paused','waiting-environment','interrupted'].indexOf(job.status)>=0);
+  modal.querySelector('[data-vision-batch-pause]').disabled = busy || !job || ['queued','running','waiting-environment'].indexOf(job.status)<0;
+  modal.querySelector('[data-vision-batch-resume]').disabled = busy || !job || !(['paused','waiting-environment','interrupted'].indexOf(job.status)>=0 || job.mode==='manual' && job.inventory.ownerClientId && job.inventory.ownerClientId!==coordinator.clientId);
+  modal.querySelector('[data-vision-batch-stop]').disabled = busy || !job || ['queued','running','paused','waiting-environment','interrupted'].indexOf(job.status)<0;
+  modal.querySelector('[data-vision-batch-undo]').disabled = busy || !job || !counts.saved;
+  modal.querySelector('[data-vision-batch-next]').disabled = !job || !job.hasMore;
+  var select = modal.querySelector('[data-vision-batch-jobs]'), jobs = view.data && view.data.jobs || [];
+  var signature = JSON.stringify(jobs);
+  if (select.__jobSignature !== signature) {
+    select.textContent = ''; jobs.forEach(function (item) { var option = document.createElement('option'); option.value=item.id;
+      option.textContent=(item.mode==='auto'?'自动':'手动')+' · '+(labels[item.status]||item.status);select.appendChild(option); });
+    select.__jobSignature=signature;
+  }
+  if (job) select.value=job.id;
+  var result = modal.querySelector('[data-vision-batch-results]'), resultKey=JSON.stringify(job && job.items || []);
+  if(result.__resultKey!==resultKey){
+    result.textContent='';(job&&job.items||[]).forEach(function(item){
+      if(['review','missing','failed','skipped'].indexOf(item.state)<0)return;
+      var row=document.createElement('div');row.className='lm-modal-status';row.textContent=item.fileName+' · '+visionTaskReason(item.reason)+' ';
+      var button=document.createElement('button');button.className='lm-button lm-button-small';button.textContent='查看曲目';
+      button.onclick=function(){void locateVisionTaskSong(modal,item.nameKey);};row.appendChild(button);result.appendChild(row);
+    });result.__resultKey=resultKey;
+  }
+}
+function visionTaskReason(reason) {
+  var names={'duplicate-period':'时段冲突','frame-conflict':'画面结论冲突','unfamiliar-scene':'陌生场景','unclear-frames':'画面不明确','missing-file':'文件不可用','media-error':'解码失败',
+    'file-or-mapping-changed':'文件或映射已变化','file-changed':'文件版本已变化','protected-manual':'已有人工设置','protected-mapping':'已有导入映射','protected-original':'已有原始依据',
+    'stopped-or-undone':'此前已停止或撤销','conflict-or-too-many-files':'存在冲突或文件过多，需人工核对'};
+  return names[reason]||'需人工核对';
+}
+async function locateVisionTaskSong(modal,nameKey) {
+  if(modal.__visionDirty&&!window.confirm('当前表单尚未保存，放弃本次编辑并查看任务曲目？'))return;
+  try { var located=await callApi('/api/custom-songs/vision/locate',{method:'POST',body:{mediaRoot:visionTaskRoot(),nameKey:nameKey}});
+    modal.__visionDirty=false;customSongsState.page=Math.floor(located.cursor/100);customSongsState.selected=nameKey;await loadCustomSongManager(modal,false);
+    if(!customSongsState.error&&currentCustomSong(modal)&&currentCustomSong(modal).nameKey===nameKey)setCustomSongView(modal,'editor');
+  } catch(error){musicNotice(error.message||'曲目不可用','error');}
 }
 
 function customSongRootKey() {
@@ -5169,10 +5333,12 @@ function renderCustomSongVision(modal) {
       if (collisions[fileName]) detail += " 同曲出现相同时段建议，请逐一核对，不会强制分配。";
     }
     if (file.evidence === "original" || file.evidence === "manual") detail += " 已保留原始或手工设置；如需修改，请使用时段下拉框。";
-    message.textContent = current + "\n" + detail;
+    message.textContent = result || !file.fileRevision || file.conflict ? current + "\n" + detail : '';
+    message.hidden = !message.textContent;
     if (result && result.thumbnail) { image.src = result.thumbnail; image.style.display = "block"; }
     else { image.removeAttribute("src"); image.style.display = "none"; }
     apply.disabled = Boolean(customSongVisionState.run) || !customSongVision.canApply(file, result);
+    apply.hidden = !result || !result.tod;
     panel.querySelector("[data-vision-one]").disabled = Boolean(customSongVisionState.run) || customSongsState.busy || !file.fileRevision;
   });
 }
@@ -5193,6 +5359,7 @@ function applyCustomSongVision(modal, fileName) {
   if (occupied) { status.textContent = "这个时段已有其他视频，请先手工核对并调整，未改动当前选择。"; return; }
   var select = selects.find(function (entry) { return entry.getAttribute("data-custom-file") === fileName; });
   if (select) select.value = result.tod;
+  modal.__visionDirty=true;modal.querySelector('[data-song-unsaved]').hidden=false;if(visionTaskCoordinator)void visionTaskCoordinator.humanActivity();
   status.textContent = "已填入画面建议，尚未保存。核对无误后点击“保存”，将作为手工设置保留。";
 }
 
@@ -5210,6 +5377,7 @@ async function reviewCustomSongVision(modal, onlyFile) {
   customSongManagerBusy(modal, false);
   var current = function () { return !run.controller.signal.aborted && run.epoch === customSongVisionState.epoch && !modal.hidden && song.nameKey === customSongsState.selected; };
   try {
+    if(visionTaskCoordinator)await visionTaskCoordinator.humanActivity();
     for (var index = 0; index < targets.length; index++) {
       if (!current()) break;
       var file = targets[index];
@@ -5349,6 +5517,7 @@ function mountCustomSongTools() {
 
 function customSongsChanged() {
   invalidateCustomSongList();
+  visionInputRevision='mutation-'+(++visionMutationRevision);syncVisionTasks();
   window.dispatchEvent(new Event("linli-custom-songs-changed"));
 }
 
@@ -5360,10 +5529,11 @@ function customSongDiagnosticsFor(modal) {
       detail: modal.querySelector("[data-custom-diagnostic-detail]"),
       reasons: modal.querySelector("[data-custom-diagnostic-reasons]"),
       exportButton: modal.querySelector("[data-custom-diagnostic-export]"),
+      unifiedExport: true,
       getRoot: function () { return modal.querySelector("[data-custom-root]").value.trim(); },
       isHidden: function () { return modal.hidden; },
-      isBusy: function () { return customSongsState.busy || Boolean(customSongVisionState.run); },
-      refreshBusy: function () { customSongManagerBusy(modal, false); },
+      isBusy: function () { return customSongsState.busy || Boolean(customSongVisionState.run) || Boolean(modal.__songDebugPackage && modal.__songDebugPackage.isBusy()); },
+      refreshBusy: function () { customSongManagerBusy(modal, customSongsState.busy); },
       request: callApi,
       download: downloadJson
     });
@@ -5379,26 +5549,44 @@ async function openCustomSongManager() {
     modal.id = "local-mail-custom-song-modal";
     modal.className = "lm-modal-backdrop";
     modal.innerHTML =
-      '<section class="lm-modal" role="dialog" aria-modal="true" aria-labelledby="local-custom-song-title">' +
-      '<div class="lm-modal-title" id="local-custom-song-title">本地定制演奏</div>' +
-      '<p class="lm-modal-status">读取已下载的演奏视频。曲名和视频时段可手动校正；缺失时段会复用现有视频。</p>' +
-      '<label>曲目下载文件夹<input class="lm-input" data-custom-root aria-label="曲目下载文件夹"></label>' +
-      '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-scan>重新扫描</button></div>' +
-      '<p class="lm-modal-status">优先使用歌曲映射表；仅补扫缺少曲名、路径或时段的歌曲。导入会覆盖相同文件名的映射，建议先导出 JSON 备份。</p>' +
-      '<div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-mapping-export>导出映射 JSON</button><button type="button" class="lm-button lm-button-small" data-custom-mapping-import>导入映射 JSON</button><input type="file" accept=".json,application/json" data-custom-mapping-file aria-label="导入歌曲映射 JSON" hidden></div>' +
-      '<p class="lm-modal-status" role="status" data-custom-diagnostic-summary></p>' +
-      '<div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-diagnostic-reasons disabled>查看原因</button><button type="button" class="lm-button lm-button-small" data-custom-diagnostic-export disabled>导出诊断</button></div>' +
-      '<div class="lm-modal-status" data-custom-diagnostic-detail style="display:none;white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto"></div>' +
+      '<section class="lm-modal lm-song-manager" role="dialog" aria-modal="true" aria-labelledby="local-custom-song-title">' +
+      '<header class="lm-song-manager-header"><div class="lm-modal-title" id="local-custom-song-title">本地定制演奏</div></header>' +
+      '<div class="lm-song-manager-body">' +
       '<label>选择曲目<select class="lm-select" data-custom-song aria-label="选择曲目"></select></label>' +
       '<div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-prev>上一页</button><span data-custom-page></span><button type="button" class="lm-button lm-button-small" data-custom-next>下一页</button></div>' +
       '<label>曲名<input class="lm-input" data-custom-name aria-label="曲名"></label>' +
-      '<div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-vision-start>画面辅助核对</button><button type="button" class="lm-button lm-button-small" data-custom-vision-cancel style="display:none">取消核对</button></div>' +
-      '<p class="lm-modal-status" role="status" data-custom-vision-status>仅核对当前曲目的待确认视频；建议不会自动保存。</p>' +
-      '<div data-custom-files></div><p class="lm-modal-status" role="status" data-custom-status></p>' +
-      '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-close>关闭</button><button type="button" class="lm-button lm-button-primary" data-custom-save>保存</button></div></section>';
+      '<section class="lm-song-fill"><div class="lm-song-inline"><button class="lm-button lm-button-small" data-vision-batch-start>一键补齐缺失时段</button><button type="button" class="lm-song-help" aria-label="补齐说明" data-song-help="仅补齐当前曲库缺失时段并保存，不覆盖手动校正；可在任务详情查看进度或撤销。">?</button></div>' +
+      '<details class="lm-song-disclosure" data-song-task-details><summary>任务详情</summary><select class="lm-select" aria-label="识别任务记录" data-vision-batch-jobs></select>' +
+      '<div class="lm-modal-actions"><button class="lm-button lm-button-small" data-vision-batch-pause>暂停</button><button class="lm-button lm-button-small" data-vision-batch-resume>继续 / 接管</button>' +
+      '<button class="lm-button lm-button-small" data-vision-batch-stop>停止</button><button class="lm-button lm-button-small" data-vision-batch-undo>撤销本次补齐</button></div>' +
+      '<div data-vision-batch-results></div><button class="lm-button lm-button-small" data-vision-batch-next>下一页任务结果</button></details></section>' +
+      '<div data-custom-files></div><div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-vision-start>画面辅助核对</button><button type="button" class="lm-button lm-button-small" data-custom-vision-cancel style="display:none">取消核对</button></div>' +
+      '<p class="lm-modal-status" role="status" data-custom-vision-status>建议不会自动保存。</p>' +
+      '<details class="lm-song-disclosure" data-song-advanced><summary>更多选项</summary>' +
+      '<section class="lm-song-group"><div class="lm-song-inline"><h3>目录与扫描</h3><button type="button" class="lm-song-help" aria-label="扫描说明" data-song-help="读取已下载的演奏视频与本地记录。缺失时段暂时复用已有视频；扫描不能找回已删除的历史数据。">?</button></div>' +
+      '<label>曲目下载文件夹<input class="lm-input" data-custom-root aria-label="曲目下载文件夹"></label>' +
+      '<div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-scan>重新扫描</button></div></section>' +
+      '<section class="lm-song-group"><h3>映射备份</h3><p class="lm-modal-status">导入会覆盖相同文件名的映射，建议先导出备份。</p>' +
+      '<div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-mapping-export>导出映射 JSON</button><button type="button" class="lm-button lm-button-small" data-custom-mapping-import>导入映射 JSON</button><input type="file" accept=".json,application/json" data-custom-mapping-file aria-label="导入歌曲映射 JSON" hidden></div></section>' +
+      '<section class="lm-song-group"><h3>诊断</h3><p class="lm-modal-status" role="status" data-custom-diagnostic-summary></p>' +
+      '<div class="lm-modal-actions"><button type="button" class="lm-button lm-button-small" data-custom-diagnostic-reasons disabled>查看原因</button><button type="button" class="lm-button lm-button-small" data-custom-diagnostic-export>导出诊断</button></div>' +
+      '<div class="lm-modal-status" data-custom-diagnostic-detail style="display:none;white-space:pre-wrap;overflow-wrap:anywhere"></div></section></details></div>' +
+      '<footer class="lm-song-manager-footer"><div class="lm-song-feedback"><span class="lm-modal-status" role="status" data-song-unsaved hidden>有未保存的修改</span><p class="lm-modal-status" role="status" data-vision-batch-status></p><p class="lm-modal-status" role="status" data-custom-status></p></div>' +
+      '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-close>关闭</button><button type="button" class="lm-button lm-button-primary" data-custom-save>保存</button></div></footer></section>';
     document.body.appendChild(modal);
+    var exportDialog = document.createElement('div');
+    exportDialog.id = 'local-mail-song-export-dialog'; exportDialog.className = 'lm-modal-backdrop lm-song-export-backdrop'; exportDialog.hidden = true;
+    exportDialog.innerHTML = '<section class="lm-modal lm-song-export-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-song-export-title"><div class="lm-modal-title" id="lm-song-export-title">导出诊断</div>' +
+      '<p class="lm-modal-status" role="status" data-custom-debug-status></p><p class="lm-song-warning">附带片段已在本地服务中定向移除凭据，但仍可能含曲名、账号、路径及其他私人内容，并非完全匿名。仅私下提供，勿公开发布。片段已改写，不是原始日志字节。不会自动上传。</p>' +
+      '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-fragments>附带脱敏片段并导出</button><button type="button" class="lm-button lm-button-primary" data-custom-debug-basic>仅导出诊断</button><button type="button" class="lm-button" data-custom-debug-cancel>取消</button></div></section>';
+    document.body.appendChild(exportDialog);
+    modal.__songHelp = createCustomSongDiagnostics.createHelp(modal);
     modal.querySelector("[data-custom-close]").onclick = function () {
       if (!customSongsState.busy && !customSongDiagnosticsFor(modal).isExporting()) {
+        if (modal.__visionDirty && !window.confirm('当前修改尚未保存，放弃修改并关闭？')) return;
+        modal.__songDebugPackage.cancel();
+        modal.__songHelp.hide();
+        modal.__visionDirty=false;if(visionTaskCoordinator)visionTaskCoordinator.closePanel();
         clearCustomSongVision(modal);
         modal.hidden = true;
         modal.querySelectorAll("video").forEach(function (video) {
@@ -5409,8 +5597,10 @@ async function openCustomSongManager() {
       }
     };
     modal.addEventListener("keydown", function (event) {
-      if (event.key === "Escape")
-        modal.querySelector("[data-custom-close]").click();
+      if (event.key === "Escape") {
+        if (modal.__managerView !== 'home') { event.preventDefault(); event.stopPropagation(); leaveCustomSongView(modal); }
+        else modal.querySelector("[data-custom-close]").click();
+      }
     });
     modal.querySelector("[data-custom-scan]").onclick = function () {
       void loadCustomSongManager(modal, true);
@@ -5425,10 +5615,53 @@ async function openCustomSongManager() {
     };
     modal.querySelector("[data-custom-mapping-file]").onchange = function () { void importCustomSongMappings(modal, this.files && this.files[0]); };
     modal.querySelector("[data-custom-root]").oninput = function () {
+      modal.__songDebugPackage.cancel();
       invalidateCustomSongList();
       customSongDiagnosticsFor(modal).setSnapshot(null, "目录已更改，请重新扫描以获得此目录的报告。");
     };
     customSongDiagnosticsFor(modal);
+    var tasks=getVisionTaskCoordinator();
+    modal.__visionTasks=tasks;
+    modal.querySelector('[data-vision-batch-start]').onclick=function(){void refreshAndOrganizeCustomSongs(modal);};
+    ['pause','resume','stop','undo'].forEach(function(action){modal.querySelector('[data-vision-batch-'+action+']').onclick=function(){
+      if(action==='undo'&&!window.confirm('仅撤销仍属于本次任务且未被后来修改的项；已修改项会跳过。继续？'))return;void tasks.control(action);
+    };});
+    modal.querySelector('[data-vision-batch-jobs]').onchange=function(){tasks.select(this.value);};
+    modal.querySelector('[data-vision-batch-next]').onclick=function(){tasks.next();};
+    function dirtyVisionForm(event){if(event.target&&event.target.matches&&event.target.matches('[data-custom-name],[data-custom-file]')){modal.__visionDirty=true;modal.querySelector('[data-song-unsaved]').hidden=false;void tasks.humanActivity();}}
+    modal.addEventListener('input',dirtyVisionForm);modal.addEventListener('change',dirtyVisionForm);
+    modal.__songDebugPackage = createCustomSongDiagnostics.createDebugPackage({
+      openButton: modal.querySelector('[data-custom-diagnostic-export]'), panel: exportDialog,
+      status: exportDialog.querySelector('[data-custom-debug-status]'),
+      fragmentButton: exportDialog.querySelector('[data-custom-debug-fragments]'), basicButton: exportDialog.querySelector('[data-custom-debug-basic]'), cancelButton: exportDialog.querySelector('[data-custom-debug-cancel]'),
+      getRoot: function () { return modal.querySelector('[data-custom-root]').value.trim(); },
+      isHidden: function () { return modal.hidden; },
+      isBusy: function () { return customSongsState.busy || Boolean(customSongVisionState.run) || customSongDiagnosticsFor(modal).isExporting(); },
+      refreshBusy: function () { customSongManagerBusy(modal, customSongsState.busy); }, request: callApi,
+      onOpen: function () { modal.inert = true; modal.setAttribute('aria-hidden', 'true'); modal.__songHelp.hide(); var button = exportDialog.querySelector('[data-custom-debug-cancel]'); if (button.focus) button.focus(); },
+      onClose: function () { modal.inert = false; modal.removeAttribute('aria-hidden'); var button = modal.querySelector('[data-custom-diagnostic-export]'); if (!modal.hidden && button.focus) button.focus(); },
+      onExport: function (include) { modal.querySelector('[data-custom-status]').textContent = include ? '已发起下载。附带片段仍含私人信息，仅私下提供。' : '已发起诊断下载，不含私人片段。'; },
+      downloadBasic: downloadJson,
+      delay: function () { return new Promise(function (resolve) { setTimeout(resolve, 500); }); },
+      download: function (bundle) {
+        if (!bundle || bundle.mimeType !== 'application/gzip' || !/^linli-song-debug-(SENSITIVE-)?[a-f0-9-]+\.json\.gz$/.test(bundle.fileName) ||
+          typeof bundle.base64 !== 'string' || bundle.base64.length > 17 * 1024 * 1024) throw new Error('invalid-package');
+        var binary = atob(bundle.base64), bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        var url = URL.createObjectURL(new Blob([bytes], { type: 'application/gzip' }));
+        var link = document.createElement('a'); link.href = url; link.download = bundle.fileName; document.body.appendChild(link); link.click(); link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      }
+    });
+    exportDialog.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); modal.__songDebugPackage.cancel(); }
+      if (event.key === 'Tab') {
+        var buttons = Array.prototype.filter.call(exportDialog.querySelectorAll('button'), function (button) { return !button.disabled && !button.hidden; });
+        var first = buttons[0], last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    });
     modal.querySelector("[data-custom-prev]").onclick = function () {
       customSongsState.page = Math.max(0, customSongsState.page - 1);
       void loadCustomSongManager(modal, false);
@@ -5451,14 +5684,123 @@ async function openCustomSongManager() {
     modal.querySelector("[data-custom-save]").onclick = function () {
       void saveCustomSongEditor(modal);
     };
+    installCustomSongHome(modal);
   }
   modal.hidden = false;
+  setCustomSongView(modal, 'home');
+  modal.__songDebugPackage.cancel();
   clearCustomSongVision(modal);
   modal.querySelector("[data-custom-root]").value =
     (customSongsState.data && customSongsState.data.mediaRoot) || "";
   customSongsState.page = 0;
   customSongDiagnosticsFor(modal).setSnapshot(null);
   await loadCustomSongManager(modal, false);
+  if (!musicShape().loaded) { try { await ensureMusicLibraryLoaded(false, true); } catch (ignored) {} }
+  syncVisionTasks('manager-opened');
+  renderCustomSongHome(modal);
+  getVisionTaskCoordinator().open();
+}
+
+function installCustomSongHome(modal) {
+  var body=modal.querySelector('.lm-song-manager-body'), header=modal.querySelector('.lm-song-manager-header'), footer=modal.querySelector('.lm-song-manager-footer');
+  var manual=document.createElement('div');manual.setAttribute('data-song-editor-pane','');
+  while(body.firstChild)manual.appendChild(body.firstChild);
+  body.appendChild(manual);
+  var home=document.createElement('div');home.className='lm-song-home';home.setAttribute('data-song-home','');
+  home.innerHTML='<section class="lm-song-home-section"><h3>歌曲文件夹</h3><div class="lm-song-path-row"><span data-song-effective-path class="lm-song-path" aria-label="生效的歌曲文件夹"></span><button class="lm-button lm-button-small" data-song-folder-change>更换歌曲文件夹</button></div></section>'+
+    '<section class="lm-song-home-section lm-song-auto-row"><div><h3>自动整理</h3><p class="lm-modal-status">新增歌曲自动识别并保存；不覆盖手工设置。</p></div><label class="lm-music-switch"><input type="checkbox" role="switch" data-song-home-auto aria-label="自动整理"></label></section>'+
+    '<section class="lm-song-home-section lm-song-mapping-row"><h3>歌曲映射</h3><div class="lm-modal-actions" data-song-home-mappings></div></section><p class="lm-modal-status" role="status" data-song-home-notice></p><div data-song-home-tasks></div>';
+  body.insertBefore(home,manual);
+  var list=document.createElement('div');list.setAttribute('data-song-list-pane','');
+  list.innerHTML='<div class="lm-song-list-toolbar"><input class="lm-input" data-song-list-search aria-label="搜索本页歌曲" placeholder="搜索本页歌曲"><span class="lm-modal-status" data-song-list-count></span></div><div data-song-list-rows></div>';
+  body.insertBefore(list,manual);
+  var pager=modal.querySelector('[data-custom-prev]').parentElement;list.appendChild(pager);
+  modal.querySelector('[data-custom-song]').parentElement.hidden=true;
+  var sourceRoot=modal.querySelector('[data-custom-root]');sourceRoot.parentElement.hidden=true;
+  home.appendChild(sourceRoot.parentElement);
+  ['export','import','file'].forEach(function(key){home.querySelector('[data-song-home-mappings]').appendChild(modal.querySelector('[data-custom-mapping-'+key+']'));});
+  home.querySelector('[data-song-home-tasks]').appendChild(modal.querySelector('[data-song-task-details]'));
+  var fill=manual.querySelector('.lm-song-fill');if(fill)fill.hidden=true;
+  var advanced=manual.querySelector('[data-song-advanced]');if(advanced)advanced.hidden=true;
+  var back=document.createElement('button');back.className='lm-button lm-button-small';back.setAttribute('data-song-view-back','');back.textContent='返回';header.insertBefore(back,header.firstChild);
+  back.onclick=function(){leaveCustomSongView(modal);};
+  var exportButton=modal.querySelector('[data-custom-diagnostic-export]');footer.insertBefore(exportButton,footer.firstChild);
+  var actions=modal.querySelector('[data-custom-save]').parentElement;
+  var manualButton=document.createElement('button');manualButton.className='lm-button';manualButton.setAttribute('data-song-manual','');manualButton.textContent='手动整理';actions.insertBefore(manualButton,actions.firstChild);
+  manualButton.onclick=function(){setCustomSongView(modal,'list');};
+  var organize=modal.querySelector('[data-vision-batch-start]');organize.textContent='重新识别全部歌曲';actions.insertBefore(organize,modal.querySelector('[data-custom-close]'));
+  var cancel=document.createElement('button');cancel.className='lm-button';cancel.setAttribute('data-song-edit-cancel','');cancel.textContent='取消';actions.insertBefore(cancel,modal.querySelector('[data-custom-save]'));
+  cancel.onclick=function(){leaveCustomSongView(modal);};
+  home.querySelector('[data-song-folder-change]').onclick=function(){void changeCustomSongFolder(modal);};
+  home.querySelector('[data-song-home-auto]').onchange=async function(){
+    var value=this.checked;try{await setMusicFeature('visionAutoFillEnabled',value);modal.querySelector('[data-custom-status]').textContent=value?'自动整理已开启':'自动整理已关闭，已有结果保留';}
+    catch(error){modal.querySelector('[data-custom-status]').textContent=error.message||'自动整理设置未保存';}finally{renderCustomSongHome(modal);}
+  };
+  list.querySelector('[data-song-list-search]').oninput=function(){renderCustomSongList(modal);};
+  modal.__managerHomeReady=true;
+}
+function setCustomSongView(modal, view) {
+  if (!modal.__managerHomeReady) return;
+  modal.__managerView=view;modal.__songHelp.hide();
+  modal.querySelector('[data-song-home]').hidden=view!=='home';
+  modal.querySelector('[data-song-list-pane]').hidden=view!=='list';
+  modal.querySelector('[data-song-editor-pane]').hidden=view!=='editor';
+  modal.querySelector('[data-song-view-back]').hidden=view==='home';
+  modal.querySelector('#local-custom-song-title').textContent=view==='home'?'本地演奏':view==='list'?'本地歌曲':'修正这首歌';
+  modal.querySelector('.lm-song-manager-footer').hidden=view==='list';
+  ['[data-custom-diagnostic-export]','[data-song-manual]','[data-vision-batch-start]','[data-custom-close]'].forEach(function(selector){modal.querySelector(selector).hidden=view!=='home';});
+  ['[data-custom-save]','[data-song-edit-cancel]'].forEach(function(selector){modal.querySelector(selector).hidden=view!=='editor';});
+  if(view==='list')renderCustomSongList(modal);
+  if(view==='home')renderCustomSongHome(modal);
+  modal.querySelector('.lm-song-manager-body').scrollTop=0;
+}
+function leaveCustomSongView(modal) {
+  if(customSongsState.busy)return;
+  if(modal.__visionDirty&&!window.confirm('这首歌还有未保存的修改，放弃并返回？'))return;
+  if(modal.__managerView==='editor'){clearCustomSongVision(modal);renderCustomSongEditor(modal);setCustomSongView(modal,'list');}
+  else setCustomSongView(modal,'home');
+}
+function renderCustomSongList(modal) {
+  if(!modal.__managerHomeReady)return;
+  var data=modal.__customSongsPage, query=modal.querySelector('[data-song-list-search]').value.trim().toLowerCase(), rows=modal.querySelector('[data-song-list-rows]');rows.textContent='';
+  var songs=data&&data.list||[];songs.filter(function(song){return !query||String(song.name).toLowerCase().indexOf(query)>=0;}).forEach(function(song){
+    var row=document.createElement('div');row.className='lm-song-list-row';var name=document.createElement('span');name.textContent=song.name;row.appendChild(name);
+    var button=document.createElement('button');button.className='lm-button lm-button-small';button.textContent='修正';button.setAttribute('data-song-edit',song.nameKey);
+    button.onclick=function(){customSongsState.selected=song.nameKey;modal.querySelector('[data-custom-song]').value=song.nameKey;clearCustomSongVision(modal);renderCustomSongEditor(modal);setCustomSongView(modal,'editor');customSongManagerBusy(modal,false);};row.appendChild(button);rows.appendChild(row);
+  });
+  if(!rows.childNodes.length)rows.textContent=query?'本页没有匹配的歌曲':'此文件夹尚无可整理的歌曲';
+  modal.querySelector('[data-song-list-count]').textContent=data?'共 '+data.total+' 首':'';
+}
+function renderCustomSongHome(modal) {
+  if(!modal.__managerHomeReady)return;
+  var root=customSongsState.data&&customSongsState.data.mediaRoot||modal.querySelector('[data-custom-root]').value;
+  setLocalElementText(modal.querySelector('[data-song-effective-path]'),root||'尚未找到歌曲文件夹');modal.querySelector('[data-song-effective-path]').title=root;
+  var input=modal.querySelector('[data-song-home-auto]');input.checked=musicFeatureEnabled('visionAutoFillEnabled');
+  input.disabled=customSongsState.busy||Boolean(musicShape().featureSaving&&musicShape().featureSaving.visionAutoFillEnabled)||!musicShape().loaded;
+  var data=customSongsState.data, notice=customSongsState.error||data&&data.refresh&&data.refresh.error||(!data?'':data.total===0?'此文件夹中还没有找到演奏文件。':data.refresh&&data.refresh.refreshing?'正在检查本地演奏，已有曲目可继续使用。':'');
+  setLocalElementText(modal.querySelector('[data-song-home-notice]'),notice);setLocalElementHidden(modal.querySelector('[data-song-home-notice]'),!notice);
+  var task=visionTaskCoordinator&&visionTaskCoordinator.status();modal.querySelector('[data-song-task-details]').hidden=!(task&&task.job);
+}
+async function changeCustomSongFolder(modal) {
+  if(customSongsState.busy)return;var oldRoot=modal.querySelector('[data-custom-root]').value;customSongManagerBusy(modal,true);
+  var changed=false;
+  try{
+    var result=await callApi('/api/custom-songs/choose-folder',{method:'POST',body:{mediaRoot:oldRoot||undefined}});
+    if(result.cancelled===true)return;
+    if(typeof result.path!=='string'||!result.path)throw new Error('文件夹选择无效');
+    var scan=await callApi('/api/custom-songs/scan',{method:'POST',body:{mediaRoot:result.path}});
+    modal.querySelector('[data-custom-root]').value=scan.mediaRoot||result.path;
+    customSongsState.data=Object.assign({},customSongsState.data||{},{mediaRoot:scan.mediaRoot||result.path});
+    customSongsState.page=0;customSongsState.selected=null;customSongsState.error='';customSongDiagnosticsFor(modal).setSnapshot(scan.diagnostics||null);changed=true;
+  }catch(error){modal.querySelector('[data-custom-root]').value=oldRoot;modal.querySelector('[data-custom-status]').textContent=error.message||'文件夹未更换';}
+  finally{customSongManagerBusy(modal,false);renderCustomSongHome(modal);}
+  if(changed){customSongsChanged();await loadCustomSongManager(modal,false);syncVisionTasks('folder-changed');}
+}
+async function refreshAndOrganizeCustomSongs(modal) {
+  if(customSongsState.busy||modal.__visionDirty)return;
+  await loadCustomSongManager(modal,true);
+  if(!customSongsState.error)await getVisionTaskCoordinator().startManual();
+  renderCustomSongHome(modal);
 }
 
 async function exportCustomSongMappings(modal) {
@@ -5504,12 +5846,12 @@ function customSongManagerBusy(modal, busy) {
   customSongsState.busy = busy;
   var reviewing = Boolean(customSongVisionState.run);
   modal.querySelectorAll("button,input,select").forEach(function (node) {
-    node.disabled = busy || reviewing || Boolean(customSongDiagnosticsFor(modal).isExporting());
+    node.disabled = busy || reviewing || Boolean(customSongDiagnosticsFor(modal).isExporting()) || Boolean(modal.__songDebugPackage && modal.__songDebugPackage.isBusy());
   });
   modal.querySelector("[data-custom-close]").disabled = busy || Boolean(customSongDiagnosticsFor(modal).isExporting());
   modal.querySelector("[data-custom-vision-cancel]").disabled = !reviewing;
   modal.querySelector("[data-custom-vision-cancel]").style.display = reviewing ? "" : "none";
-  if (!busy && !reviewing && !customSongDiagnosticsFor(modal).isExporting()) {
+  if (!busy && !reviewing && !customSongDiagnosticsFor(modal).isExporting() && !(modal.__songDebugPackage && modal.__songDebugPackage.isBusy())) {
     var data = modal.__customSongsPage;
     modal.querySelector("[data-custom-prev]").disabled =
       !data || customSongsState.page === 0;
@@ -5520,6 +5862,8 @@ function customSongManagerBusy(modal, busy) {
     renderCustomSongVision(modal);
   }
   customSongDiagnosticsFor(modal).render();
+  if (modal.__songDebugPackage) modal.__songDebugPackage.render();
+  if(visionTaskCoordinator)renderVisionTaskPanel({data:visionTaskCoordinator.status(),job:visionTaskCoordinator.status()&&visionTaskCoordinator.status().job,busy:false,message:''});
 }
 
 async function loadCustomSongManager(modal, scan) {
@@ -5583,11 +5927,13 @@ async function loadCustomSongManager(modal, scan) {
     modal.querySelector("[data-custom-page]").textContent =
       "共 " + data.total + " 首 · 第 " + (customSongsState.page + 1) + " 页";
     status.textContent = data.list.length
-      ? "已读取。关闭管理窗口后，可在“我的上传”中试听或演奏。"
+      ? "已读取"
       : "未找到可用的定制演奏视频。请检查下载文件夹。";
     if (data.warnings && data.warnings.length)
       status.textContent += "\n" + data.warnings.join("\n");
     renderCustomSongEditor(modal);
+    customSongsState.error='';
+    if(modal.__managerHomeReady){renderCustomSongList(modal);renderCustomSongHome(modal);}
     if (scan) customSongsChanged();
   } catch (error) {
     if (error.scanDiagnostics) {
@@ -5610,6 +5956,8 @@ async function loadCustomSongManager(modal, scan) {
 }
 
 function renderCustomSongEditor(modal) {
+  modal.__visionDirty=false;
+  modal.querySelector('[data-song-unsaved]').hidden=true;
   var data = modal.__customSongsPage;
   var song =
     data &&
@@ -5649,6 +5997,10 @@ function renderCustomSongEditor(modal) {
     var evidenceNote = document.createElement("p");
     evidenceNote.className = "lm-modal-status";
     evidenceNote.textContent = file.evidenceNote ? String(file.evidenceNote) : "";
+    var help = document.createElement('button'); help.type = 'button'; help.className = 'lm-song-help'; help.textContent = '?';
+    help.setAttribute('aria-label', file.fileName + ' 来源说明');
+    help.setAttribute('data-song-help', (evidenceNote.textContent ? evidenceNote.textContent + '。' : '') + '当前：' + customSongVisionLabel(file.tod) + ' · ' + customSongEvidenceLabel(file) + '。原始或手工映射不会被辅助核对覆盖；画面建议需采用并保存。');
+    badges.appendChild(help);
     var select = document.createElement("select");
     select.className = "lm-select";
     select.setAttribute("data-custom-file", file.fileName);
@@ -5670,8 +6022,9 @@ function renderCustomSongEditor(modal) {
     select.value = initialSelection;
     var details = document.createElement("details");
     var summary = document.createElement("summary");
-    summary.textContent = "预览视频";
+    summary.textContent = "画面核对与预览";
     var video = document.createElement("video");
+    video.setAttribute('data-custom-song-preview','');
     video.controls = true;
     video.preload = "none";
     video.src = file.url;
@@ -5680,7 +6033,6 @@ function renderCustomSongEditor(modal) {
     details.appendChild(video);
     row.appendChild(label);
     row.appendChild(badges);
-    row.appendChild(evidenceNote);
     row.appendChild(select);
     var panel = document.createElement("div");
     panel.setAttribute("data-vision-file", file.fileName);
@@ -5704,12 +6056,13 @@ function renderCustomSongEditor(modal) {
     apply.setAttribute("data-vision-apply", ""); apply.textContent = "采用建议"; apply.disabled = true;
     apply.onclick = function () { applyCustomSongVision(modal, file.fileName); };
     actions.appendChild(review); actions.appendChild(apply);
-    panel.appendChild(thumbnail); panel.appendChild(hint); panel.appendChild(actions);
+    details.appendChild(thumbnail); details.appendChild(actions);
+    panel.appendChild(hint); panel.appendChild(details);
     row.appendChild(panel);
-    row.appendChild(details);
     container.appendChild(row);
   });
   renderCustomSongVision(modal);
+  if (modal.__songHelp) modal.__songHelp.refresh();
 }
 
 function customSongEvidence(file) {
@@ -5726,7 +6079,7 @@ function customSongAutomaticEvidence(file) {
 
 function customSongEvidenceValue(value) {
   value = String(value || "").toLowerCase();
-  return ["original", "inferred", "manual", "mapping", "legacy", "unknown", "missing"].indexOf(value) >= 0
+  return ["original", "inferred", "manual", "mapping", "legacy", "unknown", "missing", "vision", "vision-pending"].indexOf(value) >= 0
     ? value
     : "unknown";
 }
@@ -5738,6 +6091,8 @@ function customSongEvidenceLabelValue(value) {
     manual: "手工设置",
     mapping: "歌曲映射表",
     legacy: "旧记录待确认",
+    vision: "画面推测",
+    'vision-pending': "画面推测待核验",
     unknown: "未知",
     missing: "未知",
   };
@@ -5780,7 +6135,7 @@ function customSongEffectiveTod(file) {
 }
 
 function customSongCoverageText(song) {
-  var counts = { original: 0, inferred: 0, manual: 0, mapping: 0, pending: 0 };
+  var counts = { original: 0, inferred: 0, manual: 0, mapping: 0, vision: 0, pending: 0 };
   var periods = {};
   (song.localFiles || []).forEach(function (file) {
     var evidence = customSongEvidence(file);
@@ -5788,7 +6143,8 @@ function customSongCoverageText(song) {
     if (evidence === "inferred") counts.inferred += 1;
     if (evidence === "manual") counts.manual += 1;
     if (evidence === "mapping") counts.mapping += 1;
-    if (evidence === "legacy" || evidence === "unknown" || evidence === "missing" ||
+    if (evidence === "vision") counts.vision += 1;
+    if (evidence === "legacy" || evidence === "unknown" || evidence === "missing" || evidence === "vision-pending" ||
       (evidence === "manual" && !customSongEffectiveTod(file)) || file.conflict === true)
       counts.pending += 1;
     var tod = customSongEffectiveTod(file);
@@ -5806,7 +6162,9 @@ function customSongCoverageText(song) {
     " · 手工 " + counts.manual + " · 待确认 " + counts.pending;
   if (counts.mapping) summary += " · 映射表 " + counts.mapping;
   if (confirmed) return "各时段已匹配（原始记录确认）。" + summary;
+  if (counts.vision) summary += ' · 画面推测 '+counts.vision;
   if (counts.inferred) summary += "。推定不等于原始确认";
+  if (counts.vision) summary += "。画面推测不等于原始确认";
   return (allPeriods ? "各时段已设置，证据状态仍需核对。" : "部分时段未确认或缺失，当前复用现有视频。") + summary;
 }
 
@@ -5814,6 +6172,7 @@ async function saveCustomSongEditor(modal) {
   if (customSongsState.busy || customSongVisionState.run || !customSongsState.selected) return;
   customSongManagerBusy(modal, true);
   try {
+    if(visionTaskCoordinator)await visionTaskCoordinator.humanActivity();
     var name = modal.querySelector("[data-custom-name]").value;
     var mappings = Array.prototype.map.call(
       modal.querySelectorAll("[data-custom-file]"),
@@ -5855,6 +6214,7 @@ async function saveCustomSongEditor(modal) {
     customSongsChanged();
     modal.querySelector("[data-custom-status]").textContent = "已保存。";
     modal.querySelector("[data-custom-vision-status]").textContent = "已保存。当前映射以保存结果为准，画面建议不会自动写入。";
+    if(modal.__managerView==='editor')setCustomSongView(modal,'list');
   } catch (error) {
     modal.querySelector("[data-custom-status]").textContent =
       error.message || String(error);
@@ -6198,8 +6558,9 @@ function musicShape() {
   if (!hasOwn(music, "createAfter")) music.createAfter = null;
   return music;
 }
-var MUSIC_FEATURE_KEYS = ["customPlaylistsEnabled", "batchOperationsEnabled", "desktopClearEnabled"];
+var MUSIC_FEATURE_KEYS = ["customPlaylistsEnabled", "batchOperationsEnabled", "desktopClearEnabled", "visionAutoFillEnabled"];
 function musicFeatureEnabled(key) {
+  if(key==='visionAutoFillEnabled')return Boolean(musicShape().loaded&&musicShape().features&&musicShape().features[key]===true&&!musicShape().visionAutoBlocked);
   return !musicShape().features || musicShape().features[key] !== false;
 }
 async function setMusicFeature(key, value) {
@@ -6211,11 +6572,14 @@ async function setMusicFeature(key, value) {
   var previous = musicFeatureEnabled(key);
   var patch = {}; patch[key] = Boolean(value);
   // Keep the clicked state visible during persistence. Each request owns one key.
-  music.features = Object.assign({}, music.features || {}, patch);
+  music.features = Object.assign({}, music.features || {}, key==='visionAutoFillEnabled'?{visionAutoFillEnabled:false}:patch);
+  if(key==='visionAutoFillEnabled'){music.visionAutoBlocked=!value;syncVisionTasks();}
   music.featureSaving[key] = true;
   if (typeof mountMusicEnhancementSettings === "function") mountMusicEnhancementSettings();
   try {
-    await callApi("/api/music-library/preferences", { method: "POST", body: patch });
+    var savedPreferences=await callApi("/api/music-library/preferences", { method: "POST", body: patch });
+    if(key==='visionAutoFillEnabled'&&value&&(!savedPreferences||savedPreferences.visionAutoFillEnabled!==true))throw new Error('服务尚未确认自动补齐已开启，请更新或重试。');
+    if(key==='visionAutoFillEnabled'){music.visionAutoBlocked=false;music.loaded=true;}
     music.features = Object.assign({}, music.features || {}, patch);
     if (key === "batchOperationsEnabled" && !value) { music.batchMode = false; clearMusicSelection(); }
     if (key === "customPlaylistsEnabled" && !value && isCustomMusicView()) {
@@ -6228,8 +6592,10 @@ async function setMusicFeature(key, value) {
       closeMusicModal(true);
     }
     renderMusicEnhancements();
+    if(key==='visionAutoFillEnabled')syncVisionTasks('preference-changed');
   } catch (error) {
-    music.features[key] = previous;
+    music.features[key] = key==='visionAutoFillEnabled'?false:previous;
+    if(key==='visionAutoFillEnabled'){music.visionAutoBlocked=true;syncVisionTasks();}
     renderMusicEnhancements();
     throw error;
   } finally {
@@ -6461,8 +6827,8 @@ function endMusicOperation() {
   mountMusicBehaviorSetting();
 }
 
-async function ensureMusicLibraryLoaded(force) {
-  if (!musicBridgeAvailable() && !isSettingsRoute()) return;
+async function ensureMusicLibraryLoaded(force, localManager) {
+  if (!localManager && !musicBridgeAvailable() && !isSettingsRoute()) return;
   var music = musicShape();
   if ((music.loaded && !force) || (music.loading && !force)) return;
   var generation = ++music.libraryGeneration;
@@ -6477,6 +6843,7 @@ async function ensureMusicLibraryLoaded(force) {
       if (music.featureSaving[key]) kept[key] = musicFeatureEnabled(key); return kept;
     }, {}));
     music.loaded = true;
+    syncVisionTasks();
   } catch (error) {
     if (generation === music.libraryGeneration)
       musicNotice("自定义歌单读取失败：" + (error.message || error), "error");
@@ -7530,7 +7897,7 @@ function createCustomSongDiagnostics(options) {
     if (snapshot && snapshot.local.mediaRoot !== root) snapshot = null;
     var busy = options.isBusy() || exporting;
     options.reasons.disabled = busy || !snapshot;
-    options.exportButton.disabled = busy || !snapshot;
+    options.exportButton.disabled = busy || (!options.unifiedExport && !snapshot);
     var summary = options.summary;
     var detail = options.detail;
     if (!snapshot) {
@@ -7596,7 +7963,7 @@ function createCustomSongDiagnostics(options) {
     options.detail.style.display = show ? "" : "none";
     this.textContent = show ? "收起原因" : "查看原因";
   };
-  options.exportButton.onclick = function () { void exportReport(); };
+  if (!options.unifiedExport) options.exportButton.onclick = function () { void exportReport(); };
 
   return Object.freeze({
     setSnapshot: setSnapshot,
@@ -7605,6 +7972,300 @@ function createCustomSongDiagnostics(options) {
     isExporting: function () { return exporting; },
     hasSnapshot: function () { return Boolean(snapshotState); }
   });
+}
+
+// One capture, explicit three-way choice, no persistent consent or player mutation.
+createCustomSongDiagnostics.createDebugPackage = function (options) {
+  var generation = 0, job = null, jobRoot = '', busy = false, ready = null, phase = 'closed';
+  function render() {
+    options.openButton.disabled = options.isBusy() || phase !== 'closed';
+    options.fragmentButton.disabled = phase !== 'ready' || busy;
+    options.basicButton.disabled = !['ready', 'failed'].includes(phase) || busy;
+    options.basicButton.textContent = phase === 'failed' ? '仅导出基础诊断' : '仅导出诊断';
+    options.fragmentButton.hidden = phase === 'failed';
+    options.cancelButton.disabled = false;
+  }
+  function discard(old, root) {
+    if (old && old.jobId) return options.request('/api/custom-songs/debug-package/cancel', {
+      method: 'POST', body: { jobId: old.jobId, mediaRoot: root }
+    }).catch(function () {});
+  }
+  function cancel() {
+    generation++;
+    var old = job, root = jobRoot; job = null; ready = null; jobRoot = ''; busy = false; phase = 'closed';
+    options.panel.hidden = true;
+    void discard(old, root); render(); options.refreshBusy();
+    if (options.onClose) options.onClose();
+  }
+  function valid(current, root) { return current === generation && !options.isHidden() && options.getRoot() === root; }
+  async function open() {
+    if (options.isBusy() || phase !== 'closed') return;
+    var current = ++generation, root = options.getRoot();
+    busy = true; phase = 'preparing'; jobRoot = root; options.panel.hidden = false;
+    options.status.textContent = '正在准备诊断快照，不修改曲目。完成后请选择导出方式；取消不会下载。';
+    if (options.onOpen) options.onOpen(); render(); options.refreshBusy();
+    try {
+      var started = await options.request('/api/custom-songs/debug-package/start', { method: 'POST', body: { mediaRoot: root } });
+      if (!valid(current, root)) { void discard(started, root); if (current === generation) cancel(); return; }
+      job = started;
+      while (current === generation) {
+        if (!valid(current, root)) { cancel(); return; }
+        var status = await options.request('/api/custom-songs/debug-package/status', { method: 'POST', body: { mediaRoot: root, jobId: job.jobId } });
+        if (!valid(current, root)) { if (current === generation) cancel(); return; }
+        options.status.textContent = status.state === 'verifying' ? '正在离线核对原材料与脱敏材料…' : '正在收集排障材料（已保留 ' + (status.retainedEvents || 0) + ' 条）…';
+        if (status.state === 'failed' || status.state === 'cancelled') throw new Error(status.failureCode || 'capture-failed');
+        if (status.state === 'ready') {
+          ready = status; phase = 'ready';
+          options.status.textContent = (status.complete ? '范围内收集完成' : '存在未采集范围') + '；有损记录 ' + status.lossyEvents + ' 条。可附带 ' + status.rawRetainedEvents + ' 条已定向脱敏片段，因安全或容量限制省略 ' + status.rawOmittedEvents + ' 条。扫描标识：' + status.scanId + '。';
+          return;
+        }
+        await options.delay();
+      }
+    } catch (error) {
+      if (current === generation) {
+        void discard(job, root); job = null; ready = null; phase = 'failed';
+        options.status.textContent = '完整材料未生成（收集失败、过期或超过安全容量）。可仅导出已有基础诊断：不含片段、不含本次材料，以摘要自身的扫描标识为准；也可取消后重试。';
+      }
+    } finally { if (current === generation) { busy = false; render(); options.refreshBusy(); } }
+  }
+  async function exportChoice(include) {
+    if (typeof include !== 'boolean' || busy || (phase !== 'ready' && !(phase === 'failed' && !include))) return;
+    var current = generation, root = jobRoot;
+    if (!valid(current, root)) { cancel(); return; }
+    busy = true; render(); options.refreshBusy();
+    try {
+      if (phase === 'failed') {
+        // Read-only fallback: never trigger normal scan/rebuild or pretend this is the failed snapshot.
+        var snapshot = await options.request('/api/custom-songs/diagnostics', { method: 'POST', body: { mediaRoot: root } });
+        if (!valid(current, root)) return;
+        var sameRoot = function (value) { return String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(); };
+        if (!snapshot || !snapshot.scanId || !snapshot.local || sameRoot(snapshot.local.mediaRoot) !== sameRoot(root)) throw new Error('no-basic-snapshot');
+        var report = await options.request('/api/custom-songs/diagnostics/export', { method: 'POST', body: { mediaRoot: root, scanId: snapshot.scanId } });
+        if (!valid(current, root)) return;
+        if (!report || report.scanId !== snapshot.scanId) throw new Error('changed-basic-snapshot');
+        options.downloadBasic({ kind: 'basic-diagnostics-only', materialCaptured: false, fragmentsIncluded: false, scanId: report.scanId, diagnostics: report }, 'linli-song-basic-' + report.scanId);
+      } else {
+        var bundle = await options.request('/api/custom-songs/debug-package/download', { method: 'POST', body: {
+          mediaRoot: root, jobId: job.jobId, scanId: ready.scanId, includeRaw: include,
+          confirmSensitive: include, confirmationId: include ? ready.confirmationId : undefined
+        } });
+        if (!valid(current, root)) return;
+        options.download(bundle);
+      }
+      job = null; cancel();
+      if (options.onExport) options.onExport(include);
+    } catch (error) {
+      if (current === generation) { phase = 'failed'; void discard(job, root); job = null; ready = null;
+        options.status.textContent = '导出未完成。若已有基础诊断，可重试“仅导出基础诊断”；没有可用摘要时请取消，并检查本地服务。不会回退导出原文或自动上传。'; }
+    } finally { if (current === generation) { busy = false; render(); options.refreshBusy(); } }
+  }
+  options.openButton.onclick = function () { return open(); };
+  options.fragmentButton.onclick = function () { return exportChoice(true); };
+  options.basicButton.onclick = function () { return exportChoice(false); };
+  options.cancelButton.onclick = cancel;
+  return Object.freeze({ open: open, exportChoice: exportChoice, cancel: cancel, render: render, isBusy: function () { return phase !== 'closed'; } });
+};
+
+// Scoped help for this manager; fixed sibling escapes the independently scrolling body.
+createCustomSongDiagnostics.createHelp = function (modal) {
+  var tooltip = document.createElement('div'), anchor = null, pinned = false;
+  tooltip.id = 'lm-song-help-text'; tooltip.className = 'lm-song-tooltip'; tooltip.setAttribute('role', 'tooltip'); tooltip.hidden = true;
+  document.body.appendChild(tooltip);
+  function hide() { if (anchor) { anchor.setAttribute('aria-expanded', 'false'); anchor.removeAttribute('aria-describedby'); } anchor = null; pinned = false; tooltip.hidden = true; }
+  function show(button) {
+    if (anchor !== button) hide(); anchor = button; tooltip.textContent = button.getAttribute('data-song-help'); tooltip.hidden = false;
+    button.setAttribute('aria-expanded', 'true'); button.setAttribute('aria-describedby', tooltip.id);
+    var rect = button.getBoundingClientRect(), box = tooltip.getBoundingClientRect(), width = window.innerWidth || 800, height = window.innerHeight || 600;
+    tooltip.style.left = Math.max(8, Math.min(rect.left, width - box.width - 8)) + 'px';
+    tooltip.style.top = Math.max(8, Math.min(rect.bottom + 8, height - box.height - 8)) + 'px';
+  }
+  function refresh() { modal.querySelectorAll('[data-song-help]').forEach(function (button) {
+    if (button.__songHelpBound) return; button.__songHelpBound = true;
+    button.setAttribute('aria-expanded', 'false');
+    button.onmouseenter = function () { if (!pinned) show(button); };
+    button.onmouseleave = function () { if (!pinned && document.activeElement !== button) hide(); };
+    button.onfocus = function () { show(button); };
+    button.onblur = hide;
+    button.onclick = function (event) { if (event && event.stopPropagation) event.stopPropagation(); if (pinned && anchor === button) hide(); else { show(button); pinned = true; } };
+    button.onkeydown = function (event) { if (event.key === 'Escape' && anchor) { event.preventDefault(); event.stopPropagation(); hide(); } };
+  }); }
+  refresh();
+  document.addEventListener('click', function (event) { if (anchor && event.target !== anchor) hide(); });
+  modal.querySelector('.lm-song-manager-body').addEventListener('scroll', hide);
+  window.addEventListener('resize', hide);
+  return { hide: hide, refresh: refresh };
+};
+// Independent page-lifetime worker. The manager panel is a view, not the owner of the task.
+function createVisionTaskController(options) {
+  var clientId = 'vision-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+  var data = null, selected = null, cursor = 0, root = options.getRoot(), autoEnabled = false, pendingAuto = false;
+  var timer = null, heartbeat = null, running = false, lease = null, aborter = null, epoch = 0, disposed = false;
+  var lastSignal = '', environmentHold = false, panelOpen = false, requestBusy = false, message = '', preparedRoot = null, decodeFlight = null, viewSequence = 0, pendingInput = null;
+  var now = options.now || Date.now;
+  function request(action, body) { return options.request('/api/custom-songs/vision/' + action, { method: 'POST', body: body || {} }); }
+  function render() { options.render({ data: data, job: data && data.job, message: message, busy: requestBusy, decoding: running }); }
+  function schedule(delay) {
+    if (disposed || timer !== null) return;
+    timer = options.setTimeout(function () { timer = null; void tick(); }, delay === undefined ? 1500 : delay);
+  }
+  function stopDecode() { epoch++; if (aborter) aborter.abort(); }
+  async function release(value) { if (value) try { await request('control', { action: 'release', token: value.token, clientId: clientId }); } catch (ignored) {} }
+  function environment() { try { return options.environment(); } catch (ignored) { return { visible: false, canvas: false, rvfc: false }; } }
+  function capable(value) { return value.visible === true && value.canvas === true && value.rvfc === true; }
+  async function refresh() {
+    var sequence=++viewSequence, requestedRoot=root, requestedJob=selected, requestedCursor=cursor;
+    var current=function(){return !disposed&&sequence===viewSequence&&root===requestedRoot&&options.getRoot()===requestedRoot&&selected===requestedJob&&cursor===requestedCursor;};
+    try {
+      var next=await request('status', { mediaRoot: requestedRoot || undefined, jobId: requestedJob || undefined, cursor: requestedCursor });
+      if(current()){data=next;render();}return data;
+    } catch(error){if(current())throw error;return data;}
+  }
+  async function handleEnvironment() {
+    var job = lease ? { id: lease.jobId, mediaRoot: lease.root, status: 'running' } : data && data.job, env = environment();
+    if (data && data.decoder && data.decoder.clientId !== clientId) return capable(env) && !environmentHold;
+    if (job && ['queued','running'].indexOf(job.status) >= 0 && !capable(env)) {
+      stopDecode();
+      await request('control', { mediaRoot: job.mediaRoot, jobId: job.id, action: 'environment', clientId: clientId, reason: env.visible ? 'unsupported' : 'hidden' });
+      message = env.visible ? '当前前端缺少可靠取帧能力（Canvas / RVFC），任务已暂停；可手工校正。' : '前端不可见，等待恢复可见后继续。';
+      await refresh();
+    }
+    return capable(env) && !environmentHold;
+  }
+  async function tick() {
+    if (disposed || requestBusy || running) return;
+    requestBusy = true;
+    try {
+      if (options.getRoot() !== root) { await changeRoot(options.getRoot()); return; }
+      if (options.isHumanBusy()) { schedule(); return; }
+      if (!capable(environment())) { await refresh(); await handleEnvironment(); return; }
+      if (pendingAuto && autoEnabled) {
+        pendingAuto = false;
+        if (options.prepareAuto && preparedRoot !== root) { var prepared=await options.prepareAuto(); pendingInput=prepared&&prepared.refresh||null; preparedRoot = root; }
+        if (!autoEnabled) return;
+        if(pendingInput&&pendingInput.refreshing&&options.inputStatus){
+          pendingInput=await options.inputStatus(pendingInput.mediaRoot||root);
+          if(!autoEnabled)return;
+          if(pendingInput.refreshing){pendingAuto=true;message='等待曲库检查完成后处理新索引。';schedule(1000);return;}
+          if(pendingInput.error){message='曲库检查未完成，请重新扫描后再试。';pendingInput=null;return;}
+          pendingInput=null;
+        }
+        await request('start', { mediaRoot: root || undefined, mode: 'auto', retryUnknown: false });
+      }
+      await refresh();
+      if (!await handleEnvironment()) return;
+      if (data && data.job && data.job.status === 'waiting-environment' &&
+        ((data.job.mode === 'auto' && data.job.reason === 'decoder-disconnected' && autoEnabled) ||
+          ['hidden','unsupported'].indexOf(data.job.reason) >= 0 && (!data.job.inventory.ownerClientId || data.job.inventory.ownerClientId === clientId))) {
+        await request('control', { mediaRoot: data.job.mediaRoot, jobId: data.job.id, action: 'resume', clientId: clientId }); await refresh();
+      }
+      var claimed = await request('claim', { mediaRoot: root || undefined, clientId: clientId, capabilities: environment() });
+      if (claimed.state === 'claimed') { requestBusy = false; decodeFlight = decode(claimed); await decodeFlight; decodeFlight = null; return; }
+      if (claimed.state === 'manual-resume-required') message = '上次手动任务需明确继续或接管，不会因自动开关自行重启。';
+      var job = data && data.job;
+      if (panelOpen || job && ['queued','running'].indexOf(job.status) >= 0 || claimed.state === 'retry' || claimed.state === 'busy') schedule();
+    } catch (error) {
+      message = '识别任务暂不可用，请确认本地服务后重试。';
+      if (autoEnabled && error && (error.status === 409 || /稍后|正在/.test(error.message || ''))) { pendingAuto = true; schedule(2000); }
+      render();
+    }
+    finally { requestBusy = false; render(); }
+  }
+  async function decode(claimed) {
+    var current = ++epoch, reports = []; lease = claimed.lease; running = true; aborter = new AbortController();
+    var ownedLease = lease;
+    function stillCurrent() { return current === epoch && !disposed && capable(environment()) && now() < ownedLease.expiresAt && (!autoEnabled ? ownedLease.mode !== 'auto' : true); }
+    heartbeat = options.setInterval(function () {
+      void request('heartbeat', { token: ownedLease.token, clientId: clientId, generation: ownedLease.generation }).then(function (answer) {
+        if (!answer.accepted) stopDecode(); else ownedLease.expiresAt = answer.expiresAt;
+      }).catch(stopDecode);
+    }, 5000);
+    try {
+      for (var i = 0; i < ownedLease.targets.length; i++) {
+        if (!stillCurrent() || options.isHumanBusy()) throw new Error('interrupted');
+        var target = ownedLease.targets[i], frames = [], errorCode = null;
+        if (!target.cached) {
+          try {
+            await options.capture({ url: target.url, signal: aborter.signal, thumbnail: false, onFrame: function (frame) {
+              if (!stillCurrent() || options.isHumanBusy()) throw new Error('interrupted');
+              frames.push({ time: frame.time, target: frame.target, verified: frame.verified === true,
+                feature: options.features(frame.imageData, frame.sourceWidth, frame.sourceHeight) });
+              return false;
+            } });
+          } catch (error) {
+            if (!stillCurrent() || aborter.signal.aborted || error.message === 'interrupted') throw error;
+            errorCode = error.name === 'MediaError' ? 'media-error' : error.name === 'TimeoutError' ? 'timeout' : 'environment';
+          }
+        }
+        reports.push({ fileName: target.fileName, fileRevision: target.fileRevision, useCache: target.cached === true,
+          algorithm: claimed.algorithm, policy: claimed.policy, frames: frames, errorCode: errorCode });
+        await options.yieldTurn();
+      }
+      if (!stillCurrent() || options.isHumanBusy()) throw new Error('interrupted');
+      var result = await request('submit', { token: ownedLease.token, clientId: clientId, generation: ownedLease.generation, reports: reports });
+      if (result.waiting) { environmentHold = true; message = '当前取帧不可靠，已暂停。恢复可用环境或点击继续后再试。'; }
+      if (result.saved && options.onSaved && current === epoch) options.onSaved(result.saved, result.applied || []);
+    } catch (error) { message = '本组未继续提交；已保存的结果保留，待环境或人工操作结束后重试。'; }
+    finally {
+      options.clearInterval(heartbeat); heartbeat = null; await release(ownedLease);
+      lease = null; aborter = null; running = false;
+      await refresh().catch(function () {}); render();
+      if (!disposed && !environmentHold) schedule();
+    }
+  }
+  async function startManual() {
+    if (requestBusy || options.isHumanBusy()) return;
+    requestBusy = true; environmentHold = false; stopDecode(); render();
+    try {
+      var result = await request('start', { mediaRoot: root || undefined, mode: 'manual', retryUnknown: true });
+      selected = result.job && result.job.id; cursor = 0; message = '';
+      await refresh(); schedule(0);
+    } catch (error) { message = error.message || '无法启动识别任务'; }
+    finally { requestBusy = false; render(); }
+  }
+  async function control(action) {
+    var job = data && data.job; if (!job) return;
+    stopDecode(); environmentHold = false;
+    try { await request(action === 'undo' ? 'undo' : 'control', { mediaRoot: job.mediaRoot, jobId: job.id, action: action, clientId: clientId }); await refresh(); }
+    catch (error) { message = error.message || '任务操作失败'; render(); }
+    if (action === 'resume' || action === 'stop' || action === 'undo') schedule(0);
+  }
+  async function changeRoot(next) {
+    stopDecode();viewSequence++;
+    var job = data && data.job;
+    root = next; selected = null; data = null; cursor = 0; lastSignal = ''; preparedRoot = null; pendingInput=null; environmentHold = false; pendingAuto = autoEnabled; render();
+    if (job && ['queued','running'].indexOf(job.status) >= 0) await request('control', { mediaRoot: job.mediaRoot, jobId: job.id, action: 'pause', reason: 'root-changed' }).catch(function () {});
+    if(root===next)schedule(0);
+  }
+  function sync(enabled, signal) {
+    var prior = autoEnabled; autoEnabled = enabled === true;
+    if (prior && !autoEnabled && lease && lease.mode === 'auto') stopDecode();
+    if (!autoEnabled) pendingAuto = false;
+    if (autoEnabled && (!prior || signal !== lastSignal)) { if (!prior) preparedRoot = null; pendingAuto = true; lastSignal = signal; schedule(0); }
+    if (options.getRoot() !== root) { void changeRoot(options.getRoot()); }
+  }
+  async function environmentChanged() {
+    if (!capable(environment())) { stopDecode(); await refresh().catch(function () {}); await handleEnvironment().catch(function () {}); return; }
+    environmentHold = false; await refresh().catch(function () {});
+    var job = data && data.job;
+    if (job && job.status === 'waiting-environment' && (job.mode !== 'auto' || autoEnabled) &&
+      (!job.inventory.ownerClientId || job.inventory.ownerClientId === clientId)) await control('resume');
+    schedule(0);
+  }
+  return { startManual: startManual, control: control, sync: sync, environmentChanged: environmentChanged,
+    open: function () { panelOpen = true; schedule(0); }, closePanel: function () { panelOpen = false; },
+    select: function (id) { selected = id; cursor = 0; void refresh(); }, next: function () { cursor = data && data.job && data.job.nextCursor || 0; void refresh(); },
+    status: function () { return data; }, isDecoding: function () { return running; },
+    humanActivity: function () { stopDecode(); return decodeFlight || Promise.resolve(); },
+    clientId: clientId,
+    dispose: function () {
+      disposed = true;
+      var job = data && data.job;
+      if (job) void request('control', { action: 'disconnect', mediaRoot: job.mediaRoot, jobId: job.id,
+        token: lease && lease.token, generation: lease ? lease.generation : job.generation, clientId: clientId }).catch(function () {});
+      stopDecode(); if (timer !== null) options.clearTimeout(timer);
+    },
+    refresh: refresh, tick: tick
+  };
 }
 
   function mountMusicEnhancements() {
@@ -7665,6 +8326,7 @@ function createCustomSongDiagnostics(options) {
       mountMusicBehaviorSetting();
       mountMusicEnhancements();
       mountCustomSongTools();
+      syncVisionTasks();
       mountMailboxTools();
       mountUpdateEntry();
       scheduleAutomaticUpdateCheck();
@@ -7723,6 +8385,9 @@ function createCustomSongDiagnostics(options) {
   window.addEventListener("linli-music-view-ready", queueMount);
   window.addEventListener("linli-custom-songs-changed", invalidateCustomSongList);
   document.addEventListener("visibilitychange", mountCustomSongTools);
+  document.addEventListener('visibilitychange',function(){if(visionTaskCoordinator)void visionTaskCoordinator.environmentChanged();});
+  window.addEventListener('focus',function(){if(visionTaskCoordinator)void visionTaskCoordinator.environmentChanged();});
+  window.addEventListener('beforeunload',function(){if(visionTaskCoordinator)visionTaskCoordinator.dispose();});
   window.addEventListener("resize", queueMount);
   window.addEventListener("scroll", queueMount, true);
   if (document.head) hideWatermark();

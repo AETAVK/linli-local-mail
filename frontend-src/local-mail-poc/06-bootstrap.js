@@ -57,6 +57,7 @@
       mountMusicBehaviorSetting();
       mountMusicEnhancements();
       mountCustomSongTools();
+      syncVisionTasks();
       mountMailboxTools();
       mountUpdateEntry();
       scheduleAutomaticUpdateCheck();
@@ -115,6 +116,9 @@
   window.addEventListener("linli-music-view-ready", queueMount);
   window.addEventListener("linli-custom-songs-changed", invalidateCustomSongList);
   document.addEventListener("visibilitychange", mountCustomSongTools);
+  document.addEventListener('visibilitychange',function(){if(visionTaskCoordinator)void visionTaskCoordinator.environmentChanged();});
+  window.addEventListener('focus',function(){if(visionTaskCoordinator)void visionTaskCoordinator.environmentChanged();});
+  window.addEventListener('beforeunload',function(){if(visionTaskCoordinator)visionTaskCoordinator.dispose();});
   window.addEventListener("resize", queueMount);
   window.addEventListener("scroll", queueMount, true);
   if (document.head) hideWatermark();

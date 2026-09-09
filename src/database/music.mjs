@@ -987,7 +987,8 @@ export function installMusicDatabaseDomain(MailDatabase) {
         confirmSelectionClear: this.getSetting("musicLibrary.confirmSelectionClear") !== "0",
         customPlaylistsEnabled: this.getSetting("musicLibrary.customPlaylistsEnabled") !== "0",
         batchOperationsEnabled: this.getSetting("musicLibrary.batchOperationsEnabled") !== "0",
-        desktopClearEnabled: this.getSetting("musicLibrary.desktopClearEnabled") !== "0"
+        desktopClearEnabled: this.getSetting("musicLibrary.desktopClearEnabled") !== "0",
+        visionAutoFillEnabled: [null, undefined, "1"].includes(this.getSetting("musicLibrary.visionAutoFillEnabled"))
       };
     },
 
@@ -998,7 +999,8 @@ export function installMusicDatabaseDomain(MailDatabase) {
       const booleanKeys = [
         "customPlaylistsEnabled",
         "batchOperationsEnabled",
-        "desktopClearEnabled"
+        "desktopClearEnabled",
+        "visionAutoFillEnabled"
       ];
       for (const key of booleanKeys) {
         if (Object.hasOwn(input, key) && typeof input[key] !== "boolean") {

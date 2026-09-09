@@ -193,7 +193,7 @@ function createCustomSongDiagnostics(options) {
     if (snapshot && snapshot.local.mediaRoot !== root) snapshot = null;
     var busy = options.isBusy() || exporting;
     options.reasons.disabled = busy || !snapshot;
-    options.exportButton.disabled = busy || !snapshot;
+    options.exportButton.disabled = busy || (!options.unifiedExport && !snapshot);
     var summary = options.summary;
     var detail = options.detail;
     if (!snapshot) {
@@ -259,7 +259,7 @@ function createCustomSongDiagnostics(options) {
     options.detail.style.display = show ? "" : "none";
     this.textContent = show ? "收起原因" : "查看原因";
   };
-  options.exportButton.onclick = function () { void exportReport(); };
+  if (!options.unifiedExport) options.exportButton.onclick = function () { void exportReport(); };
 
   return Object.freeze({
     setSnapshot: setSnapshot,
@@ -269,3 +269,125 @@ function createCustomSongDiagnostics(options) {
     hasSnapshot: function () { return Boolean(snapshotState); }
   });
 }
+
+// One capture, explicit three-way choice, no persistent consent or player mutation.
+createCustomSongDiagnostics.createDebugPackage = function (options) {
+  var generation = 0, job = null, jobRoot = '', busy = false, ready = null, phase = 'closed';
+  function render() {
+    options.openButton.disabled = options.isBusy() || phase !== 'closed';
+    options.fragmentButton.disabled = phase !== 'ready' || busy;
+    options.basicButton.disabled = !['ready', 'failed'].includes(phase) || busy;
+    options.basicButton.textContent = phase === 'failed' ? '仅导出基础诊断' : '仅导出诊断';
+    options.fragmentButton.hidden = phase === 'failed';
+    options.cancelButton.disabled = false;
+  }
+  function discard(old, root) {
+    if (old && old.jobId) return options.request('/api/custom-songs/debug-package/cancel', {
+      method: 'POST', body: { jobId: old.jobId, mediaRoot: root }
+    }).catch(function () {});
+  }
+  function cancel() {
+    generation++;
+    var old = job, root = jobRoot; job = null; ready = null; jobRoot = ''; busy = false; phase = 'closed';
+    options.panel.hidden = true;
+    void discard(old, root); render(); options.refreshBusy();
+    if (options.onClose) options.onClose();
+  }
+  function valid(current, root) { return current === generation && !options.isHidden() && options.getRoot() === root; }
+  async function open() {
+    if (options.isBusy() || phase !== 'closed') return;
+    var current = ++generation, root = options.getRoot();
+    busy = true; phase = 'preparing'; jobRoot = root; options.panel.hidden = false;
+    options.status.textContent = '正在准备诊断快照，不修改曲目。完成后请选择导出方式；取消不会下载。';
+    if (options.onOpen) options.onOpen(); render(); options.refreshBusy();
+    try {
+      var started = await options.request('/api/custom-songs/debug-package/start', { method: 'POST', body: { mediaRoot: root } });
+      if (!valid(current, root)) { void discard(started, root); if (current === generation) cancel(); return; }
+      job = started;
+      while (current === generation) {
+        if (!valid(current, root)) { cancel(); return; }
+        var status = await options.request('/api/custom-songs/debug-package/status', { method: 'POST', body: { mediaRoot: root, jobId: job.jobId } });
+        if (!valid(current, root)) { if (current === generation) cancel(); return; }
+        options.status.textContent = status.state === 'verifying' ? '正在离线核对原材料与脱敏材料…' : '正在收集排障材料（已保留 ' + (status.retainedEvents || 0) + ' 条）…';
+        if (status.state === 'failed' || status.state === 'cancelled') throw new Error(status.failureCode || 'capture-failed');
+        if (status.state === 'ready') {
+          ready = status; phase = 'ready';
+          options.status.textContent = (status.complete ? '范围内收集完成' : '存在未采集范围') + '；有损记录 ' + status.lossyEvents + ' 条。可附带 ' + status.rawRetainedEvents + ' 条已定向脱敏片段，因安全或容量限制省略 ' + status.rawOmittedEvents + ' 条。扫描标识：' + status.scanId + '。';
+          return;
+        }
+        await options.delay();
+      }
+    } catch (error) {
+      if (current === generation) {
+        void discard(job, root); job = null; ready = null; phase = 'failed';
+        options.status.textContent = '完整材料未生成（收集失败、过期或超过安全容量）。可仅导出已有基础诊断：不含片段、不含本次材料，以摘要自身的扫描标识为准；也可取消后重试。';
+      }
+    } finally { if (current === generation) { busy = false; render(); options.refreshBusy(); } }
+  }
+  async function exportChoice(include) {
+    if (typeof include !== 'boolean' || busy || (phase !== 'ready' && !(phase === 'failed' && !include))) return;
+    var current = generation, root = jobRoot;
+    if (!valid(current, root)) { cancel(); return; }
+    busy = true; render(); options.refreshBusy();
+    try {
+      if (phase === 'failed') {
+        // Read-only fallback: never trigger normal scan/rebuild or pretend this is the failed snapshot.
+        var snapshot = await options.request('/api/custom-songs/diagnostics', { method: 'POST', body: { mediaRoot: root } });
+        if (!valid(current, root)) return;
+        var sameRoot = function (value) { return String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(); };
+        if (!snapshot || !snapshot.scanId || !snapshot.local || sameRoot(snapshot.local.mediaRoot) !== sameRoot(root)) throw new Error('no-basic-snapshot');
+        var report = await options.request('/api/custom-songs/diagnostics/export', { method: 'POST', body: { mediaRoot: root, scanId: snapshot.scanId } });
+        if (!valid(current, root)) return;
+        if (!report || report.scanId !== snapshot.scanId) throw new Error('changed-basic-snapshot');
+        options.downloadBasic({ kind: 'basic-diagnostics-only', materialCaptured: false, fragmentsIncluded: false, scanId: report.scanId, diagnostics: report }, 'linli-song-basic-' + report.scanId);
+      } else {
+        var bundle = await options.request('/api/custom-songs/debug-package/download', { method: 'POST', body: {
+          mediaRoot: root, jobId: job.jobId, scanId: ready.scanId, includeRaw: include,
+          confirmSensitive: include, confirmationId: include ? ready.confirmationId : undefined
+        } });
+        if (!valid(current, root)) return;
+        options.download(bundle);
+      }
+      job = null; cancel();
+      if (options.onExport) options.onExport(include);
+    } catch (error) {
+      if (current === generation) { phase = 'failed'; void discard(job, root); job = null; ready = null;
+        options.status.textContent = '导出未完成。若已有基础诊断，可重试“仅导出基础诊断”；没有可用摘要时请取消，并检查本地服务。不会回退导出原文或自动上传。'; }
+    } finally { if (current === generation) { busy = false; render(); options.refreshBusy(); } }
+  }
+  options.openButton.onclick = function () { return open(); };
+  options.fragmentButton.onclick = function () { return exportChoice(true); };
+  options.basicButton.onclick = function () { return exportChoice(false); };
+  options.cancelButton.onclick = cancel;
+  return Object.freeze({ open: open, exportChoice: exportChoice, cancel: cancel, render: render, isBusy: function () { return phase !== 'closed'; } });
+};
+
+// Scoped help for this manager; fixed sibling escapes the independently scrolling body.
+createCustomSongDiagnostics.createHelp = function (modal) {
+  var tooltip = document.createElement('div'), anchor = null, pinned = false;
+  tooltip.id = 'lm-song-help-text'; tooltip.className = 'lm-song-tooltip'; tooltip.setAttribute('role', 'tooltip'); tooltip.hidden = true;
+  document.body.appendChild(tooltip);
+  function hide() { if (anchor) { anchor.setAttribute('aria-expanded', 'false'); anchor.removeAttribute('aria-describedby'); } anchor = null; pinned = false; tooltip.hidden = true; }
+  function show(button) {
+    if (anchor !== button) hide(); anchor = button; tooltip.textContent = button.getAttribute('data-song-help'); tooltip.hidden = false;
+    button.setAttribute('aria-expanded', 'true'); button.setAttribute('aria-describedby', tooltip.id);
+    var rect = button.getBoundingClientRect(), box = tooltip.getBoundingClientRect(), width = window.innerWidth || 800, height = window.innerHeight || 600;
+    tooltip.style.left = Math.max(8, Math.min(rect.left, width - box.width - 8)) + 'px';
+    tooltip.style.top = Math.max(8, Math.min(rect.bottom + 8, height - box.height - 8)) + 'px';
+  }
+  function refresh() { modal.querySelectorAll('[data-song-help]').forEach(function (button) {
+    if (button.__songHelpBound) return; button.__songHelpBound = true;
+    button.setAttribute('aria-expanded', 'false');
+    button.onmouseenter = function () { if (!pinned) show(button); };
+    button.onmouseleave = function () { if (!pinned && document.activeElement !== button) hide(); };
+    button.onfocus = function () { show(button); };
+    button.onblur = hide;
+    button.onclick = function (event) { if (event && event.stopPropagation) event.stopPropagation(); if (pinned && anchor === button) hide(); else { show(button); pinned = true; } };
+    button.onkeydown = function (event) { if (event.key === 'Escape' && anchor) { event.preventDefault(); event.stopPropagation(); hide(); } };
+  }); }
+  refresh();
+  document.addEventListener('click', function (event) { if (anchor && event.target !== anchor) hide(); });
+  modal.querySelector('.lm-song-manager-body').addEventListener('scroll', hide);
+  window.addEventListener('resize', hide);
+  return { hide: hide, refresh: refresh };
+};

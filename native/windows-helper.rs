@@ -12,6 +12,58 @@ const INVALID_HANDLE_VALUE: isize = -1;
 type Handle = *mut c_void;
 
 #[repr(C)]
+struct BrowseInfo {
+    owner: Handle, root: *const c_void, display: *mut u16, title: *const u16, flags: u32,
+    callback: Option<unsafe extern "system" fn(Handle, u32, isize, isize) -> i32>, parameter: isize, image: i32,
+}
+#[link(name = "ole32")]
+extern "system" {
+    fn CoInitializeEx(reserved: *mut c_void, flags: u32) -> i32;
+    fn CoUninitialize();
+    fn CoTaskMemFree(memory: *mut c_void);
+}
+#[link(name = "shell32")]
+extern "system" {
+    fn SHBrowseForFolderW(info: *const BrowseInfo) -> *mut c_void;
+    fn SHGetPathFromIDListEx(id: *const c_void, path: *mut u16, length: u32, flags: u32) -> i32;
+}
+#[link(name = "user32")]
+extern "system" {
+    fn SendMessageW(window: Handle, message: u32, wparam: usize, lparam: isize) -> isize;
+    fn SetForegroundWindow(window: Handle) -> i32;
+}
+unsafe extern "system" fn folder_callback(window: Handle, message: u32, _value: isize, initial: isize) -> i32 {
+    if message == 1 {
+        if initial != 0 { SendMessageW(window, 0x467, 1, initial); } // BFFM_SETSELECTIONW
+        SetForegroundWindow(window);
+    }
+    0
+}
+fn command_choose_song_folder(arguments: &[String]) -> Result<i32, String> {
+    if !arguments.is_empty() { return Err("choose-song-folder does not accept arguments".into()); }
+    let input = String::from_utf8(read_stdin()?).map_err(|_| "folder must be UTF-8")?;
+    if input.len() > 16384 || input.contains('\0') || (!input.is_empty() && !Path::new(&input).is_absolute()) { return Err("invalid initial folder".into()); }
+    let initial: Vec<u16> = input.encode_utf16().chain(Some(0)).collect();
+    let title: Vec<u16> = "选择歌曲下载文件夹（包含 midi_… 子文件夹）".encode_utf16().chain(Some(0)).collect();
+    let mut display = [0u16; 260]; let mut selected = vec![0u16; 4097];
+    unsafe {
+        if CoInitializeEx(std::ptr::null_mut(), 2) < 0 { return Err("folder dialog initialization failed".into()); }
+        let info = BrowseInfo { owner: std::ptr::null_mut(), root: std::ptr::null(), display: display.as_mut_ptr(), title: title.as_ptr(),
+            flags: 0x0001 | 0x0040 | 0x0010 | 0x0200, callback: Some(folder_callback), parameter: initial.as_ptr() as isize, image: 0 };
+        let id = SHBrowseForFolderW(&info);
+        if id.is_null() { CoUninitialize(); write_stdout(b"{\"cancelled\":true,\"path\":null}")?; return Ok(0); }
+        let valid = SHGetPathFromIDListEx(id, selected.as_mut_ptr(), selected.len() as u32, 0);
+        CoTaskMemFree(id); CoUninitialize();
+        if valid == 0 { return Err("selected item is not a filesystem folder".into()); }
+    }
+    let end = selected.iter().position(|unit| *unit == 0).ok_or("folder is too long")?;
+    let value = String::from_utf16(&selected[..end]).map_err(|_| "invalid folder encoding")?;
+    if !Path::new(&value).is_dir() { return Err("selected folder is not accessible".into()); }
+    write_stdout(format!("{{\"cancelled\":false,\"path\":{}}}", json_escape(&value)).as_bytes())?;
+    Ok(0)
+}
+
+#[repr(C)]
 struct DataBlob {
     size: u32,
     data: *mut u8,
@@ -553,6 +605,7 @@ fn run() -> Result<i32, String> {
             Ok(0)
         }
         "process-info" => command_process_info(&rest),
+        "choose-song-folder" => command_choose_song_folder(&rest),
         "process-list" => command_process_list(&rest),
         "self-test" => {
             if !rest.is_empty() {

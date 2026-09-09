@@ -1,7 +1,7 @@
 // Local-only, conservative hints for the known city-window performance scene.
 // These rules are rejection gates, not calibrated confidence probabilities.
 var customSongVision = (function () {
-  var VERSION = "city-window-roi1-v1";
+  var VERSION = VISION_ALGORITHM;
   var ROIS = [[0.44, 0.04, 0.62, 0.14], [0.72, 0.03, 0.91, 0.13], [0.43, 0.20, 0.63, 0.40]];
   var PERIODS = ["TOD12", "TOD1730", "TOD20"];
   function quantile(hist, count, ratio) {
@@ -43,35 +43,9 @@ var customSongVision = (function () {
     });
     return { version: VERSION, aspect: Number(sourceWidth || width) / Number(sourceHeight || height), regions: regions };
   }
-  function unknown(reason) { return { tod: null, reason: reason }; }
-  function sky(region) {
-    var r = region.rgb[0], g = region.rgb[1], b = region.rgb[2], y = region.lum, w = region.warmth;
-    if (y >= 185 && y <= 250 && w >= -0.13 && w <= 0.01 && b - r >= 8 && g - r >= 4) return "TOD12";
-    if (y >= 155 && y <= 245 && w >= 0.012 && w <= 0.17 && r - g >= 6 && g - b >= -8) return "TOD1730";
-    if (y >= 18 && y <= 88 && w >= -0.65 && w <= -0.10 && b - g >= 5 && g - r >= 7) return "TOD20";
-    return null;
-  }
   function classify(feature) {
-    if (!feature || feature.version !== VERSION || !Number.isFinite(feature.aspect) ||
-      Math.abs(feature.aspect - 16 / 9) > 0.04 || !Array.isArray(feature.regions) || feature.regions.length !== 3) return unknown("unfamiliar-scene");
-    var regions = feature.regions;
-    if (regions.some(function (r) { return !r || !Array.isArray(r.rgb) || r.rgb.length !== 3 ||
-      r.rgb.some(function (n) { return !Number.isFinite(n) || n < 0 || n > 255; }) ||
-      [r.lum, r.warmth, r.contrast, r.edgeRate, r.black, r.white].some(function (n) { return !Number.isFinite(n); }); })) return unknown("invalid-features");
-    if (regions.every(function (r) { return r.black > 0.85 || r.lum < 12; })) return unknown("black-frame");
-    if (regions.some(function (r) { return r.white > 0.65 || r.black > 0.65; })) return unknown("obscured-frame");
-    var a = regions[0], b = regions[1], city = regions[2];
-    var one = sky(a), two = sky(b);
-    if (one && two && one !== two) return unknown("region-conflict");
-    if (!one || one !== two || Math.abs(a.lum - b.lum) > 28 || Math.abs(a.warmth - b.warmth) > 0.065) return unknown("unfamiliar-scene");
-    // Require a relatively smooth sky and a structured lower city patch. Flat
-    // colour cards, noise, framing changes and unrecognised scenes are rejected.
-    if (a.contrast > 80 || b.contrast > 80 || city.contrast < 6 || city.edgeRate < 0.004 || city.edgeRate > 0.65) return unknown("unfamiliar-structure");
-    var top = (a.lum + b.lum) / 2, warm = (a.warmth + b.warmth) / 2;
-    var matches = one === "TOD12" ? city.lum >= 130 && city.lum <= 242 && city.warmth >= -0.15 && city.warmth <= 0.035 && top - city.lum >= 5 && top - city.lum <= 100
-      : one === "TOD1730" ? city.lum >= 115 && city.lum <= 225 && city.warmth >= 0.065 && city.warmth <= 0.30 && city.warmth - warm >= 0.02 && top - city.lum >= 5 && top - city.lum <= 100
-      : city.lum >= 15 && city.lum <= 95 && city.warmth >= -0.60 && city.warmth <= -0.05 && top - city.lum >= -12 && top - city.lum <= 45;
-    return matches ? { tod: one, reason: "scene-match" } : unknown("region-conflict");
+    // Injected from the same pure module that the Node write guard imports.
+    return classifyVisionFeature(feature);
   }
   function summarize(frames) {
     var selected = (frames || []).slice(0, 3);

@@ -16,6 +16,7 @@ export const FRAGMENT_MANIFEST = Object.freeze([
   Object.freeze({ file: "04b-video-vision.js", owner: "video-vision" }),
   Object.freeze({ file: "05-music.js", owner: "music" }),
   Object.freeze({ file: "05a-music-diagnostics.js", owner: "music-diagnostics" }),
+  Object.freeze({ file: "05b-visual-tasks.js", owner: "visual-tasks" }),
   Object.freeze({ file: "06-bootstrap.js", owner: "bootstrap" })
 ]);
 
@@ -24,7 +25,13 @@ function fragmentPath(fragment) {
 }
 
 export function assembleFrontendSourceBytes() {
-  return Buffer.concat(FRAGMENT_MANIFEST.map((fragment) => fs.readFileSync(fragmentPath(fragment))));
+  return Buffer.concat(FRAGMENT_MANIFEST.flatMap((fragment) => {
+    const bytes = fs.readFileSync(fragmentPath(fragment));
+    if (fragment.file !== '04b-video-vision.js') return [bytes];
+    // This fixed pure module is the sole classification source for Node and the classic frontend.
+    const shared = fs.readFileSync(path.join(ROOT, 'src', 'custom-song-vision-policy.mjs'), 'utf8').replace(/^export /gm, '');
+    return [Buffer.from(shared + '\n'), bytes];
+  }));
 }
 
 export function assembleFrontendSourceText() {

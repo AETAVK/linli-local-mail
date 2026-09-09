@@ -1059,6 +1059,11 @@
       key: "desktopClearEnabled",
       label: "音乐桌面清空开关",
       description: "控制音乐桌面的清空按钮，关闭不会清空播单。"
+    },
+    {
+      key: "visionAutoFillEnabled",
+      label: "本地演奏自动整理",
+      description: "首次使用默认开启，保留已有关闭选择。前端可用时识别并保存缺项，不覆盖手工设置；关闭不撤销已保存结果。"
     }
   ];
 
@@ -1080,7 +1085,7 @@
       if (!input) return;
       input.checked = typeof musicFeatureEnabled === "function"
         ? Boolean(musicFeatureEnabled(feature.key))
-        : true;
+        : feature.key !== "visionAutoFillEnabled";
       input.disabled = Boolean(saving[feature.key]);
     });
   }
