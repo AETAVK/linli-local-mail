@@ -7,11 +7,11 @@
 本项目不是官方项目，不隶属于、未经原游戏开发商或发行商认可。仓库和安装包均不包含游戏本体、
 官方启动器、图片、音乐、视频、字体、DLL、历史信件或其他官方资源。使用者必须自行准备原版客户端。
 
-当前稳定版为 `0.11.12`。普通玩家可使用下方正式版安装器。
+当前稳定版为 `0.11.13`。普通玩家可使用下方正式版安装器。
 
-- [GitHub 0.11.12 正式发布页](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.11.12)
-- [Gitee 0.11.12 正式发布页（国内镜像）](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.11.12)
-- [v0.11.12 发布说明](.github/release-notes/v0.11.12.md)
+- [GitHub 0.11.13 正式发布页](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.11.13)
+- [Gitee 0.11.13 正式发布页（国内镜像）](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.11.13)
+- [v0.11.13 发布说明](.github/release-notes/v0.11.13.md)
 
 ## 系统要求
 
@@ -26,14 +26,14 @@
 
 ## 快速安装与启动
 
-以下步骤适用于正式版 `0.11.12`。
+以下步骤适用于正式版 `0.11.13`。
 
 ### 1. 下载安装器
 
-- [GitHub：下载 LinliLocalMail-0.11.12-Setup.exe](https://github.com/AETAVK/linli-local-mail/releases/download/v0.11.12/LinliLocalMail-0.11.12-Setup.exe)
-- [Gitee：下载 LinliLocalMail-0.11.12-Setup.exe](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.11.12/LinliLocalMail-0.11.12-Setup.exe)
+- [GitHub：下载 LinliLocalMail-0.11.13-Setup.exe](https://github.com/AETAVK/linli-local-mail/releases/download/v0.11.13/LinliLocalMail-0.11.13-Setup.exe)
+- [Gitee：下载 LinliLocalMail-0.11.13-Setup.exe](https://gitee.com/sforlife/linli-local-mail/releases/download/v0.11.13/LinliLocalMail-0.11.13-Setup.exe)
 
-普通玩家只需下载 `LinliLocalMail-0.11.12-Setup.exe`。Release 页面中的 `.sha256`、`.json` 和
+普通玩家只需下载 `LinliLocalMail-0.11.13-Setup.exe`。Release 页面中的 `.sha256`、`.json` 和
 `.cer` 文件用于完整性校验与签名信息核对；自动生成的 `Source code` 压缩包不是安装程序。
 
 ### 2. 放入游戏根目录
@@ -48,7 +48,7 @@
 
 ### 3. 退出游戏并安装
 
-完全退出游戏和官方启动器后，双击 `LinliLocalMail-0.11.12-Setup.exe`。安装器会自动识别当前目录，
+完全退出游戏和官方启动器后，双击 `LinliLocalMail-0.11.13-Setup.exe`。安装器会自动识别当前目录，
 部署内置 Node.js、本地服务、启动包装器和客户端补丁。
 
 安装器采用自签名证书，Windows 可能显示“未知发布者”或 SmartScreen 提示。请先确认文件来自上述
@@ -73,7 +73,7 @@ GitHub/Gitee Release 页面并核对 SHA-256；不要对网盘、群文件或陌
 ## 升级说明
 
 - 从 `0.9.x` 或更早版本升级时，最稳妥的方式是完全退出游戏与官方启动器，再手动运行
-  `0.11.12` 安装器。
+  `0.11.13` 安装器。
 - 新版内置更新器可以在游戏运行时下载并校验更新，但安装交接仍需退出游戏和官方启动器；安装器不会
   为继续安装而强制结束游戏进程。
 - 升级默认保留信件、模型配置、API Key、歌单、歌曲映射、媒体和备份。
