@@ -1,9 +1,9 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "04b73118b22470f935f413b980819816196058d5",
-  "packageVersion": "0.11.12",
-  "releaseVersion": "0.11.12",
+  "canonicalCommit": "3284bd02373aa4f2a66ad6926ae3f34fa4661b16",
+  "packageVersion": "0.11.13",
+  "releaseVersion": "0.11.13",
   "files": [
     {
       "path": ".gitattributes",
@@ -11,9 +11,9 @@
       "sha256": "4ee8456f0a011f74e2e8fc1cf155849f19756f076c3851d647f02d974851f66f"
     },
     {
-      "path": ".github/release-notes/v0.11.12.md",
-      "gitBlob": "f13e6c8a21e4a66be237137d26d333e1c1593002",
-      "sha256": "e292eb9673b6e548afc765078582cd3164085b0ca4c93eca148d5a0e39967699"
+      "path": ".github/release-notes/v0.11.13.md",
+      "gitBlob": "6b4fd93ead4c634113079006fc003bcddcc05c1d",
+      "sha256": "3aa0fb40a43fe5f01f89e3cbe40edd58bf6d85257f49be14a28e862abb8c224b"
     },
     {
       "path": ".github/scripts/publish-gitee-release.mjs",
@@ -52,8 +52,8 @@
     },
     {
       "path": "frontend-src/local-mail-poc/01-core-styles.js",
-      "gitBlob": "d344df4fc661a437b205ba4cabc7bee15975dd7c",
-      "sha256": "0346a8c15fc190a90b187d27288e99a4087220708e9f84d183516c805011c9dd"
+      "gitBlob": "1dbee67fe76ba3df0b6eef4d0e745b3d7d2f96c0",
+      "sha256": "93944ac9216e3c2a506f597fc9d24652462dd40f47e617d52b7f67b80689059f"
     },
     {
       "path": "frontend-src/local-mail-poc/02-mail-import-updater.js",
@@ -82,8 +82,8 @@
     },
     {
       "path": "frontend-src/local-mail-poc/05-music.js",
-      "gitBlob": "d32d74a2b29d7f3362cfc8669ad51532e9c9fb26",
-      "sha256": "dc428db693417ecb195fdb6401c9fa18f8abb8dbf0e32109f0f0d3570c50ab97"
+      "gitBlob": "9a87feec0f3d59d50ebf9c8b36304e35046f555b",
+      "sha256": "ed17135f4bf4588b2c4d0b0cd39f05e9e919ce5d95657ee711d64a6d28753f2c"
     },
     {
       "path": "frontend-src/local-mail-poc/05a-music-diagnostics.js",
@@ -92,8 +92,8 @@
     },
     {
       "path": "frontend-src/local-mail-poc/05b-visual-tasks.js",
-      "gitBlob": "245ceabf3caaea83e3420c8d449de55d297eeec7",
-      "sha256": "c54cfb867dbf98beeb83a153cef2531b0264575b058e6b1e61447db4cf422ccf"
+      "gitBlob": "5226063ec997cc679ae6032fc197f301103aefa9",
+      "sha256": "998e4c719cda288a78f09ade92b65bf568ebf805b13c6adb007546ae8f003063"
     },
     {
       "path": "frontend-src/local-mail-poc/06-bootstrap.js",
@@ -102,8 +102,8 @@
     },
     {
       "path": "frontend/local-mail-poc.js",
-      "gitBlob": "bbfcdf5742634257ccd17de25f1d2e856cfdd29c",
-      "sha256": "bb2d5028754fc9d89124c153baffe742ab26c9f8332da26b6206f9de2e785f19"
+      "gitBlob": "7da753cd1959cc468f3d966ed1e4c094dc2515fc",
+      "sha256": "af547645d797ba050716c7f2d473e8deac7e2fdc3133030d64b854d0b9523785"
     },
     {
       "path": "Install.cmd",
@@ -137,13 +137,13 @@
     },
     {
       "path": "package.json",
-      "gitBlob": "f6e6e1276ba2a79a3cd1356256b10c6ae240ae7a",
-      "sha256": "3a8eb809f09ed0e13fd9e9a387cdc53ffb1102b1563503aa190d7ac20054f4b9"
+      "gitBlob": "dc0f3fd98e622ed66685c84ebd00d8ce3d52af00",
+      "sha256": "e94f6328513af68ba0c5307905a6ebff86dd59a09c39d255b66fca0883259798"
     },
     {
       "path": "README.md",
-      "gitBlob": "59fbeeb5eb4c42aabb35a5013918e84f39d7f7b6",
-      "sha256": "fe825835533ae31805bd4ead5379fe165a8ee1ba2dae520f938c7c4fda27abe8"
+      "gitBlob": "8ed8097cf5b8b5584701e691e74a7bc69e6aa09a",
+      "sha256": "60532fc086f88f2bf2bb64b9ed95ca80211b081606eabbfc6bf2b77960184a86"
     },
     {
       "path": "repo-role.json",
@@ -157,8 +157,8 @@
     },
     {
       "path": "SOURCE_CODE.md",
-      "gitBlob": "3624f2d174ca1435645334968a11dc1777e5f21a",
-      "sha256": "42b3672d34933dc73db430e793e65491642f79761c56fa5baece1644767528e8"
+      "gitBlob": "a0ce3d50b34a1a3992399963707dcd3f7cea8856",
+      "sha256": "15246c1bee74d316c5a7bee7365c5841ab87d11f9f6760a82ac22e7115bae474"
     },
     {
       "path": "src/character.mjs",
@@ -172,8 +172,8 @@
     },
     {
       "path": "src/constants.mjs",
-      "gitBlob": "c1bc23d38ca36fa0a99579b8e2c9ded2f0ac2760",
-      "sha256": "e878f8c4559cf25bc700b06523f22c0aa0740035f46c54f82b1de293329304ac"
+      "gitBlob": "73d61c6d06b4c17a5b0f197330a8ba7347593cfd",
+      "sha256": "fd9b550de4a3c37f1d699bc51af581f4c81c98f2ef7abde33609cfa2ea04ea2c"
     },
     {
       "path": "src/context-budget.mjs",

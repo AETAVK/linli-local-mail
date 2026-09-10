@@ -132,6 +132,20 @@ function createVisionTaskController(options) {
     catch (error) { message = error.message || '任务操作失败'; render(); }
     if (action === 'resume' || action === 'stop' || action === 'undo') schedule(0);
   }
+  var stoppingCurrent=false;
+  async function stopCurrent() {
+    if(stoppingCurrent)return;stoppingCurrent=true;
+    var requestedRoot=options.getRoot();
+    try {
+      var latest=await request('status',{mediaRoot:requestedRoot||undefined});
+      if(disposed||options.getRoot()!==requestedRoot)return;
+      var current=latest&&latest.job;
+      if(!current||['queued','running','waiting-environment','paused','interrupted'].indexOf(current.status)<0)return;
+      data=latest;selected=current.id;cursor=0;pendingAuto=false;
+      await control('stop');
+    }catch(error){message=error.message||'停止整理未完成，请重试。';render();}
+    finally{stoppingCurrent=false;}
+  }
   async function changeRoot(next) {
     stopDecode();viewSequence++;
     var job = data && data.job;
@@ -154,7 +168,7 @@ function createVisionTaskController(options) {
       (!job.inventory.ownerClientId || job.inventory.ownerClientId === clientId)) await control('resume');
     schedule(0);
   }
-  return { startManual: startManual, control: control, sync: sync, environmentChanged: environmentChanged,
+  return { startManual: startManual, control: control, stopCurrent: stopCurrent, sync: sync, environmentChanged: environmentChanged,
     open: function () { panelOpen = true; schedule(0); }, closePanel: function () { panelOpen = false; },
     select: function (id) { selected = id; cursor = 0; void refresh(); }, next: function () { cursor = data && data.job && data.job.nextCursor || 0; void refresh(); },
     status: function () { return data; }, isDecoding: function () { return running; },
