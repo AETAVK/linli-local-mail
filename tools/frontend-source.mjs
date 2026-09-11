@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,13 +26,15 @@ function fragmentPath(fragment) {
 }
 
 export function assembleFrontendSourceBytes() {
-  return Buffer.concat(FRAGMENT_MANIFEST.flatMap((fragment) => {
+  const assembled=Buffer.concat(FRAGMENT_MANIFEST.flatMap((fragment) => {
     const bytes = fs.readFileSync(fragmentPath(fragment));
     if (fragment.file !== '04b-video-vision.js') return [bytes];
     // This fixed pure module is the sole classification source for Node and the classic frontend.
     const shared = fs.readFileSync(path.join(ROOT, 'src', 'custom-song-vision-policy.mjs'), 'utf8').replace(/^export /gm, '');
     return [Buffer.from(shared + '\n'), bytes];
   }));
+  const identity={version:JSON.parse(fs.readFileSync(path.join(ROOT,'package.json'),'utf8')).version,sha256:crypto.createHash('sha256').update(assembled).digest('hex'),basis:'assembled-input-hash-not-runtime-attestation'};
+  return Buffer.from(assembled.toString('utf8').replace('"__LINLI_FRONTEND_BUILD__"',JSON.stringify(identity)));
 }
 
 export function assembleFrontendSourceText() {

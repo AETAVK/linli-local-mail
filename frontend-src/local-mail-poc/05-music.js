@@ -81,7 +81,7 @@ function visionTaskHumanBusy() {
 }
 function getVisionTaskCoordinator() {
   if (!visionTaskCoordinator) visionTaskCoordinator = createVisionTaskController({
-    getRoot: visionTaskRoot, request: callApi, isHumanBusy: visionTaskHumanBusy,
+    getRoot: visionTaskRoot, request: callApi, isHumanBusy: visionTaskHumanBusy, failureInfo:musicFailureFields,
     environment: function () {
       var video = document.createElement('video'), canvas = document.createElement('canvas');
       return { visible: document.hidden !== true && document.visibilityState !== 'hidden',
@@ -475,9 +475,10 @@ async function openCustomSongManager() {
     document.body.appendChild(modal);
     var exportDialog = document.createElement('div');
     exportDialog.id = 'local-mail-song-export-dialog'; exportDialog.className = 'lm-modal-backdrop lm-song-export-backdrop'; exportDialog.hidden = true;
-    exportDialog.innerHTML = '<section class="lm-modal lm-song-export-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-song-export-title"><div class="lm-modal-title" id="lm-song-export-title">是否附带脱敏后的日志片段？</div>' +
-      '<p class="lm-modal-status" role="status" data-custom-debug-status></p><p class="lm-song-warning">附带片段已在本地服务中定向移除凭据，但仍可能含曲名、账号、路径及其他私人内容，并非完全匿名。仅私下提供，勿公开发布。片段已改写，不是原始日志字节。不会自动上传。</p>' +
-      '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-fragments>附带脱敏片段并导出</button><button type="button" class="lm-button lm-button-primary" data-custom-debug-basic>仅导出诊断</button><button type="button" class="lm-button" data-custom-debug-cancel>取消</button></div></section>';
+    exportDialog.innerHTML = '<section class="lm-modal lm-song-export-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-song-export-title"><div class="lm-modal-title" id="lm-song-export-title">选择诊断内容</div>' +
+      '<p class="lm-modal-status" role="status" data-custom-debug-status></p><p class="lm-song-warning">详细诊断包含真实歌曲名、业务标识、文件名、目录路径和已有识别依据；始终移除令牌、Cookie、密码和签名。仅私下提供，勿公开发布。片段是去凭据后的内容，不是完整原始日志。默认只导出摘要，不自动上传。</p>' +
+      '<details><summary>补充资料（可选）</summary><p>默认检查当前资料和补丁备份。可选择旧日志、改名日志、gzip 日志、映射 JSON、SQLite 备份或资料文件夹；仅本次只读使用，不导出信件。</p><div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-files>选择多个文件</button><button type="button" class="lm-button" data-custom-debug-directory>添加文件夹</button><button type="button" class="lm-button" data-custom-debug-clear>清空补充资料</button></div><p data-custom-debug-sources>未选择补充资料</p></details>' +
+      '<p data-custom-debug-names></p><div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-fragments>导出详细诊断及片段</button><button type="button" class="lm-button lm-button-primary" data-custom-debug-basic>仅导出诊断摘要</button><button type="button" class="lm-button" data-custom-debug-cancel>取消</button></div></section>';
     document.body.appendChild(exportDialog);
     modal.__songHelp = createCustomSongDiagnostics.createHelp(modal);
     modal.querySelector("[data-custom-close]").onclick = function () {
@@ -532,14 +533,21 @@ async function openCustomSongManager() {
     modal.__songDebugPackage = createCustomSongDiagnostics.createDebugPackage({
       openButton: modal.querySelector('[data-custom-diagnostic-export]'), panel: exportDialog,
       status: exportDialog.querySelector('[data-custom-debug-status]'),
+      filesButton:exportDialog.querySelector('[data-custom-debug-files]'),directoryButton:exportDialog.querySelector('[data-custom-debug-directory]'),
+      clearSourcesButton:exportDialog.querySelector('[data-custom-debug-clear]'),sourcesStatus:exportDialog.querySelector('[data-custom-debug-sources]'),namesStatus:exportDialog.querySelector('[data-custom-debug-names]'),
       fragmentButton: exportDialog.querySelector('[data-custom-debug-fragments]'), basicButton: exportDialog.querySelector('[data-custom-debug-basic]'), cancelButton: exportDialog.querySelector('[data-custom-debug-cancel]'),
       getRoot: function () { return modal.querySelector('[data-custom-root]').value.trim(); },
+      getOfficialRoot: officialSongStoragePath,
+      getEvidence: function () {
+        var evidence=visionTaskCoordinator&&visionTaskCoordinator.diagnostic?visionTaskCoordinator.diagnostic():{startedAt:musicDiagnosticStartedAt,currentFailures:[],recentFailures:[],capabilities:{visible:document.hidden!==true,canvas:null,rvfc:null}};
+        return Object.assign({},evidence,{scriptRevision:'song-diagnostics-2026-09-11',build:LOCAL_FRONTEND_BUILD,userAgent:window.navigator&&String(window.navigator.userAgent).slice(0,512),startedAt:Math.min(musicDiagnosticStartedAt,evidence.startedAt||musicDiagnosticStartedAt),capturedAt:Date.now(),recentFailures:(evidence.recentFailures||[]).concat(musicDiagnosticRecent).sort(function(a,b){return a.at-b.at;}).slice(-16)});
+      },
       isHidden: function () { return modal.hidden; },
       isBusy: function () { return customSongsState.busy || Boolean(customSongVisionState.run) || customSongDiagnosticsFor(modal).isExporting(); },
       refreshBusy: function () { customSongManagerBusy(modal, customSongsState.busy); }, request: callApi,
       onOpen: function () { modal.inert = true; modal.setAttribute('aria-hidden', 'true'); modal.__songHelp.hide(); var button = exportDialog.querySelector('[data-custom-debug-cancel]'); if (button.focus) button.focus(); },
       onClose: function () { modal.inert = false; modal.removeAttribute('aria-hidden'); var button = modal.querySelector('[data-custom-diagnostic-export]'); if (!modal.hidden && button.focus) button.focus(); },
-      onExport: function (include) { modal.querySelector('[data-custom-status]').textContent = include ? '已发起下载。附带片段仍含私人信息，仅私下提供。' : '已发起诊断下载，不含私人片段。'; },
+      onExport: function (include) { modal.querySelector('[data-custom-status]').textContent = include ? '已发起详细诊断下载，含真实业务信息，请仅私下提供。' : '已发起诊断摘要下载，只包含已取得的现场。'; },
       downloadBasic: downloadJson,
       delay: function () { return new Promise(function (resolve) { setTimeout(resolve, 500); }); },
       download: function (bundle) {
@@ -607,7 +615,7 @@ function installCustomSongHome(modal) {
   body.appendChild(manual);
   var home=document.createElement('div');home.className='lm-song-home';home.setAttribute('data-song-home','');
   home.innerHTML='<section class="lm-song-home-section"><h3>歌曲文件夹</h3><div class="lm-song-path-row"><span data-song-effective-path class="lm-song-path" tabindex="0" aria-label="生效的歌曲文件夹"></span><button class="lm-button lm-button-small" data-song-folder-change>更换歌曲文件夹</button></div></section>'+
-    '<section class="lm-song-home-section"><div class="lm-song-auto-row"><div><div class="lm-song-inline"><h3>自动整理</h3><button class="lm-song-help" type="button" aria-label="自动整理说明" data-song-help="整理当前文件夹中的全部歌曲，自动保存可用匹配与推测，不覆盖人工或导入设置。画面推测可能不准确，可在任务详情中撤销。">?</button></div><p class="lm-modal-status">新增歌曲自动识别并保存。</p></div><div class="lm-song-auto-control"><span data-song-auto-state class="lm-modal-status"></span><label class="lm-music-switch"><input type="checkbox" role="switch" data-song-home-auto aria-label="自动整理"></label></div></div>'+
+    '<section class="lm-song-home-section"><div class="lm-song-auto-row"><div><div class="lm-song-inline"><h3>自动整理</h3><button class="lm-song-help" type="button" aria-label="自动整理说明" data-song-help="整理当前文件夹中的全部歌曲，保留人工或导入设置。画面仅辅助补时段，不凭画面识别曲名；推测可能不准确，可在任务详情撤销。">?</button></div><p class="lm-modal-status">新增歌曲自动识别并保存。</p></div><div class="lm-song-auto-control"><span data-song-auto-state class="lm-modal-status"></span><label class="lm-music-switch"><input type="checkbox" role="switch" data-song-home-auto aria-label="自动整理"></label></div></div>'+
     '<div class="lm-song-organize-row"><div class="lm-song-run-context"><p class="lm-modal-status" data-song-run-scope>范围：当前文件夹中的全部歌曲</p><div data-song-run-status></div><progress data-song-run-progress aria-label="整理进度" hidden></progress></div><div data-song-run-action></div></div></section>'+
     '<section class="lm-song-home-section lm-song-mapping-row"><div class="lm-song-inline"><h3>歌曲映射</h3><button class="lm-song-help" type="button" aria-label="歌曲映射说明" data-song-help="映射保存曲名、文件对应关系与时段，不包含演奏视频。可以导出备份，或导入已有映射；覆盖已有内容前会再次确认。">?</button></div><div class="lm-modal-actions" data-song-home-mappings></div></section><p class="lm-modal-status" role="status" data-song-home-notice></p><div data-song-operation-feedback></div><div data-song-home-tasks></div>';
   body.insertBefore(home,manual);

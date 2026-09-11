@@ -22,7 +22,7 @@ const COUNTER_NAMES = Object.freeze([
   'retainedNames', 'manualNames', 'directoryNames',
   'logFilesIgnored', 'totalLines', 'nonEmptyLines', 'markerLines', 'linesWithoutMarker',
   'bomLines', 'suspectedEncodingLines', 'outerJsonParsed', 'unclassifiedOuterFailures',
-  'unknownActions', 'requestTypeFailures', 'innerJsonParsed', 'innerJsonFailures',
+  'unknownActions', 'requestTypeFailures', 'responseOnlyEvents', 'innerJsonParsed', 'innerJsonFailures',
   'prefixAttempts', 'prefixRecoveredEvents', 'prefixEmptyEvents', 'eventsWithoutNameKey',
   'recordKeysObserved', 'missingNameRecords', 'invalidNameRecords', 'mergedNameLosses',
   'mappingMatchedNames', 'logMatchedNames', 'unattributedMatchedNames',

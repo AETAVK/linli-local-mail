@@ -193,7 +193,7 @@ function createCustomSongDiagnostics(options) {
     if (snapshot && snapshot.local.mediaRoot !== root) snapshot = null;
     var busy = options.isBusy() || exporting;
     options.reasons.disabled = busy || !snapshot;
-    options.exportButton.disabled = busy || (!options.unifiedExport && !snapshot);
+    options.exportButton.disabled = options.unifiedExport ? false : busy || !snapshot;
     var summary = options.summary;
     var detail = options.detail;
     if (!snapshot) {
@@ -272,14 +272,33 @@ function createCustomSongDiagnostics(options) {
 
 // One capture, explicit three-way choice, no persistent consent or player mutation.
 createCustomSongDiagnostics.createDebugPackage = function (options) {
-  var generation = 0, job = null, jobRoot = '', busy = false, ready = null, phase = 'closed';
+  var generation = 0, job = null, jobRoot = '', busy = false, ready = null, phase = 'closed', frontSnapshot=null, captureErrors=[];
+  function safeFailure(error,stage){var status=Number.isInteger(error&&error.status)&&error.status>=100&&error.status<=599?error.status:0,code=error&&error.code;
+    if(typeof code!=='string'||!(/^(E[A-Z0-9_]+|SQLITE_[A-Z0-9_]+|DEBUG_[A-Z0-9_]+)$/.test(code))||code.length>80||/TOKEN|SECRET|PASSWORD|COOKIE/.test(code))code=null;
+    return{phase:stage,httpStatus:status,code:code,errno:error&&Number.isInteger(error.errno)&&Math.abs(error.errno)<10000000?error.errno:null,sqliteCode:error&&Number.isInteger(error.sqliteCode)&&error.sqliteCode>=0&&error.sqliteCode<=65535?error.sqliteCode:null,at:Date.now(),summary:'诊断操作未完成，原始异常未导出'};
+  }
+  function safeFront(input){
+    var available=Boolean(input),aliases={},next=0;
+    function alias(value){if(typeof value!=='string')return null;var key='$'+value;if(!Object.prototype.hasOwnProperty.call(aliases,key))aliases[key]='ref-'+(++next);return aliases[key];}
+    function failures(items){return(Array.isArray(items)?items:[]).slice(-16).map(function(item){
+      var record=safeFailure({status:item.httpStatus,code:item.code,errno:item.errno,sqliteCode:item.sqliteCode},/^[a-z][a-z-]{0,60}$/.test(item.phase||'')?item.phase:'unknown-phase');
+      record.endpoint=/^(vision\/(status|start|claim|submit|heartbeat|control|undo|locate)|catalog\/(search|status|scan)|music\/preferences|mapping\/(import|export)|folder\/choose)$/.test(item.endpoint||'')?item.endpoint:'unknown';
+      record.at=Number.isSafeInteger(item.at)?item.at:null;record.durationMs=Number.isFinite(item.durationMs)?Math.max(0,Math.min(item.durationMs,300000)):null;
+      record.scope=item.scope==='current'?'current':item.scope==='previous'?'previous':'unknown';record.links={};
+      ['root','jobId','nameKey','fileName'].forEach(function(key){record.links[key]=alias(item.links&&item.links[key]);});return record;
+    });}
+    input=input||{};var caps={};['visible','canvas','rvfc'].forEach(function(k){caps[k]=typeof(input.capabilities&&input.capabilities[k])==='boolean'?input.capabilities[k]:null;});
+    return{available:available,capturedAt:Date.now(),capabilities:caps,currentFailures:failures(input.currentFailures).slice(-8),recentFailures:failures(input.recentFailures),historyScope:'current-renderer-only',build:input.build&&/^[a-f0-9]{64}$/.test(input.build.sha256)?{sha256:input.build.sha256,basis:'running-script-self-report'}:null};
+  }
+  function minimalFront(){var id='frontend-'+Date.now();return{format:'linli-song-debug',schemaVersion:3,manifest:{scanId:id,minimal:true,summaryOnly:true,complete:false,serviceObserved:false,scope:'frontend-only',context:{frontend:frontSnapshot},failures:captureErrors.slice(-16),limitations:['service-data-not-observed','no-game-or-browser-no-export']},diagnostics:{scanId:id,complete:false},material:{events:[],directories:[],mappings:[]},verification:{events:[],scope:'not-captured'}};}
   function render() {
-    options.openButton.disabled = options.isBusy() || phase !== 'closed';
+    options.openButton.disabled = phase !== 'closed';
     options.fragmentButton.disabled = phase !== 'ready' || busy;
     options.basicButton.disabled = !['ready', 'failed'].includes(phase) || busy;
-    options.basicButton.textContent = phase === 'failed' ? '仅导出基础诊断' : '仅导出诊断';
+    options.basicButton.textContent = phase === 'failed' ? '导出最小诊断' : '仅导出诊断摘要';
     options.fragmentButton.hidden = phase === 'failed';
     options.cancelButton.disabled = false;
+    [options.filesButton,options.directoryButton,options.clearSourcesButton].forEach(function(button){if(button)button.disabled=busy||!['ready','failed'].includes(phase);});
   }
   function discard(old, root) {
     if (old && old.jobId) return options.request('/api/custom-songs/debug-package/cancel', {
@@ -290,18 +309,23 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
     generation++;
     var old = job, root = jobRoot; job = null; ready = null; jobRoot = ''; busy = false; phase = 'closed';
     options.panel.hidden = true;
+    frontSnapshot=null;captureErrors=[];extraPaths=[];
+    if(options.sourcesStatus)options.sourcesStatus.textContent='未选择补充资料';
+    if(options.namesStatus)options.namesStatus.textContent='';
     void discard(old, root); render(); options.refreshBusy();
     if (options.onClose) options.onClose();
   }
   function valid(current, root) { return current === generation && !options.isHidden() && options.getRoot() === root; }
   async function open() {
-    if (options.isBusy() || phase !== 'closed') return;
+    if (phase !== 'closed') return;
     var current = ++generation, root = options.getRoot();
+    var frontendEvidence,officialRoot;
+    captureErrors=[];try{frontendEvidence=options.getEvidence?options.getEvidence():undefined;officialRoot=options.getOfficialRoot?options.getOfficialRoot():undefined;frontSnapshot=safeFront(frontendEvidence);}catch(error){frontSnapshot=safeFront(null);captureErrors.push(safeFailure(error,'frontend-snapshot'));}
     busy = true; phase = 'preparing'; jobRoot = root; options.panel.hidden = false;
     options.status.textContent = '正在准备诊断快照，不修改曲目。完成后请选择导出方式；取消不会下载。';
     if (options.onOpen) options.onOpen(); render(); options.refreshBusy();
     try {
-      var started = await options.request('/api/custom-songs/debug-package/start', { method: 'POST', body: { mediaRoot: root } });
+      var started = await options.request('/api/custom-songs/debug-package/start', { method: 'POST', body: { mediaRoot: root, frontend:frontendEvidence, officialRoot:officialRoot,extraPaths:extraPaths.slice() } });
       if (!valid(current, root)) { void discard(started, root); if (current === generation) cancel(); return; }
       job = started;
       while (current === generation) {
@@ -312,7 +336,9 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
         if (status.state === 'failed' || status.state === 'cancelled') throw new Error(status.failureCode || 'capture-failed');
         if (status.state === 'ready') {
           ready = status; phase = 'ready';
-          options.status.textContent = (status.complete ? '范围内收集完成' : '存在未采集范围') + '；有损记录 ' + status.lossyEvents + ' 条。可附带 ' + status.rawRetainedEvents + ' 条已定向脱敏片段，因安全或容量限制省略 ' + status.rawOmittedEvents + ' 条。扫描标识：' + status.scanId + '。';
+          if(options.namesStatus){var count=status.nameRecovery&&status.nameRecovery.counts;
+            options.namesStatus.textContent=count?'逐首名称诊断：原名可恢复 '+(count.recoverable||0)+'；历史显示名 '+(count.historical||0)+'；冲突 '+(count.ambiguous||0)+'；已检查资料无名 '+(count.unrecoverable||0)+'；检查未完成 '+(count.incomplete||0)+'；身份待确认 '+(count.excluded||0)+'。逐首证据及预演随详细诊断导出，不会实际改名。':'逐首名称诊断未取得（旧服务或采集失败）。';}
+          options.status.textContent = status.minimal?'完整材料未采集，但已保存可取得的现场和故障原因。可导出最小故障包；详细选择仅包含实际取得的证据。':'摘要用于快速查看，详细模式另含结构化关联证据。可附带 '+status.rawRetainedEvents+' 条去凭据片段，另省略 '+status.rawOmittedEvents+' 条；扫描标识：'+status.scanId+'。';
           return;
         }
         await options.delay();
@@ -320,7 +346,8 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
     } catch (error) {
       if (current === generation) {
         void discard(job, root); job = null; ready = null; phase = 'failed';
-        options.status.textContent = '完整材料未生成（收集失败、过期或超过安全容量）。可仅导出已有基础诊断：不含片段、不含本次材料，以摘要自身的扫描标识为准；也可取消后重试。';
+        captureErrors.push(safeFailure(error,'diagnostic-capture'));
+        options.status.textContent = '服务诊断未取得。仍可导出本次前端最小现场及失败阶段；服务数据明确未观测，不依赖旧扫描。取消不会下载。';
       }
     } finally { if (current === generation) { busy = false; render(); options.refreshBusy(); } }
   }
@@ -331,15 +358,7 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
     busy = true; render(); options.refreshBusy();
     try {
       if (phase === 'failed') {
-        // Read-only fallback: never trigger normal scan/rebuild or pretend this is the failed snapshot.
-        var snapshot = await options.request('/api/custom-songs/diagnostics', { method: 'POST', body: { mediaRoot: root } });
-        if (!valid(current, root)) return;
-        var sameRoot = function (value) { return String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(); };
-        if (!snapshot || !snapshot.scanId || !snapshot.local || sameRoot(snapshot.local.mediaRoot) !== sameRoot(root)) throw new Error('no-basic-snapshot');
-        var report = await options.request('/api/custom-songs/diagnostics/export', { method: 'POST', body: { mediaRoot: root, scanId: snapshot.scanId } });
-        if (!valid(current, root)) return;
-        if (!report || report.scanId !== snapshot.scanId) throw new Error('changed-basic-snapshot');
-        options.downloadBasic({ kind: 'basic-diagnostics-only', materialCaptured: false, fragmentsIncluded: false, scanId: report.scanId, diagnostics: report }, 'linli-song-basic-' + report.scanId);
+        options.downloadBasic(minimalFront(),'linli-song-frontend-'+Date.now());
       } else {
         var bundle = await options.request('/api/custom-songs/debug-package/download', { method: 'POST', body: {
           mediaRoot: root, jobId: job.jobId, scanId: ready.scanId, includeRaw: include,
@@ -352,10 +371,29 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
       if (options.onExport) options.onExport(include);
     } catch (error) {
       if (current === generation) { phase = 'failed'; void discard(job, root); job = null; ready = null;
-        options.status.textContent = '导出未完成。若已有基础诊断，可重试“仅导出基础诊断”；没有可用摘要时请取消，并检查本地服务。不会回退导出原文或自动上传。'; }
+        captureErrors.push(safeFailure(error,'diagnostic-download'));
+        options.status.textContent = '导出未完成。可重试下载前端最小现场，包含本次下载失败阶段；不会导出原始异常或自动上传。'; }
     } finally { if (current === generation) { busy = false; render(); options.refreshBusy(); } }
   }
   options.openButton.onclick = function () { return open(); };
+  var extraPaths=[];
+  async function chooseSources(mode){
+    if(busy||!['ready','failed'].includes(phase))return;
+    var current=generation,root=jobRoot;busy=true;render();
+    try{
+      var picked=mode==='clear'?{cancelled:false,paths:[]}:await options.request('/api/custom-songs/debug-package/choose-sources',{method:'POST',body:{mediaRoot:root,mode:mode}});
+      if(!valid(current,root)||picked.cancelled)return;
+      var paths=mode==='clear'?[]:Array.from(new Set(extraPaths.concat(picked.paths||[])));
+      if(paths.length>32){options.status.textContent='补充资料最多32项，请先清空后重新选择。';return;}
+      cancel();extraPaths=paths;
+      if(options.sourcesStatus)options.sourcesStatus.textContent='已选择 '+paths.length+' 项补充资料，仅本次只读使用。';
+      return await open();
+    }catch(error){if(current===generation)options.status.textContent='资料选择未完成，未添加任何来源；可重试或取消。';}
+    finally{if(current===generation){busy=false;render();}}
+  }
+  if(options.filesButton)options.filesButton.onclick=function(){return chooseSources('files');};
+  if(options.directoryButton)options.directoryButton.onclick=function(){return chooseSources('directory');};
+  if(options.clearSourcesButton)options.clearSourcesButton.onclick=function(){return chooseSources('clear');};
   options.fragmentButton.onclick = function () { return exportChoice(true); };
   options.basicButton.onclick = function () { return exportChoice(false); };
   options.cancelButton.onclick = cancel;
