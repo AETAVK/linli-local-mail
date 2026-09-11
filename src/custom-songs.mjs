@@ -7,6 +7,11 @@ import { inspectVideo } from "./custom-song-media-facts.mjs";
 import { ScanDiagnostics } from "./custom-song-diagnostics.mjs";
 import { SongDebugPackageManager } from "./custom-song-debug-package.mjs";
 import { VisionTaskService } from "./custom-song-vision-jobs.mjs";
+import { captureDebugContext, safeFrontendEvidence } from "./custom-song-debug-context.mjs";
+import { detailedServiceEvidence } from "./custom-song-debug-evidence.mjs";
+import {snapshotSongDatabase,mappingNameSource,validateExtraSourcePaths} from "./custom-song-name-sources.mjs";
+import {baseSongName,savedSongName,normalizeSongRename,planSongRename} from "./custom-song-name-policy.mjs";
+import { diagnosticError } from "./diagnostic-errors.mjs";
 import { revisionForResolvedFile, isVisionFile, validVisionFile } from "./custom-song-vision-evidence.mjs";
 import { SERVICE_VERSION } from "./constants.mjs";
 import { CustomSongMappings, mappingKey } from "./custom-song-mappings.mjs";
@@ -65,6 +70,7 @@ async function mp4Duration(filePath) {
 export class CustomSongCatalog {
   constructor({ db, baseUrl, mediaRoot, logRoot, mappingPath, scan = scanCustomSongs, clock = () => Date.now(), refreshOptions }) {
     this.db = db;
+    this.diagnosticStartedAt = Date.now();
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.defaultRoot = mediaRoot || path.join(os.homedir(), "Music", "miHoYo", "Olivia-steam", "cache", "studiovideo");
     this.logRoot = logRoot ?? path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "miHoYo", "Olivia-steam", "logs");
@@ -205,7 +211,7 @@ export class CustomSongCatalog {
       const raw = [...new Map(JSON.parse(row.files_json).map((file) => [mappingKey(file.fileName), file])).values()];
       const overrides = JSON.parse(row.overrides_json);
       const old = previous.get(row.name_key);
-      let name = row.custom_name || row.name;
+      let name = savedSongName(row, raw, entries);
       const files = raw.map((file) => {
         const candidate = table.get(mappingKey(file.fileName));
         const mapped = candidate && (!candidate.filePath || candidate.filePath.toLowerCase() === `${row.name_key}/${file.fileName}`.toLowerCase()) ? candidate : null;
@@ -296,9 +302,30 @@ export class CustomSongCatalog {
   debugPackage(action, input = {}) {
     const mediaRoot = this.root(input.mediaRoot);
     if (action === 'start') {
-      if (this.inFlight || this.mappingMutation) throw fail('正在扫描或保存映射，请稍后再收集排障材料', 409);
+      const extraPaths=validateExtraSourcePaths(input.extraPaths||[]);
+      let frozenNameSources=[];
+      try{frozenNameSources=snapshotSongDatabase(this.db);}
+      catch{frozenNameSources=[{id:'current-db',kind:'current-db',complete:false,gaps:[{reason:'database-snapshot-failed'}],records:[]}];}
       // Deliberately bypass rebuild/search: no SQLite, mapping persistence, or playback mutations.
-      return this.debugPackages.start({ mediaRoot, logRoot: this.logRoot, logRootSource: this.logRootSource, mappingEntries: structuredClone(this.mappings?.read() || []) });
+      const failures=[];let mappingEntries=[];
+      try{mappingEntries=structuredClone(this.mappings?.read()||[]);}catch(error){failures.push(diagnosticError(error,'mapping-read'));}
+      let context;
+      try { context = captureDebugContext(this, { mediaRoot, requestedRoot: input.mediaRoot, officialRoot: input.officialRoot, frontend: input.frontend }, mappingEntries); }
+      catch(error) { failures.push(diagnosticError(error,'context-read'));context = { schemaVersion: 1, basis: 'before-debug-capture-read-only', available: false, reason: 'context-snapshot-unavailable',frontend:safeFrontendEvidence(input.frontend),service:{version:SERVICE_VERSION} }; }
+      const detailContext=detailedServiceEvidence(this,{...input,mediaRoot},mappingEntries,failures);
+      frozenNameSources.push(mappingNameSource(mappingEntries));
+      const original=detailContext.components['mapping-source'];
+      if(original?.records){
+        const source=mappingNameSource(original.records.map(r=>r.value),{id:'current-mapping-original',kind:'mapping-original'});
+        if(original.omitted||original.records.some(r=>r.gaps?.length)){source.complete=false;source.gaps.push({reason:'mapping-original-evidence-omitted'});}
+        frozenNameSources.push(source);
+      }else if(this.mappings){
+        const absent=original?.error?.code==='ENOENT';
+        frozenNameSources.push({id:'current-mapping-original',kind:'mapping-original',state:absent?'confirmed-absent':'unavailable',complete:absent,gaps:absent?[]:[{reason:'mapping-original-unavailable'}],records:[]});
+      }
+      return this.debugPackages.start({ mediaRoot, logRoot: this.logRoot, logRootSource: this.logRootSource, mappingEntries, context,detailContext,failures,frozenNameSources,extraPaths,
+        backupRoot:this.mappings?path.join(path.dirname(path.dirname(this.mappings.filePath)),'backups'):null,
+        minimalOnly:Boolean(this.inFlight||this.mappingMutation||this.visionTasks.userMutation) });
     }
     if (!['status', 'download', 'cancel'].includes(action)) throw fail('未知排障操作', 404);
     return this.debugPackages[action]({ ...input, mediaRoot });
@@ -648,7 +675,7 @@ export class CustomSongCatalog {
     });
     return {
       localCustomSong: true, localEvidenceVersion: 1,
-      id: row.song_id, userSongId: row.song_id, name: row.custom_name || row.name,
+      id: row.song_id, userSongId: row.song_id, name: baseSongName(row),
       nameKey: row.name_key, songNameKey: row.name_key, itemType: 3, sourceType: 3,
       localAvailable: true, metadataSource: row.metadata_source,
       localFiles: files, fallbackPeriods: PERIODS.filter((tod) => !files.some((file) => file.tod === tod)),
@@ -696,8 +723,15 @@ export class CustomSongCatalog {
     if (!NAME_KEY.test(String(nameKey))) throw fail("曲目编号无效");
     const row = this.db.prepare("SELECT * FROM custom_songs WHERE name_key=?").get(nameKey);
     if (!row) throw fail("找不到曲目", 404);
-    const nextName = name === undefined ? row.custom_name : String(name).trim();
+    const nextName = name === undefined ? row.custom_name : normalizeSongRename(name);
     if (name !== undefined && (!nextName || nextName.length > 240)) throw fail("曲名应为 1～240 个字符");
+    if(name!==undefined&&mappings===undefined){
+      // The same pure plan is used by diagnostics. A name edit cannot reclassify video periods.
+      const plan=planSongRename(row,this.mappings?.read()||[],nextName);
+      this.commitMappings(this.mappings?plan.nextEntries:undefined,()=>this.db.prepare("UPDATE custom_songs SET custom_name=?,updated_at=? WHERE name_key=?").run(nextName,Date.now(),nameKey));
+      this.invalidatePresentationCache();this.refresh?.invalidate();
+      return this.present(this.db.prepare("SELECT * FROM custom_songs WHERE name_key=?").get(nameKey));
+    }
     const override = JSON.parse(row.overrides_json);
     const originalFiles = JSON.parse(row.files_json);
     if (mappings !== undefined) {

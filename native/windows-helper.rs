@@ -11,6 +11,52 @@ const INVALID_HANDLE_VALUE: isize = -1;
 
 type Handle = *mut c_void;
 
+// OPENFILENAMEW Win32 layout (Windows SDK commdlg.h; _MAC fields excluded).
+#[repr(C)]
+struct OpenFileName {
+    size:u32, owner:Handle, instance:Handle, filter:*const u16, custom_filter:*mut u16,
+    max_custom_filter:u32, filter_index:u32, file:*mut u16, max_file:u32,
+    file_title:*mut u16, max_file_title:u32, initial_dir:*const u16, title:*const u16,
+    flags:u32, file_offset:u16, file_extension:u16, default_extension:*const u16,
+    custom_data:isize, hook:*const c_void, template_name:*const u16, reserved:*mut c_void,
+    reserved_word:u32, flags_ex:u32,
+}
+#[cfg(target_arch="x86_64")]
+const _: [();152] = [();std::mem::size_of::<OpenFileName>()];
+#[link(name="comdlg32")]
+extern "system" {
+    fn GetOpenFileNameW(info:*mut OpenFileName)->i32;
+    fn CommDlgExtendedError()->u32;
+}
+fn command_choose_diagnostic_files(arguments:&[String])->Result<i32,String> {
+    if !arguments.is_empty(){return Err("choose-diagnostic-files does not accept arguments".into());}
+    let input=String::from_utf8(read_stdin()?).map_err(|_|"invalid initial folder")?;
+    if input.len()>16384||input.contains('\0')||(!input.is_empty()&&!Path::new(&input).is_absolute()){return Err("invalid initial folder".into());}
+    let initial:Vec<u16>=input.encode_utf16().chain(Some(0)).collect();
+    let title:Vec<u16>="选择诊断资料（可多选，不修改文件）".encode_utf16().chain(Some(0)).collect();
+    let filter:Vec<u16>="歌曲诊断资料\0*.log;*.bak;*.old;*.txt;*.gz;*.json;*.sqlite;*.sqlite3;*.db\0所有文件\0*.*\0\0".encode_utf16().collect();
+    let mut buffer=vec![0u16;131072];
+    let mut info:OpenFileName=unsafe{std::mem::zeroed()};
+    info.size=std::mem::size_of::<OpenFileName>() as u32;info.filter=filter.as_ptr();info.filter_index=1;
+    info.file=buffer.as_mut_ptr();info.max_file=buffer.len() as u32;info.initial_dir=initial.as_ptr();info.title=title.as_ptr();
+    // Explorer, multiselect, path/file must exist, no CWD change, no Recent Documents shortcut.
+    info.flags=0x00080000|0x00000200|0x00001000|0x00000800|0x00000008|0x02000000|0x00100000;
+    if unsafe{GetOpenFileNameW(&mut info)}==0{
+        if unsafe{CommDlgExtendedError()}!=0{return Err("diagnostic file dialog failed".into());}
+        write_stdout(b"{\"cancelled\":true,\"paths\":[]}")?;return Ok(0);
+    }
+    let mut parts=Vec::new();let mut start=0;
+    while start<buffer.len()&&buffer[start]!=0{
+        let end=start+buffer[start..].iter().position(|u|*u==0).ok_or("invalid selection")?;
+        parts.push(String::from_utf16(&buffer[start..end]).map_err(|_|"invalid selection encoding")?);start=end+1;
+    }
+    if parts.is_empty()||parts.len()>33{return Err("select at most 32 files".into());}
+    let paths:Vec<String>=if parts.len()==1{parts}else{parts[1..].iter().map(|name|Path::new(&parts[0]).join(name).to_string_lossy().into_owned()).collect()};
+    if paths.iter().any(|p|p.len()>16384||!Path::new(p).is_absolute()||!Path::new(p).is_file()){return Err("invalid file selection".into());}
+    write_stdout(format!("{{\"cancelled\":false,\"paths\":[{}]}}",paths.iter().map(|p|json_escape(p)).collect::<Vec<_>>().join(",")).as_bytes())?;
+    Ok(0)
+}
+
 #[repr(C)]
 struct BrowseInfo {
     owner: Handle, root: *const c_void, display: *mut u16, title: *const u16, flags: u32,
@@ -606,6 +652,7 @@ fn run() -> Result<i32, String> {
         }
         "process-info" => command_process_info(&rest),
         "choose-song-folder" => command_choose_song_folder(&rest),
+        "choose-diagnostic-files" => command_choose_diagnostic_files(&rest),
         "process-list" => command_process_list(&rest),
         "self-test" => {
             if !rest.is_empty() {

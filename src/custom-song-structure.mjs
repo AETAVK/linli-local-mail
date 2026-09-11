@@ -149,7 +149,7 @@ export function inspectRequestStructure(text) {
     beginValue(type); emit(token); if (!frames.length) rootDone = true;
   }
   const complete = index === characters && stopped === null;
-  const explicitMarker = /\[(?:truncated|cut|partial)\]\s*$/i.test(text);
+  const explicitMarker = /\[(?:truncated(?:\s+\d+\s+chars)?|cut|partial)\]\s*$/i.test(text);
   return {
     characters, utf8Bytes: Buffer.byteLength(text, 'utf8'), inspectedCharacters: index,
     inspectionComplete: complete, inspectionLimit: stopped,

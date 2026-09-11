@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 export const MAPPING_MAX_BYTES = 8 * 1024 * 1024;
 const MAX_ENTRIES = 10000;
 const PERIODS = ["TOD12", "TOD1730", "TOD20"];
-const fail = (message) => Object.assign(new Error(message), { status: 400 });
+const fail = (message,code='MAPPING_SCHEMA_INVALID') => Object.assign(new Error(message), { status: 400,code,phase:code==='MAPPING_TOO_LARGE'?'mapping-size':'mapping-schema' });
 export const mappingKey = (fileName) => fileName.toLowerCase();
 
 // Paths are portable, relative to the selected studiovideo directory. Never use
@@ -36,16 +36,21 @@ export class CustomSongMappings {
   constructor(filePath) { this.filePath = filePath; }
 
   read() {
+    let phase='mapping-read';
     try {
-      if (fs.statSync(this.filePath).size > MAPPING_MAX_BYTES) throw fail("本地映射表不能超过 8 MiB");
-      const document = JSON.parse(fs.readFileSync(this.filePath, "utf8").replace(/^\uFEFF/, ""));
+      if (fs.statSync(this.filePath).size > MAPPING_MAX_BYTES) throw fail("本地映射表不能超过 8 MiB",'MAPPING_TOO_LARGE');
+      const text=fs.readFileSync(this.filePath,"utf8").replace(/^\uFEFF/,"");phase='mapping-json-parse';
+      const document = JSON.parse(text);phase='mapping-schema';
       const entries = validateMappingDocument(document);
       // Only locally persisted evidence is retained. Import strips this field.
       return entries.map((entry, index) => ({ ...entry, ...(document.entries[index].automatic
         ? { automatic: document.entries[index].automatic } : {}) }));
     } catch (error) {
       if (error.code === "ENOENT") return [];
-      throw fail(`无法读取歌曲映射表，请先备份并修复 JSON：${error.message}`);
+      const code=error instanceof SyntaxError?'MAPPING_JSON_INVALID':error.code||'MAPPING_READ_FAILED';
+      const wrapped=fail(`无法读取歌曲映射表，请先备份并修复 JSON（${code}）${code==='MAPPING_TOO_LARGE'?'：不能超过 8 MiB':''}`,code);
+      wrapped.phase=error.phase||phase;if(Number.isInteger(error.errno))wrapped.errno=error.errno;
+      throw wrapped;
     }
   }
 

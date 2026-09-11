@@ -74,6 +74,15 @@
     }
   };
   var sessionPromise = null;
+  var LOCAL_FRONTEND_BUILD = {"version":"0.11.14","sha256":"6ace18b1739165d3376f26fb13137aa04fb3e7e8c392ecf3a153493ecb393b15","basis":"assembled-input-hash-not-runtime-attestation"};
+  function musicFailureFields(error,phase,links){
+    var code=error&&error.code;
+    if(typeof code!=='string'||code.length>80||!(/^(?:E[A-Z0-9_]+|SQLITE_[A-Z0-9_]+|DEBUG_[A-Z0-9_]+|MAPPING_[A-Z0-9_]+)$/.test(code))||/(TOKEN|SECRET|PASSWORD|COOKIE)/.test(code))code=null;
+    var safeLinks={};['root','jobId','nameKey','fileName'].forEach(function(key){var value=links&&links[key];if(typeof value==='string'&&value.length<=(key==='root'?4096:512))safeLinks[key]=value;});
+    return {phase:error&&/^[a-z][a-z0-9]*(?:-[a-z0-9]+){1,8}$/.test(error.phase||'')?error.phase:phase,code:code,sqliteCode:error&&Number.isInteger(error.sqliteCode)&&error.sqliteCode>=0&&error.sqliteCode<=65535?error.sqliteCode:null,errno:error&&Number.isInteger(error.errno)&&Math.abs(error.errno)<10000000?error.errno:null,links:safeLinks};
+  }
+  var musicDiagnosticStartedAt=Date.now(), musicDiagnosticRecent=[];
+  var MUSIC_DIAGNOSTIC_ENDPOINTS={'/api/custom-songs/search':'catalog/search','/api/custom-songs/status':'catalog/status','/api/custom-songs/scan':'catalog/scan','/api/music-library/preferences':'music/preferences','/api/custom-songs/mappings/import':'mapping/import','/api/custom-songs/mappings/export':'mapping/export','/api/custom-songs/choose-folder':'folder/choose'};
 
   async function localSession() {
     if (!sessionPromise) {
@@ -83,13 +92,14 @@
         credentials: "omit",
         referrerPolicy: "no-referrer"
       }).then(async function (response) {
-        var payload = await response.json();
+        var payload;try{payload=await response.json();}catch(error){throw Object.assign(new Error('无法解析本地会话响应'),{phase:'session-response-json',status:response.status});}
         if (!response.ok || payload.code !== 0 || !payload.data || !payload.data.token) {
-          throw new Error(payload.message || "无法建立本地回信会话");
+          throw Object.assign(new Error(payload.message || "无法建立本地回信会话"),{phase:'session-create',status:response.status});
         }
         return payload.data.token;
       }).catch(function (error) {
         sessionPromise = null;
+        if(!error.phase)error.phase='session-transport';
         throw error;
       });
     }
@@ -108,7 +118,7 @@
     return text ? "?" + text : "";
   }
 
-  async function localRequest(method, path, data, config, retrying) {
+  async function performLocalRequest(method, path, data, config, retrying) {
     var token = await localSession();
     var url = API_BASE + path + (method === "GET" ? queryString(config && config.params) : "");
     var response = await fetch(url, {
@@ -125,18 +135,34 @@
     });
     if (response.status === 401 && !retrying) {
       sessionPromise = null;
-      return localRequest(method, path, data, config, true);
+      return performLocalRequest(method, path, data, config, true);
     }
-    var payload = await response.json();
+    var payload;try{payload=await response.json();}catch(error){throw Object.assign(new Error('无法解析本地服务响应'),{phase:'response-json',status:response.status});}
     if (!response.ok || payload.code !== 0) {
       var failure = new Error(payload.message || "本地服务请求失败");
       failure.status = response.status;
+      var diagnostic=payload.data&&payload.data.diagnosticFailure;
+      failure.phase=diagnostic&&diagnostic.phase||'service-response';failure.code=diagnostic&&diagnostic.code;failure.sqliteCode=diagnostic&&diagnostic.sqliteCode;failure.errno=diagnostic&&diagnostic.errno;
       if ((path === "/api/custom-songs/scan" || path === "/api/custom-songs/search") && payload.data && payload.data.scanDiagnostics) {
         failure.scanDiagnostics = payload.data.scanDiagnostics;
       }
       throw failure;
     }
     return { data: payload.data, status: response.status, headers: response.headers };
+  }
+
+  async function localRequest(method, path, data, config, retrying) {
+    var started=Date.now();
+    try{return await performLocalRequest(method,path,data,config,retrying);}catch(error){
+      var endpoint=MUSIC_DIAGNOSTIC_ENDPOINTS[String(path).split('?')[0]];
+      if(endpoint){var status=Number.isInteger(error&&error.status)&&error.status>=100&&error.status<=599?error.status:0;
+        musicDiagnosticRecent.push({endpoint:endpoint,operation:method==='GET'?'read':'save',httpStatus:status,category:status===409?'busy':status===401||status===403?'access-denied':status===429?'rate-limited':status>=500?'service-error':status>=400?'invalid-request':'unknown-no-status',at:Date.now(),durationMs:Math.max(0,Math.min(300000,Date.now()-started)),scope:'unknown'});
+        if(musicDiagnosticRecent.length>16)musicDiagnosticRecent.shift();
+        var scopeData=method==='GET'?config&&config.params:data;
+        Object.assign(musicDiagnosticRecent[musicDiagnosticRecent.length-1],musicFailureFields(error,'request-transport',{root:scopeData&&scopeData.mediaRoot,jobId:scopeData&&scopeData.jobId,nameKey:scopeData&&scopeData.nameKey,fileName:scopeData&&scopeData.fileName}));
+        if(status>0&&status<400)musicDiagnosticRecent[musicDiagnosticRecent.length-1].category='invalid-response';
+      }throw error;
+    }
   }
 
   window.__LOCAL_MAIL_HTTP__ = Object.freeze({
@@ -5183,7 +5209,7 @@ function visionTaskHumanBusy() {
 }
 function getVisionTaskCoordinator() {
   if (!visionTaskCoordinator) visionTaskCoordinator = createVisionTaskController({
-    getRoot: visionTaskRoot, request: callApi, isHumanBusy: visionTaskHumanBusy,
+    getRoot: visionTaskRoot, request: callApi, isHumanBusy: visionTaskHumanBusy, failureInfo:musicFailureFields,
     environment: function () {
       var video = document.createElement('video'), canvas = document.createElement('canvas');
       return { visible: document.hidden !== true && document.visibilityState !== 'hidden',
@@ -5577,9 +5603,10 @@ async function openCustomSongManager() {
     document.body.appendChild(modal);
     var exportDialog = document.createElement('div');
     exportDialog.id = 'local-mail-song-export-dialog'; exportDialog.className = 'lm-modal-backdrop lm-song-export-backdrop'; exportDialog.hidden = true;
-    exportDialog.innerHTML = '<section class="lm-modal lm-song-export-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-song-export-title"><div class="lm-modal-title" id="lm-song-export-title">是否附带脱敏后的日志片段？</div>' +
-      '<p class="lm-modal-status" role="status" data-custom-debug-status></p><p class="lm-song-warning">附带片段已在本地服务中定向移除凭据，但仍可能含曲名、账号、路径及其他私人内容，并非完全匿名。仅私下提供，勿公开发布。片段已改写，不是原始日志字节。不会自动上传。</p>' +
-      '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-fragments>附带脱敏片段并导出</button><button type="button" class="lm-button lm-button-primary" data-custom-debug-basic>仅导出诊断</button><button type="button" class="lm-button" data-custom-debug-cancel>取消</button></div></section>';
+    exportDialog.innerHTML = '<section class="lm-modal lm-song-export-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-song-export-title"><div class="lm-modal-title" id="lm-song-export-title">选择诊断内容</div>' +
+      '<p class="lm-modal-status" role="status" data-custom-debug-status></p><p class="lm-song-warning">详细诊断包含真实歌曲名、业务标识、文件名、目录路径和已有识别依据；始终移除令牌、Cookie、密码和签名。仅私下提供，勿公开发布。片段是去凭据后的内容，不是完整原始日志。默认只导出摘要，不自动上传。</p>' +
+      '<details><summary>补充资料（可选）</summary><p>默认检查当前资料和补丁备份。可选择旧日志、改名日志、gzip 日志、映射 JSON、SQLite 备份或资料文件夹；仅本次只读使用，不导出信件。</p><div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-files>选择多个文件</button><button type="button" class="lm-button" data-custom-debug-directory>添加文件夹</button><button type="button" class="lm-button" data-custom-debug-clear>清空补充资料</button></div><p data-custom-debug-sources>未选择补充资料</p></details>' +
+      '<p data-custom-debug-names></p><div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-fragments>导出详细诊断及片段</button><button type="button" class="lm-button lm-button-primary" data-custom-debug-basic>仅导出诊断摘要</button><button type="button" class="lm-button" data-custom-debug-cancel>取消</button></div></section>';
     document.body.appendChild(exportDialog);
     modal.__songHelp = createCustomSongDiagnostics.createHelp(modal);
     modal.querySelector("[data-custom-close]").onclick = function () {
@@ -5634,14 +5661,21 @@ async function openCustomSongManager() {
     modal.__songDebugPackage = createCustomSongDiagnostics.createDebugPackage({
       openButton: modal.querySelector('[data-custom-diagnostic-export]'), panel: exportDialog,
       status: exportDialog.querySelector('[data-custom-debug-status]'),
+      filesButton:exportDialog.querySelector('[data-custom-debug-files]'),directoryButton:exportDialog.querySelector('[data-custom-debug-directory]'),
+      clearSourcesButton:exportDialog.querySelector('[data-custom-debug-clear]'),sourcesStatus:exportDialog.querySelector('[data-custom-debug-sources]'),namesStatus:exportDialog.querySelector('[data-custom-debug-names]'),
       fragmentButton: exportDialog.querySelector('[data-custom-debug-fragments]'), basicButton: exportDialog.querySelector('[data-custom-debug-basic]'), cancelButton: exportDialog.querySelector('[data-custom-debug-cancel]'),
       getRoot: function () { return modal.querySelector('[data-custom-root]').value.trim(); },
+      getOfficialRoot: officialSongStoragePath,
+      getEvidence: function () {
+        var evidence=visionTaskCoordinator&&visionTaskCoordinator.diagnostic?visionTaskCoordinator.diagnostic():{startedAt:musicDiagnosticStartedAt,currentFailures:[],recentFailures:[],capabilities:{visible:document.hidden!==true,canvas:null,rvfc:null}};
+        return Object.assign({},evidence,{scriptRevision:'song-diagnostics-2026-09-11',build:LOCAL_FRONTEND_BUILD,userAgent:window.navigator&&String(window.navigator.userAgent).slice(0,512),startedAt:Math.min(musicDiagnosticStartedAt,evidence.startedAt||musicDiagnosticStartedAt),capturedAt:Date.now(),recentFailures:(evidence.recentFailures||[]).concat(musicDiagnosticRecent).sort(function(a,b){return a.at-b.at;}).slice(-16)});
+      },
       isHidden: function () { return modal.hidden; },
       isBusy: function () { return customSongsState.busy || Boolean(customSongVisionState.run) || customSongDiagnosticsFor(modal).isExporting(); },
       refreshBusy: function () { customSongManagerBusy(modal, customSongsState.busy); }, request: callApi,
       onOpen: function () { modal.inert = true; modal.setAttribute('aria-hidden', 'true'); modal.__songHelp.hide(); var button = exportDialog.querySelector('[data-custom-debug-cancel]'); if (button.focus) button.focus(); },
       onClose: function () { modal.inert = false; modal.removeAttribute('aria-hidden'); var button = modal.querySelector('[data-custom-diagnostic-export]'); if (!modal.hidden && button.focus) button.focus(); },
-      onExport: function (include) { modal.querySelector('[data-custom-status]').textContent = include ? '已发起下载。附带片段仍含私人信息，仅私下提供。' : '已发起诊断下载，不含私人片段。'; },
+      onExport: function (include) { modal.querySelector('[data-custom-status]').textContent = include ? '已发起详细诊断下载，含真实业务信息，请仅私下提供。' : '已发起诊断摘要下载，只包含已取得的现场。'; },
       downloadBasic: downloadJson,
       delay: function () { return new Promise(function (resolve) { setTimeout(resolve, 500); }); },
       download: function (bundle) {
@@ -5709,7 +5743,7 @@ function installCustomSongHome(modal) {
   body.appendChild(manual);
   var home=document.createElement('div');home.className='lm-song-home';home.setAttribute('data-song-home','');
   home.innerHTML='<section class="lm-song-home-section"><h3>歌曲文件夹</h3><div class="lm-song-path-row"><span data-song-effective-path class="lm-song-path" tabindex="0" aria-label="生效的歌曲文件夹"></span><button class="lm-button lm-button-small" data-song-folder-change>更换歌曲文件夹</button></div></section>'+
-    '<section class="lm-song-home-section"><div class="lm-song-auto-row"><div><div class="lm-song-inline"><h3>自动整理</h3><button class="lm-song-help" type="button" aria-label="自动整理说明" data-song-help="整理当前文件夹中的全部歌曲，自动保存可用匹配与推测，不覆盖人工或导入设置。画面推测可能不准确，可在任务详情中撤销。">?</button></div><p class="lm-modal-status">新增歌曲自动识别并保存。</p></div><div class="lm-song-auto-control"><span data-song-auto-state class="lm-modal-status"></span><label class="lm-music-switch"><input type="checkbox" role="switch" data-song-home-auto aria-label="自动整理"></label></div></div>'+
+    '<section class="lm-song-home-section"><div class="lm-song-auto-row"><div><div class="lm-song-inline"><h3>自动整理</h3><button class="lm-song-help" type="button" aria-label="自动整理说明" data-song-help="整理当前文件夹中的全部歌曲，保留人工或导入设置。画面仅辅助补时段，不凭画面识别曲名；推测可能不准确，可在任务详情撤销。">?</button></div><p class="lm-modal-status">新增歌曲自动识别并保存。</p></div><div class="lm-song-auto-control"><span data-song-auto-state class="lm-modal-status"></span><label class="lm-music-switch"><input type="checkbox" role="switch" data-song-home-auto aria-label="自动整理"></label></div></div>'+
     '<div class="lm-song-organize-row"><div class="lm-song-run-context"><p class="lm-modal-status" data-song-run-scope>范围：当前文件夹中的全部歌曲</p><div data-song-run-status></div><progress data-song-run-progress aria-label="整理进度" hidden></progress></div><div data-song-run-action></div></div></section>'+
     '<section class="lm-song-home-section lm-song-mapping-row"><div class="lm-song-inline"><h3>歌曲映射</h3><button class="lm-song-help" type="button" aria-label="歌曲映射说明" data-song-help="映射保存曲名、文件对应关系与时段，不包含演奏视频。可以导出备份，或导入已有映射；覆盖已有内容前会再次确认。">?</button></div><div class="lm-modal-actions" data-song-home-mappings></div></section><p class="lm-modal-status" role="status" data-song-home-notice></p><div data-song-operation-feedback></div><div data-song-home-tasks></div>';
   body.insertBefore(home,manual);
@@ -7950,7 +7984,7 @@ function createCustomSongDiagnostics(options) {
     if (snapshot && snapshot.local.mediaRoot !== root) snapshot = null;
     var busy = options.isBusy() || exporting;
     options.reasons.disabled = busy || !snapshot;
-    options.exportButton.disabled = busy || (!options.unifiedExport && !snapshot);
+    options.exportButton.disabled = options.unifiedExport ? false : busy || !snapshot;
     var summary = options.summary;
     var detail = options.detail;
     if (!snapshot) {
@@ -8029,14 +8063,33 @@ function createCustomSongDiagnostics(options) {
 
 // One capture, explicit three-way choice, no persistent consent or player mutation.
 createCustomSongDiagnostics.createDebugPackage = function (options) {
-  var generation = 0, job = null, jobRoot = '', busy = false, ready = null, phase = 'closed';
+  var generation = 0, job = null, jobRoot = '', busy = false, ready = null, phase = 'closed', frontSnapshot=null, captureErrors=[];
+  function safeFailure(error,stage){var status=Number.isInteger(error&&error.status)&&error.status>=100&&error.status<=599?error.status:0,code=error&&error.code;
+    if(typeof code!=='string'||!(/^(E[A-Z0-9_]+|SQLITE_[A-Z0-9_]+|DEBUG_[A-Z0-9_]+)$/.test(code))||code.length>80||/TOKEN|SECRET|PASSWORD|COOKIE/.test(code))code=null;
+    return{phase:stage,httpStatus:status,code:code,errno:error&&Number.isInteger(error.errno)&&Math.abs(error.errno)<10000000?error.errno:null,sqliteCode:error&&Number.isInteger(error.sqliteCode)&&error.sqliteCode>=0&&error.sqliteCode<=65535?error.sqliteCode:null,at:Date.now(),summary:'诊断操作未完成，原始异常未导出'};
+  }
+  function safeFront(input){
+    var available=Boolean(input),aliases={},next=0;
+    function alias(value){if(typeof value!=='string')return null;var key='$'+value;if(!Object.prototype.hasOwnProperty.call(aliases,key))aliases[key]='ref-'+(++next);return aliases[key];}
+    function failures(items){return(Array.isArray(items)?items:[]).slice(-16).map(function(item){
+      var record=safeFailure({status:item.httpStatus,code:item.code,errno:item.errno,sqliteCode:item.sqliteCode},/^[a-z][a-z-]{0,60}$/.test(item.phase||'')?item.phase:'unknown-phase');
+      record.endpoint=/^(vision\/(status|start|claim|submit|heartbeat|control|undo|locate)|catalog\/(search|status|scan)|music\/preferences|mapping\/(import|export)|folder\/choose)$/.test(item.endpoint||'')?item.endpoint:'unknown';
+      record.at=Number.isSafeInteger(item.at)?item.at:null;record.durationMs=Number.isFinite(item.durationMs)?Math.max(0,Math.min(item.durationMs,300000)):null;
+      record.scope=item.scope==='current'?'current':item.scope==='previous'?'previous':'unknown';record.links={};
+      ['root','jobId','nameKey','fileName'].forEach(function(key){record.links[key]=alias(item.links&&item.links[key]);});return record;
+    });}
+    input=input||{};var caps={};['visible','canvas','rvfc'].forEach(function(k){caps[k]=typeof(input.capabilities&&input.capabilities[k])==='boolean'?input.capabilities[k]:null;});
+    return{available:available,capturedAt:Date.now(),capabilities:caps,currentFailures:failures(input.currentFailures).slice(-8),recentFailures:failures(input.recentFailures),historyScope:'current-renderer-only',build:input.build&&/^[a-f0-9]{64}$/.test(input.build.sha256)?{sha256:input.build.sha256,basis:'running-script-self-report'}:null};
+  }
+  function minimalFront(){var id='frontend-'+Date.now();return{format:'linli-song-debug',schemaVersion:3,manifest:{scanId:id,minimal:true,summaryOnly:true,complete:false,serviceObserved:false,scope:'frontend-only',context:{frontend:frontSnapshot},failures:captureErrors.slice(-16),limitations:['service-data-not-observed','no-game-or-browser-no-export']},diagnostics:{scanId:id,complete:false},material:{events:[],directories:[],mappings:[]},verification:{events:[],scope:'not-captured'}};}
   function render() {
-    options.openButton.disabled = options.isBusy() || phase !== 'closed';
+    options.openButton.disabled = phase !== 'closed';
     options.fragmentButton.disabled = phase !== 'ready' || busy;
     options.basicButton.disabled = !['ready', 'failed'].includes(phase) || busy;
-    options.basicButton.textContent = phase === 'failed' ? '仅导出基础诊断' : '仅导出诊断';
+    options.basicButton.textContent = phase === 'failed' ? '导出最小诊断' : '仅导出诊断摘要';
     options.fragmentButton.hidden = phase === 'failed';
     options.cancelButton.disabled = false;
+    [options.filesButton,options.directoryButton,options.clearSourcesButton].forEach(function(button){if(button)button.disabled=busy||!['ready','failed'].includes(phase);});
   }
   function discard(old, root) {
     if (old && old.jobId) return options.request('/api/custom-songs/debug-package/cancel', {
@@ -8047,18 +8100,23 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
     generation++;
     var old = job, root = jobRoot; job = null; ready = null; jobRoot = ''; busy = false; phase = 'closed';
     options.panel.hidden = true;
+    frontSnapshot=null;captureErrors=[];extraPaths=[];
+    if(options.sourcesStatus)options.sourcesStatus.textContent='未选择补充资料';
+    if(options.namesStatus)options.namesStatus.textContent='';
     void discard(old, root); render(); options.refreshBusy();
     if (options.onClose) options.onClose();
   }
   function valid(current, root) { return current === generation && !options.isHidden() && options.getRoot() === root; }
   async function open() {
-    if (options.isBusy() || phase !== 'closed') return;
+    if (phase !== 'closed') return;
     var current = ++generation, root = options.getRoot();
+    var frontendEvidence,officialRoot;
+    captureErrors=[];try{frontendEvidence=options.getEvidence?options.getEvidence():undefined;officialRoot=options.getOfficialRoot?options.getOfficialRoot():undefined;frontSnapshot=safeFront(frontendEvidence);}catch(error){frontSnapshot=safeFront(null);captureErrors.push(safeFailure(error,'frontend-snapshot'));}
     busy = true; phase = 'preparing'; jobRoot = root; options.panel.hidden = false;
     options.status.textContent = '正在准备诊断快照，不修改曲目。完成后请选择导出方式；取消不会下载。';
     if (options.onOpen) options.onOpen(); render(); options.refreshBusy();
     try {
-      var started = await options.request('/api/custom-songs/debug-package/start', { method: 'POST', body: { mediaRoot: root } });
+      var started = await options.request('/api/custom-songs/debug-package/start', { method: 'POST', body: { mediaRoot: root, frontend:frontendEvidence, officialRoot:officialRoot,extraPaths:extraPaths.slice() } });
       if (!valid(current, root)) { void discard(started, root); if (current === generation) cancel(); return; }
       job = started;
       while (current === generation) {
@@ -8069,7 +8127,9 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
         if (status.state === 'failed' || status.state === 'cancelled') throw new Error(status.failureCode || 'capture-failed');
         if (status.state === 'ready') {
           ready = status; phase = 'ready';
-          options.status.textContent = (status.complete ? '范围内收集完成' : '存在未采集范围') + '；有损记录 ' + status.lossyEvents + ' 条。可附带 ' + status.rawRetainedEvents + ' 条已定向脱敏片段，因安全或容量限制省略 ' + status.rawOmittedEvents + ' 条。扫描标识：' + status.scanId + '。';
+          if(options.namesStatus){var count=status.nameRecovery&&status.nameRecovery.counts;
+            options.namesStatus.textContent=count?'逐首名称诊断：原名可恢复 '+(count.recoverable||0)+'；历史显示名 '+(count.historical||0)+'；冲突 '+(count.ambiguous||0)+'；已检查资料无名 '+(count.unrecoverable||0)+'；检查未完成 '+(count.incomplete||0)+'；身份待确认 '+(count.excluded||0)+'。逐首证据及预演随详细诊断导出，不会实际改名。':'逐首名称诊断未取得（旧服务或采集失败）。';}
+          options.status.textContent = status.minimal?'完整材料未采集，但已保存可取得的现场和故障原因。可导出最小故障包；详细选择仅包含实际取得的证据。':'摘要用于快速查看，详细模式另含结构化关联证据。可附带 '+status.rawRetainedEvents+' 条去凭据片段，另省略 '+status.rawOmittedEvents+' 条；扫描标识：'+status.scanId+'。';
           return;
         }
         await options.delay();
@@ -8077,7 +8137,8 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
     } catch (error) {
       if (current === generation) {
         void discard(job, root); job = null; ready = null; phase = 'failed';
-        options.status.textContent = '完整材料未生成（收集失败、过期或超过安全容量）。可仅导出已有基础诊断：不含片段、不含本次材料，以摘要自身的扫描标识为准；也可取消后重试。';
+        captureErrors.push(safeFailure(error,'diagnostic-capture'));
+        options.status.textContent = '服务诊断未取得。仍可导出本次前端最小现场及失败阶段；服务数据明确未观测，不依赖旧扫描。取消不会下载。';
       }
     } finally { if (current === generation) { busy = false; render(); options.refreshBusy(); } }
   }
@@ -8088,15 +8149,7 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
     busy = true; render(); options.refreshBusy();
     try {
       if (phase === 'failed') {
-        // Read-only fallback: never trigger normal scan/rebuild or pretend this is the failed snapshot.
-        var snapshot = await options.request('/api/custom-songs/diagnostics', { method: 'POST', body: { mediaRoot: root } });
-        if (!valid(current, root)) return;
-        var sameRoot = function (value) { return String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(); };
-        if (!snapshot || !snapshot.scanId || !snapshot.local || sameRoot(snapshot.local.mediaRoot) !== sameRoot(root)) throw new Error('no-basic-snapshot');
-        var report = await options.request('/api/custom-songs/diagnostics/export', { method: 'POST', body: { mediaRoot: root, scanId: snapshot.scanId } });
-        if (!valid(current, root)) return;
-        if (!report || report.scanId !== snapshot.scanId) throw new Error('changed-basic-snapshot');
-        options.downloadBasic({ kind: 'basic-diagnostics-only', materialCaptured: false, fragmentsIncluded: false, scanId: report.scanId, diagnostics: report }, 'linli-song-basic-' + report.scanId);
+        options.downloadBasic(minimalFront(),'linli-song-frontend-'+Date.now());
       } else {
         var bundle = await options.request('/api/custom-songs/debug-package/download', { method: 'POST', body: {
           mediaRoot: root, jobId: job.jobId, scanId: ready.scanId, includeRaw: include,
@@ -8109,10 +8162,29 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
       if (options.onExport) options.onExport(include);
     } catch (error) {
       if (current === generation) { phase = 'failed'; void discard(job, root); job = null; ready = null;
-        options.status.textContent = '导出未完成。若已有基础诊断，可重试“仅导出基础诊断”；没有可用摘要时请取消，并检查本地服务。不会回退导出原文或自动上传。'; }
+        captureErrors.push(safeFailure(error,'diagnostic-download'));
+        options.status.textContent = '导出未完成。可重试下载前端最小现场，包含本次下载失败阶段；不会导出原始异常或自动上传。'; }
     } finally { if (current === generation) { busy = false; render(); options.refreshBusy(); } }
   }
   options.openButton.onclick = function () { return open(); };
+  var extraPaths=[];
+  async function chooseSources(mode){
+    if(busy||!['ready','failed'].includes(phase))return;
+    var current=generation,root=jobRoot;busy=true;render();
+    try{
+      var picked=mode==='clear'?{cancelled:false,paths:[]}:await options.request('/api/custom-songs/debug-package/choose-sources',{method:'POST',body:{mediaRoot:root,mode:mode}});
+      if(!valid(current,root)||picked.cancelled)return;
+      var paths=mode==='clear'?[]:Array.from(new Set(extraPaths.concat(picked.paths||[])));
+      if(paths.length>32){options.status.textContent='补充资料最多32项，请先清空后重新选择。';return;}
+      cancel();extraPaths=paths;
+      if(options.sourcesStatus)options.sourcesStatus.textContent='已选择 '+paths.length+' 项补充资料，仅本次只读使用。';
+      return await open();
+    }catch(error){if(current===generation)options.status.textContent='资料选择未完成，未添加任何来源；可重试或取消。';}
+    finally{if(current===generation){busy=false;render();}}
+  }
+  if(options.filesButton)options.filesButton.onclick=function(){return chooseSources('files');};
+  if(options.directoryButton)options.directoryButton.onclick=function(){return chooseSources('directory');};
+  if(options.clearSourcesButton)options.clearSourcesButton.onclick=function(){return chooseSources('clear');};
   options.fragmentButton.onclick = function () { return exportChoice(true); };
   options.basicButton.onclick = function () { return exportChoice(false); };
   options.cancelButton.onclick = cancel;
@@ -8155,22 +8227,44 @@ function createVisionTaskController(options) {
   var timer = null, heartbeat = null, running = false, lease = null, aborter = null, epoch = 0, disposed = false;
   var lastSignal = '', environmentHold = false, panelOpen = false, requestBusy = false, message = '', preparedRoot = null, decodeFlight = null, viewSequence = 0, pendingInput = null;
   var now = options.now || Date.now;
-  function request(action, body) { return options.request('/api/custom-songs/vision/' + action, { method: 'POST', body: body || {} }); }
-  function render() { options.render({ data: data, job: data && data.job, message: message, busy: requestBusy, decoding: running }); }
+  var evidenceStartedAt=now(), errorScope=0, requestSequence=0, latestRequests={}, currentFailures={}, recentFailures=[];
+  function clearScope(){errorScope++;currentFailures={};latestRequests={};message='';}
+  function failureEvidence(item){var copy=Object.assign({},item);copy.scope=item.scopeEpoch===errorScope&&item.applicable?'current':'previous';delete copy.scopeEpoch;delete copy.applicable;return copy;}
+  function failureText(item){return item.category==='busy'?'曲库或识别任务暂忙，稍后重试。':item.category==='access-denied'?'识别请求未获授权，请重新连接本地服务。':item.category==='invalid-request'?'识别请求未完成，请检查当前任务后重试。':'识别任务暂不可用，请确认本地服务后重试。';}
+  async function observed(endpoint,operation,body,run){
+    var scope=errorScope, sequence=++requestSequence, key=endpoint+':'+operation, started=now();
+    var requestedRoot=body&&body.mediaRoot||root, requestedJob=body&&body.jobId||selected;
+    var applies=function(){return scope===errorScope&&requestedRoot===root&&(!requestedJob||!selected||requestedJob===selected);};
+    if(applies())latestRequests[key]=sequence;
+    try {var result=await run();if(applies()&&latestRequests[key]===sequence){
+      if(currentFailures[key])currentFailures[key].recoveredAt=now();delete currentFailures[key];
+    }return result;}catch(error){
+      var status=Number.isInteger(error&&error.status)?error.status:Number.isInteger(error&&error.statusCode)?error.statusCode:0;
+      if(status<100||status>599)status=0;
+      var item={endpoint:endpoint,operation:operation,httpStatus:status,category:status===409?'busy':status===401||status===403?'access-denied':status===429?'rate-limited':status>=500?'service-error':status>=400?'invalid-request':'unknown-no-status',at:now(),durationMs:Math.max(0,Math.min(300000,now()-started)),scopeEpoch:scope,applicable:applies()};
+      if(options.failureInfo)Object.assign(item,options.failureInfo(error,'vision-request',{root:requestedRoot,jobId:requestedJob,nameKey:body&&body.nameKey,fileName:body&&body.fileName}));
+      recentFailures.push(item);if(recentFailures.length>16)recentFailures.shift();
+      if(applies()&&latestRequests[key]===sequence){currentFailures[key]=item;var keys=Object.keys(currentFailures);if(keys.length>8)delete currentFailures[keys[0]];}
+      throw error;
+    }
+  }
+  function request(action, body, scopeBody) { return observed('vision/'+action,action==='control'?String(body&&body.action||'unknown'):action,scopeBody||body,function(){return options.request('/api/custom-songs/vision/' + action, { method: 'POST', body: body || {} });}); }
+  function render() { var failures=Object.values(currentFailures), failure=failures[failures.length-1];options.render({ data: data, job: data && data.job, message: failure?failureText(failure):message, busy: requestBusy, decoding: running }); }
   function schedule(delay) {
     if (disposed || timer !== null) return;
     timer = options.setTimeout(function () { timer = null; void tick(); }, delay === undefined ? 1500 : delay);
   }
   function stopDecode() { epoch++; if (aborter) aborter.abort(); }
-  async function release(value) { if (value) try { await request('control', { action: 'release', token: value.token, clientId: clientId }); } catch (ignored) {} }
+  async function release(value) { if (value) try { await request('control', { action: 'release', token: value.token, clientId: clientId },{mediaRoot:value.root,jobId:value.jobId}); } catch (ignored) {} }
   function environment() { try { return options.environment(); } catch (ignored) { return { visible: false, canvas: false, rvfc: false }; } }
+  function evidenceEnvironment(){try{return options.environment();}catch(ignored){return{visible:null,canvas:null,rvfc:null};}}
   function capable(value) { return value.visible === true && value.canvas === true && value.rvfc === true; }
   async function refresh() {
     var sequence=++viewSequence, requestedRoot=root, requestedJob=selected, requestedCursor=cursor;
     var current=function(){return !disposed&&sequence===viewSequence&&root===requestedRoot&&options.getRoot()===requestedRoot&&selected===requestedJob&&cursor===requestedCursor;};
     try {
       var next=await request('status', { mediaRoot: requestedRoot || undefined, jobId: requestedJob || undefined, cursor: requestedCursor });
-      if(current()){data=next;render();}return data;
+      if(current()){data=next;if(!next.job||['completed','stopped','undone'].indexOf(next.job.status)>=0){message='';environmentHold=false;}render();}return data;
     } catch(error){if(current())throw error;return data;}
   }
   async function handleEnvironment() {
@@ -8193,14 +8287,14 @@ function createVisionTaskController(options) {
       if (!capable(environment())) { await refresh(); await handleEnvironment(); return; }
       if (pendingAuto && autoEnabled) {
         pendingAuto = false;
-        if (options.prepareAuto && preparedRoot !== root) { var prepared=await options.prepareAuto(); pendingInput=prepared&&prepared.refresh||null; preparedRoot = root; }
+        if (options.prepareAuto && preparedRoot !== root) { var prepared=await observed('catalog/search','prepare',null,options.prepareAuto); pendingInput=prepared&&prepared.refresh||null; preparedRoot = root; }
         if (!autoEnabled) return;
-        if(pendingInput&&pendingInput.refreshing&&options.inputStatus){
-          pendingInput=await options.inputStatus(pendingInput.mediaRoot||root);
+        if(pendingInput&&(pendingInput.refreshing||pendingInput.error)&&options.inputStatus){
+          var inputRoot=pendingInput.mediaRoot||root;pendingInput=await observed('catalog/status','refresh',null,function(){return options.inputStatus(inputRoot);});
           if(!autoEnabled)return;
           if(pendingInput.refreshing){pendingAuto=true;message='等待曲库检查完成后处理新索引。';schedule(1000);return;}
-          if(pendingInput.error){message='曲库检查未完成，请重新扫描后再试。';pendingInput=null;return;}
-          pendingInput=null;
+          if(pendingInput.error){message='曲库检查未完成，请重新扫描后再试。';pendingAuto=true;return;}
+          pendingInput=null;message='';
         }
         await request('start', { mediaRoot: root || undefined, mode: 'auto', retryUnknown: false });
       }
@@ -8212,13 +8306,15 @@ function createVisionTaskController(options) {
         await request('control', { mediaRoot: data.job.mediaRoot, jobId: data.job.id, action: 'resume', clientId: clientId }); await refresh();
       }
       var claimed = await request('claim', { mediaRoot: root || undefined, clientId: clientId, capabilities: environment() });
+      if(!environmentHold)message='';
       if (claimed.state === 'claimed') { requestBusy = false; decodeFlight = decode(claimed); await decodeFlight; decodeFlight = null; return; }
       if (claimed.state === 'manual-resume-required') message = '上次手动任务需明确继续或接管，不会因自动开关自行重启。';
       var job = data && data.job;
       if (panelOpen || job && ['queued','running'].indexOf(job.status) >= 0 || claimed.state === 'retry' || claimed.state === 'busy') schedule();
     } catch (error) {
-      message = '识别任务暂不可用，请确认本地服务后重试。';
-      if (autoEnabled && error && (error.status === 409 || /稍后|正在/.test(error.message || ''))) { pendingAuto = true; schedule(2000); }
+      message = Object.keys(currentFailures).length?'':'本次前端处理未完成，请重试。';
+      if (autoEnabled && error && error.status === 409) { pendingAuto = true; schedule(2000); }
+      else if(panelOpen)schedule(3000);
       render();
     }
     finally { requestBusy = false; render(); }
@@ -8228,7 +8324,7 @@ function createVisionTaskController(options) {
     var ownedLease = lease;
     function stillCurrent() { return current === epoch && !disposed && capable(environment()) && now() < ownedLease.expiresAt && (!autoEnabled ? ownedLease.mode !== 'auto' : true); }
     heartbeat = options.setInterval(function () {
-      void request('heartbeat', { token: ownedLease.token, clientId: clientId, generation: ownedLease.generation }).then(function (answer) {
+      void request('heartbeat', { token: ownedLease.token, clientId: clientId, generation: ownedLease.generation },{mediaRoot:ownedLease.root,jobId:ownedLease.jobId}).then(function (answer) {
         if (!answer.accepted) stopDecode(); else ownedLease.expiresAt = answer.expiresAt;
       }).catch(stopDecode);
     }, 5000);
@@ -8267,19 +8363,20 @@ function createVisionTaskController(options) {
   }
   async function startManual() {
     if (requestBusy || options.isHumanBusy()) return;
+    clearScope();
     requestBusy = true; environmentHold = false; stopDecode(); render();
     try {
       var result = await request('start', { mediaRoot: root || undefined, mode: 'manual', retryUnknown: true });
       selected = result.job && result.job.id; cursor = 0; message = '';
       await refresh(); schedule(0);
-    } catch (error) { message = error.message || '无法启动识别任务'; }
+    } catch (error) { message = ''; }
     finally { requestBusy = false; render(); }
   }
   async function control(action) {
     var job = data && data.job; if (!job) return;
     stopDecode(); environmentHold = false;
-    try { await request(action === 'undo' ? 'undo' : 'control', { mediaRoot: job.mediaRoot, jobId: job.id, action: action, clientId: clientId }); await refresh(); }
-    catch (error) { message = error.message || '任务操作失败'; render(); }
+    try { await request(action === 'undo' ? 'undo' : 'control', { mediaRoot: job.mediaRoot, jobId: job.id, action: action, clientId: clientId }); message='';await refresh(); }
+    catch (error) { message = '';render(); }
     if (action === 'resume' || action === 'stop' || action === 'undo') schedule(0);
   }
   var stoppingCurrent=false;
@@ -8293,11 +8390,11 @@ function createVisionTaskController(options) {
       if(!current||['queued','running','waiting-environment','paused','interrupted'].indexOf(current.status)<0)return;
       data=latest;selected=current.id;cursor=0;pendingAuto=false;
       await control('stop');
-    }catch(error){message=error.message||'停止整理未完成，请重试。';render();}
+    }catch(error){message='';render();}
     finally{stoppingCurrent=false;}
   }
   async function changeRoot(next) {
-    stopDecode();viewSequence++;
+    stopDecode();viewSequence++;clearScope();
     var job = data && data.job;
     root = next; selected = null; data = null; cursor = 0; lastSignal = ''; preparedRoot = null; pendingInput=null; environmentHold = false; pendingAuto = autoEnabled; render();
     if (job && ['queued','running'].indexOf(job.status) >= 0) await request('control', { mediaRoot: job.mediaRoot, jobId: job.id, action: 'pause', reason: 'root-changed' }).catch(function () {});
@@ -8312,7 +8409,7 @@ function createVisionTaskController(options) {
   }
   async function environmentChanged() {
     if (!capable(environment())) { stopDecode(); await refresh().catch(function () {}); await handleEnvironment().catch(function () {}); return; }
-    environmentHold = false; await refresh().catch(function () {});
+    environmentHold = false; message='';await refresh().catch(function () {});
     var job = data && data.job;
     if (job && job.status === 'waiting-environment' && (job.mode !== 'auto' || autoEnabled) &&
       (!job.inventory.ownerClientId || job.inventory.ownerClientId === clientId)) await control('resume');
@@ -8320,7 +8417,8 @@ function createVisionTaskController(options) {
   }
   return { startManual: startManual, control: control, stopCurrent: stopCurrent, sync: sync, environmentChanged: environmentChanged,
     open: function () { panelOpen = true; schedule(0); }, closePanel: function () { panelOpen = false; },
-    select: function (id) { selected = id; cursor = 0; void refresh(); }, next: function () { cursor = data && data.job && data.job.nextCursor || 0; void refresh(); },
+    select: function (id) { clearScope();selected = id; cursor = 0; void refresh().catch(function(){render();}); }, next: function () { cursor = data && data.job && data.job.nextCursor || 0; void refresh().catch(function(){render();}); },
+    diagnostic: function(){return {startedAt:evidenceStartedAt,historyScope:'current-renderer-memory-only',currentFailures:Object.values(currentFailures).map(failureEvidence),recentFailures:recentFailures.map(failureEvidence),capabilities:evidenceEnvironment(),autoEnabled:autoEnabled,environmentHold:environmentHold,decoding:running};},
     status: function () { return data; }, isDecoding: function () { return running; },
     humanActivity: function () { stopDecode(); return decodeFlight || Promise.resolve(); },
     clientId: clientId,

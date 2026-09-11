@@ -23,8 +23,11 @@ import { UpdateManager } from "./src/updater.mjs";
 import { getUpdatePreferences, setUpdatePreferences } from "./src/update-preferences.mjs";
 import { VideoAssetStore, parseByteRange } from "./src/video-assets.mjs";
 import { CustomSongCatalog } from "./src/custom-songs.mjs";
+import { diagnosticError } from "./src/diagnostic-errors.mjs";
 import { createSongFolderPicker } from "./src/song-folder-picker.mjs";
 const chooseSongFolder = createSongFolderPicker();
+import {createSongDiagnosticPicker} from "./src/song-diagnostic-picker.mjs";
+const chooseSongDiagnosticSources=createSongDiagnosticPicker();
 import { MAPPING_MAX_BYTES } from "./src/custom-song-mappings.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -567,6 +570,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     const debugPackageAction = url.pathname.match(/^\/api\/custom-songs\/debug-package\/(start|status|download|cancel)$/);
+    if(req.method==='POST'&&url.pathname==='/api/custom-songs/debug-package/choose-sources'){
+      const input=await readJsonBody(req),controller=new AbortController(),abort=()=>controller.abort();
+      res.once('close',abort);
+      try{ok(req,res,await chooseSongDiagnosticSources({mode:input.mode,initialRoot:customSongs.root(input.mediaRoot),signal:controller.signal}));}
+      finally{res.off('close',abort);}return;
+    }
     if (req.method === "POST" && debugPackageAction) {
       ok(req, res, customSongs.debugPackage(debugPackageAction[1], await readJsonBody(req)));
       return;
@@ -946,8 +955,9 @@ const server = http.createServer(async (req, res) => {
       ? candidateStatus
       : error instanceof SyntaxError ? 400 : 500;
     if (["/api/custom-songs/scan", "/api/custom-songs/search"].includes(url.pathname) && error.scanDiagnostics) {
-      sendJson(req, res, status, { code: status, message, data: { scanDiagnostics: error.scanDiagnostics } });
-    } else fail(req, res, status, message);
+      sendJson(req, res, status, { code: status, message, data: { scanDiagnostics: error.scanDiagnostics,diagnosticFailure:diagnosticError(error,'service-operation') } });
+    } else if(url.pathname.startsWith('/api/custom-songs/')||url.pathname==='/api/music-library/preferences')sendJson(req,res,status,{code:status,message,data:{diagnosticFailure:diagnosticError(error,'service-operation')}});
+    else fail(req, res, status, message);
   }
 });
 

@@ -411,14 +411,11 @@ async function readLogMetadata(logRoot, limits, warnings, diagnostics, io) {
       continue;
     }
     if (logFile.size > remainingBytes) {
-      warnings.add(`[LOG_BUDGET_EXHAUSTED] 日志预算在 ${logFile.name} 前耗尽，剩余日志已跳过。`);
-      const remaining = logFiles.slice(logFiles.indexOf(logFile));
-      for (const skipped of remaining) {
-        diagnostics.increment('logFilesSkipped');
-        diagnostics.addFile({ fileId: skipped.fileId, name: skipped.name, size: skipped.size, status: 'skipped' });
-      }
+      warnings.add(`[LOG_BUDGET_EXHAUSTED] 剩余预算不足以读取 ${logFile.name}，继续检查后续较小日志。`);
+      diagnostics.increment('logFilesSkipped');
+      diagnostics.addFile({ fileId: logFile.fileId, name: logFile.name, size: logFile.size, status: 'skipped' });
       diagnostics.reason('READ_LIMIT');
-      break;
+      continue;
     }
 
     const fileRecords = new Map();
@@ -569,6 +566,10 @@ function parseLogLine(line, context, warnings, diagnostics) {
   diagnostics.increment('relevantEvents', 1, context.fileId);
   diagnostics.observeRequestFields?.(action, attributes, context);
   const request = attributes?.['query.request'];
+  if (!Object.hasOwn(attributes, 'query.request') && Object.hasOwn(attributes, 'query.response')) {
+    diagnostics.increment('responseOnlyEvents', 1, context.fileId);
+    return []; // Acknowledgements do not supply names and are not malformed requests.
+  }
   if (typeof request !== 'string') {
     diagnostics.increment('parseFailures', 1, context.fileId);
     diagnostics.increment('requestTypeFailures', 1, context.fileId);
@@ -607,7 +608,7 @@ function parseRequestRecords(request, context, diagnostics) {
   } catch (error) {
     diagnostics.increment('innerJsonFailures', 1, context.fileId);
     diagnostics.issue(context, 'inner', 'INNER_JSON_FAILED');
-    if (/\[(?:truncated|cut|partial)\]\s*$/i.test(request)) {
+    if (/\[(?:truncated(?:\s+\d+\s+chars)?|cut|partial)\]\s*$/i.test(request)) {
       diagnostics.increment('truncatedRequests', 1, context.fileId);
       diagnostics.issue(context, 'inner', 'REQUEST_TRUNCATED');
     }

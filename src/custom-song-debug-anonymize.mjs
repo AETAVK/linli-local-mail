@@ -11,16 +11,17 @@ export function isSongEvidenceCandidate(line) {
 }
 
 export class SongEvidenceAnonymizer {
-  #values = new Map(); #keys = new Map(); #files = new Map(); #fields = new Map(); #groups = new Map();
+  #values = new Map(); #keys = new Map(); #keyGroups = new Map(); #files = new Map(); #fields = new Map(); #groups = new Map();
   #namespace = crypto.randomInt(1000000, 9999999);
   alias(map, raw, prefix) {
     if (!map.has(raw)) map.set(raw, `${prefix}${map.size + 1}`);
     return map.get(raw);
   }
   key(raw) {
-    return /^midi_\d+_\d+$/.test(raw) ? this.alias(this.#keys, raw, `midi_${this.#namespace}_`) : this.value(raw);
+    const parts=typeof raw==='string'&&raw.match(/^midi_(\d+)_(\d+)$/);
+    return parts ? `midi_${this.alias(this.#keyGroups,parts[1],String(this.#namespace))}_${this.alias(this.#keys,parts[2],'')}` : this.value(raw);
   }
-  file(raw) { return this.alias(this.#files, raw, 'media_') + '.mp4'; }
+  file(raw) { return this.alias(this.#files, String(raw).toLowerCase(), 'media_') + '.mp4'; }
   value(raw) {
     if (typeof raw !== 'string') return raw;
     if (!raw || /^\s+$/.test(raw)) return raw;
@@ -32,7 +33,7 @@ export class SongEvidenceAnonymizer {
     try {
       const url = new URL(raw);
       const official = url.protocol === 'https:' && url.hostname === 'static-cnbeta01.olivia.miyoushe.com';
-      const match = url.pathname.match(/^\/midiPerf\/([^/]+)\/([^/]+)\/([^/]+)$/);
+      const match = url.pathname.match(/^\/midiPerf\/([^/]+)\/([^/]+)\/([^/]+)$/i);
       if (official && match) return `https://static-cnbeta01.olivia.miyoushe.com/midiPerf/1/${this.alias(this.#groups, match[1] + '/' + match[2], '')}/${this.file(decodeURIComponent(match[3]))}`;
       if (raw.includes('/custom-song-media/')) return 'http://127.0.0.1/custom-song-media/redacted.mp4';
     } catch { /* arbitrary malformed URLs are not retained */ }
@@ -52,7 +53,7 @@ export class SongEvidenceAnonymizer {
       if (key === 'nameKey') return this.key(value);
       if ((key === 'tod' || key === 'view') && FIXED.has(value)) return value;
       if (/^https?:/i.test(value) || value.includes('/custom-song-media/')) return this.#url(value, losses);
-      if (key === 'query.request' || key === 'query.response' || /^[\s]*[\[{]/.test(value)) {
+      if (key === 'query.request' || key === 'query.response') {
         const inner = this.text(value, depth + 1);
         for (const loss of inner.losses) losses.add(loss);
         return inner.text;

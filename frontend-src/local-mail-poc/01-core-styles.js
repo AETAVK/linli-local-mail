@@ -74,6 +74,15 @@
     }
   };
   var sessionPromise = null;
+  var LOCAL_FRONTEND_BUILD = "__LINLI_FRONTEND_BUILD__";
+  function musicFailureFields(error,phase,links){
+    var code=error&&error.code;
+    if(typeof code!=='string'||code.length>80||!(/^(?:E[A-Z0-9_]+|SQLITE_[A-Z0-9_]+|DEBUG_[A-Z0-9_]+|MAPPING_[A-Z0-9_]+)$/.test(code))||/(TOKEN|SECRET|PASSWORD|COOKIE)/.test(code))code=null;
+    var safeLinks={};['root','jobId','nameKey','fileName'].forEach(function(key){var value=links&&links[key];if(typeof value==='string'&&value.length<=(key==='root'?4096:512))safeLinks[key]=value;});
+    return {phase:error&&/^[a-z][a-z0-9]*(?:-[a-z0-9]+){1,8}$/.test(error.phase||'')?error.phase:phase,code:code,sqliteCode:error&&Number.isInteger(error.sqliteCode)&&error.sqliteCode>=0&&error.sqliteCode<=65535?error.sqliteCode:null,errno:error&&Number.isInteger(error.errno)&&Math.abs(error.errno)<10000000?error.errno:null,links:safeLinks};
+  }
+  var musicDiagnosticStartedAt=Date.now(), musicDiagnosticRecent=[];
+  var MUSIC_DIAGNOSTIC_ENDPOINTS={'/api/custom-songs/search':'catalog/search','/api/custom-songs/status':'catalog/status','/api/custom-songs/scan':'catalog/scan','/api/music-library/preferences':'music/preferences','/api/custom-songs/mappings/import':'mapping/import','/api/custom-songs/mappings/export':'mapping/export','/api/custom-songs/choose-folder':'folder/choose'};
 
   async function localSession() {
     if (!sessionPromise) {
@@ -83,13 +92,14 @@
         credentials: "omit",
         referrerPolicy: "no-referrer"
       }).then(async function (response) {
-        var payload = await response.json();
+        var payload;try{payload=await response.json();}catch(error){throw Object.assign(new Error('无法解析本地会话响应'),{phase:'session-response-json',status:response.status});}
         if (!response.ok || payload.code !== 0 || !payload.data || !payload.data.token) {
-          throw new Error(payload.message || "无法建立本地回信会话");
+          throw Object.assign(new Error(payload.message || "无法建立本地回信会话"),{phase:'session-create',status:response.status});
         }
         return payload.data.token;
       }).catch(function (error) {
         sessionPromise = null;
+        if(!error.phase)error.phase='session-transport';
         throw error;
       });
     }
@@ -108,7 +118,7 @@
     return text ? "?" + text : "";
   }
 
-  async function localRequest(method, path, data, config, retrying) {
+  async function performLocalRequest(method, path, data, config, retrying) {
     var token = await localSession();
     var url = API_BASE + path + (method === "GET" ? queryString(config && config.params) : "");
     var response = await fetch(url, {
@@ -125,18 +135,34 @@
     });
     if (response.status === 401 && !retrying) {
       sessionPromise = null;
-      return localRequest(method, path, data, config, true);
+      return performLocalRequest(method, path, data, config, true);
     }
-    var payload = await response.json();
+    var payload;try{payload=await response.json();}catch(error){throw Object.assign(new Error('无法解析本地服务响应'),{phase:'response-json',status:response.status});}
     if (!response.ok || payload.code !== 0) {
       var failure = new Error(payload.message || "本地服务请求失败");
       failure.status = response.status;
+      var diagnostic=payload.data&&payload.data.diagnosticFailure;
+      failure.phase=diagnostic&&diagnostic.phase||'service-response';failure.code=diagnostic&&diagnostic.code;failure.sqliteCode=diagnostic&&diagnostic.sqliteCode;failure.errno=diagnostic&&diagnostic.errno;
       if ((path === "/api/custom-songs/scan" || path === "/api/custom-songs/search") && payload.data && payload.data.scanDiagnostics) {
         failure.scanDiagnostics = payload.data.scanDiagnostics;
       }
       throw failure;
     }
     return { data: payload.data, status: response.status, headers: response.headers };
+  }
+
+  async function localRequest(method, path, data, config, retrying) {
+    var started=Date.now();
+    try{return await performLocalRequest(method,path,data,config,retrying);}catch(error){
+      var endpoint=MUSIC_DIAGNOSTIC_ENDPOINTS[String(path).split('?')[0]];
+      if(endpoint){var status=Number.isInteger(error&&error.status)&&error.status>=100&&error.status<=599?error.status:0;
+        musicDiagnosticRecent.push({endpoint:endpoint,operation:method==='GET'?'read':'save',httpStatus:status,category:status===409?'busy':status===401||status===403?'access-denied':status===429?'rate-limited':status>=500?'service-error':status>=400?'invalid-request':'unknown-no-status',at:Date.now(),durationMs:Math.max(0,Math.min(300000,Date.now()-started)),scope:'unknown'});
+        if(musicDiagnosticRecent.length>16)musicDiagnosticRecent.shift();
+        var scopeData=method==='GET'?config&&config.params:data;
+        Object.assign(musicDiagnosticRecent[musicDiagnosticRecent.length-1],musicFailureFields(error,'request-transport',{root:scopeData&&scopeData.mediaRoot,jobId:scopeData&&scopeData.jobId,nameKey:scopeData&&scopeData.nameKey,fileName:scopeData&&scopeData.fileName}));
+        if(status>0&&status<400)musicDiagnosticRecent[musicDiagnosticRecent.length-1].category='invalid-response';
+      }throw error;
+    }
   }
 
   window.__LOCAL_MAIL_HTTP__ = Object.freeze({

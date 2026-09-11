@@ -11,12 +11,12 @@ import { FRAGMENT_POLICY } from './custom-song-fragment-redact.mjs';
 export const DEBUG_LIMITS = Object.freeze({ packageBytes: 12 * 1024 * 1024, decodedBytes: 20 * 1024 * 1024,
   events: 2048, eventBytes: 1024 * 1024, evidenceBytes: 8 * 1024 * 1024, directories: 10000, files: 20000,
   rawBytes: 256 * 1024, rawEventBytes: 32 * 1024, rawEvents: 16, ttlMs: 10 * 60 * 1000 });
-const EVENT_COUNTERS = ['relevantEvents', 'parsedEvents', 'parseFailures', 'unknownActions', 'requestTypeFailures',
+const EVENT_COUNTERS = ['relevantEvents', 'parsedEvents', 'parseFailures', 'unknownActions', 'requestTypeFailures', 'responseOnlyEvents',
   'innerJsonParsed', 'innerJsonFailures', 'prefixRecoveredEvents', 'prefixEmptyEvents', 'eventsWithoutNameKey', 'derivedEvents'];
 const identity = { key: v => v, value: v => v, file: v => v };
-const runtimeIdentity = Promise.all(['custom-song-scan.mjs', 'custom-song-debug-replay.mjs', 'custom-song-debug-anonymize.mjs', 'custom-song-fragment-redact.mjs', 'custom-song-structure.mjs', 'custom-song-diagnostics.mjs', 'custom-song-mappings.mjs']
-  .map(name => fs.readFile(new URL('./' + name, import.meta.url)).then(bytes => [name, crypto.createHash('sha256').update(bytes).digest('hex')])))
-  .then(files => ({ nodeVersion: process.version, sources: Object.fromEntries(files) }));
+const runtimeIdentity = Promise.all(['custom-song-name-sources.mjs','custom-song-name-recovery.mjs','custom-song-name-policy.mjs','song-diagnostic-picker.mjs','custom-song-scan.mjs', 'custom-song-debug-replay.mjs', 'custom-song-debug-package.mjs','custom-song-debug-evidence.mjs','diagnostic-errors.mjs','custom-song-debug-anonymize.mjs', 'custom-song-fragment-redact.mjs', 'custom-song-debug-context.mjs', 'custom-song-structure.mjs', 'custom-song-diagnostics.mjs', 'custom-song-mappings.mjs']
+  .map(name => fs.readFile(new URL('./' + name, import.meta.url)).then(bytes => [name, crypto.createHash('sha256').update(bytes).digest('hex')]).catch(()=>[name,null])))
+  .then(files => ({ nodeVersion: process.version, sources: Object.fromEntries(files),basis:'disk-source-hashes-at-module-initialization' }));
 export async function replayRuntimeIdentity() { return structuredClone(await runtimeIdentity); }
 
 export function eventInvariant(line, aliases = identity) {
@@ -101,21 +101,36 @@ export function validateReplayMaterial(material) {
 export function decodeDebugPackage(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length > DEBUG_LIMITS.packageBytes) invalid();
   let value;
-  try { value = JSON.parse(gunzipSync(buffer, { maxOutputLength: DEBUG_LIMITS.decodedBytes }).toString('utf8')); } catch { invalid(); }
-  if (!plain(value) || value.format !== 'linli-song-debug' || ![1, 2].includes(value.schemaVersion) || !plain(value.manifest) || !plain(value.diagnostics) ||
-    Buffer.byteLength(JSON.stringify(value.diagnostics)) > 65536 || Object.keys(value).some(key => !['format','schemaVersion','manifest','diagnostics','material','verification','sensitive'].includes(key))) invalid();
+  try { value = JSON.parse((buffer[0]===0x1f&&buffer[1]===0x8b?gunzipSync(buffer, { maxOutputLength: DEBUG_LIMITS.decodedBytes }):buffer).toString('utf8')); } catch { invalid(); }
+  if (!plain(value) || value.format !== 'linli-song-debug' || ![1, 2, 3].includes(value.schemaVersion) || !plain(value.manifest) || !plain(value.diagnostics) ||
+    Buffer.byteLength(JSON.stringify(value.diagnostics)) > 65536 || Object.keys(value).some(key => !['format','schemaVersion','manifest','diagnostics','material','verification','sensitive','details'].includes(key))) invalid();
   validateReplayMaterial(value.material);
+  if(value.manifest.context&&Buffer.byteLength(JSON.stringify(value.manifest.context))>65536)invalid();
   if (value.sensitive !== undefined) {
     if (!Array.isArray(value.sensitive) || value.sensitive.length > DEBUG_LIMITS.rawEvents) invalid();
     let bytes = 0;
     for (const record of value.sensitive) {
       if (!plain(record) || typeof record.text !== 'string' || !Number.isSafeInteger(record.eventIndex) || record.eventIndex < 0 || record.eventIndex >= value.material.events.length) invalid();
-      if (value.schemaVersion === 2 && (record.contentKind !== 'credential-redacted-fragment' || record.policy !== FRAGMENT_POLICY)) invalid();
+      if (value.schemaVersion >= 2 && (record.contentKind !== 'credential-redacted-fragment' || !['targeted-credentials-v1',FRAGMENT_POLICY].includes(record.policy))) invalid();
       const size = Buffer.byteLength(record.text); if (size > DEBUG_LIMITS.rawEventBytes) invalid(); bytes += size;
     }
     if (bytes > DEBUG_LIMITS.rawBytes) invalid();
   }
+  if(value.details!==undefined&&(!plain(value.details)||Buffer.byteLength(JSON.stringify(value.details))>16*1024*1024))invalid();
   return value;
+}
+
+export function readDetailedEvidence(buffer,{confirmSensitive=false}={}){
+ if(confirmSensitive!==true)throw Error('DETAILED_EVIDENCE_REQUIRES_CONFIRMATION');
+ const bundle=decodeDebugPackage(buffer),manifest=bundle.manifest;
+ const complete=manifest.complete===true&&manifest.readCoverageComplete===true&&
+   !manifest.coverage?.inputFilesChanged&&!manifest.coverage?.inputFilesUnavailableAfterRead&&
+   (!bundle.details?.nameRecovery||bundle.details.nameRecovery.complete===true)&&
+   bundle.details?.coverage?.complete===true&&bundle.details?.service?.coverage?.complete===true&&!(manifest.failures||[]).length;
+ // Data only. Never open roots/extraPaths from a package or execute its preview plan.
+ return{schemaVersion:bundle.schemaVersion,details:bundle.details||null,failures:manifest.failures||[],complete,
+   nameRecovery:bundle.details?.nameRecovery?.schemaVersion===1?bundle.details.nameRecovery:null,
+   nameRecoveryAvailable:bundle.details?.nameRecovery?.schemaVersion===1};
 }
 
 export async function replayDebugPackage(buffer, { includeRaw = false, confirmSensitive = false } = {}) {
@@ -123,8 +138,9 @@ export async function replayDebugPackage(buffer, { includeRaw = false, confirmSe
   const bundle = decodeDebugPackage(buffer);
   const result = await replayMaterial(bundle.material);
   // Only fixed counters in CLI output; never echo any untrusted request, name, path or error.
-  const receipt = { schemaVersion: 2, mode: includeRaw ? (bundle.schemaVersion === 2 ? 'credential-redacted-fragments' : 'legacy-sensitive-originals') : 'sanitized',
-    fragmentBytes: bundle.schemaVersion === 2 ? 'redacted-not-original' : 'legacy-may-contain-credentials',
+  const receipt = { schemaVersion: 3, mode: includeRaw ? (bundle.schemaVersion >= 2 ? 'credential-redacted-fragments' : 'legacy-sensitive-originals') : 'sanitized-summary',
+    fragmentBytes: bundle.schemaVersion >= 2 ? 'redacted-not-original' : 'legacy-may-contain-credentials',
+    detailedEvents:includeRaw?bundle.details?.events?.length||0:0,summaryOnly:!includeRaw,
     runtimeMatchesCapture: JSON.stringify(await replayRuntimeIdentity()) === JSON.stringify(bundle.manifest.runtime),
     events: result.events.length, extractedRecords: result.events.reduce((n, event) => n + event.records.length, 0),
     songDirectories: result.songs.length, replayMatchesStored: JSON.stringify(result) === JSON.stringify(bundle.verification?.sanitizedResult),
