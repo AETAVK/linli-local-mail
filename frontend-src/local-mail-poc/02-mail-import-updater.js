@@ -106,6 +106,7 @@
       '<div class="lm-update-version" data-role="update-version"><span data-role="update-current"></span><span> → </span><span data-role="update-latest"></span></div>' +
       '<p class="lm-update-copy" data-role="update-copy"></p>' +
       '<div class="lm-update-meta" data-role="update-meta"></div>' +
+      '<div class="lm-update-progress" data-role="update-progress" hidden><progress max="100" aria-label="更新下载进度"></progress><span data-role="update-progress-text" aria-live="polite"></span></div>' +
       '<details class="lm-update-releases" data-role="update-releases"><summary>查看更新说明</summary><div class="lm-update-release-list" data-role="update-release-list"></div></details>' +
       '<p class="lm-update-warning" data-role="update-warning"></p>' +
       '<div class="lm-modal-status" data-role="update-status" aria-live="polite"></div>' +
@@ -195,7 +196,7 @@
     var phase = updatePreparing() ? "preparing" : state.update.phase;
     var error = state.update.error;
     var checking = state.update.checking;
-    var signature = JSON.stringify([phase, result, error, checking, state.update.operation]);
+    var signature = JSON.stringify([phase, result, error, checking, state.update.operation,state.update.progress,state.update.exitRequestStatus]);
     if (modal.__linliUpdateSignature !== signature) {
       modal.__linliUpdateSignature = signature;
       var title = modal.querySelector('[data-role="update-title"]');
@@ -220,20 +221,22 @@
       warning.hidden = true;
       apply.hidden = !available;
       apply.disabled = checking || phase === "preparing" || phase === "scheduled";
-      apply.textContent = error && error.stage === "prepare" ? "重试准备更新" : "下载并在退出后安装";
+      apply.textContent = error && error.stage === "prepare" ? "重试更新并重启" : "更新并重启游戏";
       later.textContent = "稍后";
       renderUpdateReleaseNotes(modal, available ? result : null);
       if (phase === "preparing") {
         title.textContent = "正在准备更新";
         copy.textContent = "正在下载并校验更新包…";
-        warning.textContent = "请暂时保持游戏和本地服务运行。可以收起此面板，准备完成后按钮会变为时钟。";
+        warning.textContent = "下载并校验成功后将正常退出游戏、安装更新并重新启动。请勿编辑未保存内容；收起此面板不会取消更新。";
         apply.textContent = "正在准备…";
         later.textContent = "收起";
         status.hidden = true;
       } else if (phase === "scheduled") {
         title.textContent = "更新已准备";
         copy.textContent = "安装包已校验，正在等待游戏和启动器退出。";
-        warning.textContent = "按平常方式完全退出游戏和启动器，随后按安装程序提示完成更新。";
+        warning.textContent = state.update.operation && state.update.operation.restartGame ?
+          (state.update.exitRequestStatus === "requested" ? "已请求游戏正常退出。若游戏或启动器仍在运行，请手动完全退出；安装成功后会自动启动游戏。" : "暂时无法自动退出，请手动完全退出游戏和启动器；安装成功后会自动启动游戏。") :
+          "按平常方式完全退出游戏和启动器，随后按安装程序提示完成更新。";
         meta.textContent = "目标版本：v" + (state.update.operation && state.update.operation.version || result && result.latestVersion || "");
         apply.hidden = true;
         later.textContent = "知道了";
@@ -248,7 +251,7 @@
       } else if (available) {
         title.textContent = "发现补丁更新";
         copy.textContent = result.releaseName || "有新的林离本地回信补丁可用。";
-        warning.textContent = "下载并校验完成后，完全退出游戏和启动器即可进入安装流程。";
+        warning.textContent = "请先保存信件、MIDI 等未提交内容。确认后，下载与校验成功会自动退出游戏并更新重启；不会强制结束进程。";
       } else if (error) {
         title.textContent = "检查更新失败";
         copy.textContent = "暂时无法完成检查，现有本地回信功能不会受到影响。";
@@ -263,6 +266,14 @@
         copy.textContent = "尚未检查更新。";
       }
       warning.hidden = !warning.textContent;
+      var progress=state.update.progress,box=modal.querySelector('[data-role="update-progress"]'),bar=box.querySelector('progress'),label=modal.querySelector('[data-role="update-progress-text"]');
+      box.hidden=phase!=="preparing"||!progress;
+      bar.removeAttribute("value");
+      if(progress){
+        if(Number.isFinite(progress.percent))bar.setAttribute("value",String(Math.max(0,Math.min(100,progress.percent))));
+        label.textContent=progress.stage==="verifying"?"下载完成，正在校验安装包…":progress.stage==="ready"?"校验完成，正在准备安装交接…":
+          "已下载 "+formatUpdateBytes(progress.receivedBytes)+(progress.totalBytes>0?" / "+formatUpdateBytes(progress.totalBytes)+(Number.isFinite(progress.percent)?"（"+progress.percent+"%）":""):"（总大小未知）");
+      }else label.textContent="";
     }
     if (modal.hidden) modal.hidden = false;
     positionUpdatePopover();
@@ -352,8 +363,23 @@
       state.update.phase = snapshot.phase || "idle";
       state.update.error = snapshot.error || null;
       state.update.operation = snapshot.operation || null;
+      state.update.progress = snapshot.progress || null;
     }
+    requestUpdateGameExit();
     mountUpdateEntry();
+  }
+
+  // Official .627 exit command. Never use restartApp here: that would race installation.
+  function requestUpdateGameExit() {
+    var operation=state.update.operation;
+    if(!isMainRenderer()||state.update.disposed||state.update.phase!=="scheduled"||!operation||operation.restartGame!==true||operation.scheduled!==true||!operation.id)return;
+    if(state.update.exitOperationId===operation.id)return;
+    state.update.exitOperationId=operation.id;
+    try{
+      if(!window.ToyPianistClient||typeof window.ToyPianistClient.invoke!=="function")throw new Error("native-exit-unavailable");
+      window.ToyPianistClient.invoke("exitApp",undefined);
+      state.update.exitRequestStatus="requested";
+    }catch(error){state.update.exitRequestStatus="manual-required";}
   }
 
   async function refreshUpdateStatus() {
@@ -428,17 +454,22 @@
   async function applyUpdate() {
     var result = state.update.result;
     if (!result || !result.updateAvailable || updatePreparing() || state.update.phase === "scheduled") return;
+    if(!window.confirm("请先保存尚未提交的信件、MIDI 等内容。下载并校验成功后，游戏将正常退出，自动安装更新并重新启动。下载期间请勿编辑未保存内容。是否继续？"))return;
     state.update.applying = true;
+    state.update.progress=null;
+    state.update.exitRequestStatus=null;
     state.update.readId += 1;
     state.update.phase = "preparing";
     state.update.error = null;
     mountUpdateEntry();
     scheduleUpdateTick(2000);
     try {
-      var applied = await updateRequest("/api/update/apply", { method: "POST", body: { version: result.latestVersion } }, 16 * 60 * 1000);
+      var applied = await updateRequest("/api/update/apply", { method: "POST", body: { version: result.latestVersion,restartGame:true } }, 16 * 60 * 1000);
       if (state.update.disposed) return;
       state.update.phase = "scheduled";
       state.update.operation = applied;
+      state.update.progress=applied.progress||state.update.progress;
+      requestUpdateGameExit();
     } catch (error) {
       if (state.update.disposed) return;
       // The response may be lost after the helper was queued. Reconcile before allowing retry.

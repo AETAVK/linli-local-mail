@@ -74,7 +74,7 @@
     }
   };
   var sessionPromise = null;
-  var LOCAL_FRONTEND_BUILD = {"version":"0.11.14","sha256":"6ace18b1739165d3376f26fb13137aa04fb3e7e8c392ecf3a153493ecb393b15","basis":"assembled-input-hash-not-runtime-attestation"};
+  var LOCAL_FRONTEND_BUILD = {"version":"0.11.15","sha256":"8ed16979517cf5628c71a0cbb174dfab07c5bfc0fae4b265b04b28a7fe965a42","basis":"assembled-input-hash-not-runtime-attestation"};
   function musicFailureFields(error,phase,links){
     var code=error&&error.code;
     if(typeof code!=='string'||code.length>80||!(/^(?:E[A-Z0-9_]+|SQLITE_[A-Z0-9_]+|DEBUG_[A-Z0-9_]+|MAPPING_[A-Z0-9_]+)$/.test(code))||/(TOKEN|SECRET|PASSWORD|COOKIE)/.test(code))code=null;
@@ -826,6 +826,7 @@
       ".lm-update-primary:hover{background:#fffaf0}.lm-update-primary:disabled{cursor:default;opacity:.65}",
       ".lm-update-later{display:block;margin:9px auto 0;padding:6px 12px;border:0;background:transparent;color:#a1a5ad;font:inherit;font-size:13px;cursor:pointer}",
       ".lm-update-preference{margin:10px 0 6px}.lm-update-setting-state{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}",
+      ".lm-update-progress{margin:12px 0;color:#a1a5ad;font-size:12px}.lm-update-progress[hidden]{display:none!important}.lm-update-progress progress{display:block;width:100%;height:7px;margin:8px 0;accent-color:#a9d9c0;border:0;border-radius:4px;overflow:hidden}.lm-update-progress progress::-webkit-progress-bar{background:#37383c}.lm-update-progress progress::-webkit-progress-value{background:#a9d9c0}",
       "#local-mail-local-navigation{position:fixed;top:18px;left:18px;z-index:45;display:flex;align-items:center;gap:5px;padding:5px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(28,29,33,.94);box-shadow:0 8px 24px rgba(0,0,0,.24);color-scheme:dark;backdrop-filter:blur(10px);-webkit-app-region:no-drag;pointer-events:auto}",
       "#local-mail-local-navigation[hidden]{display:none!important}",
       ".lm-local-nav-button{display:flex;align-items:center;gap:6px;height:42px;padding:0 18px;border:0;border-radius:8px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:16px;font-weight:600;cursor:pointer;white-space:nowrap;-webkit-app-region:no-drag;pointer-events:auto}",
@@ -1006,6 +1007,7 @@
       '<div class="lm-update-version" data-role="update-version"><span data-role="update-current"></span><span> → </span><span data-role="update-latest"></span></div>' +
       '<p class="lm-update-copy" data-role="update-copy"></p>' +
       '<div class="lm-update-meta" data-role="update-meta"></div>' +
+      '<div class="lm-update-progress" data-role="update-progress" hidden><progress max="100" aria-label="更新下载进度"></progress><span data-role="update-progress-text" aria-live="polite"></span></div>' +
       '<details class="lm-update-releases" data-role="update-releases"><summary>查看更新说明</summary><div class="lm-update-release-list" data-role="update-release-list"></div></details>' +
       '<p class="lm-update-warning" data-role="update-warning"></p>' +
       '<div class="lm-modal-status" data-role="update-status" aria-live="polite"></div>' +
@@ -1095,7 +1097,7 @@
     var phase = updatePreparing() ? "preparing" : state.update.phase;
     var error = state.update.error;
     var checking = state.update.checking;
-    var signature = JSON.stringify([phase, result, error, checking, state.update.operation]);
+    var signature = JSON.stringify([phase, result, error, checking, state.update.operation,state.update.progress,state.update.exitRequestStatus]);
     if (modal.__linliUpdateSignature !== signature) {
       modal.__linliUpdateSignature = signature;
       var title = modal.querySelector('[data-role="update-title"]');
@@ -1120,20 +1122,22 @@
       warning.hidden = true;
       apply.hidden = !available;
       apply.disabled = checking || phase === "preparing" || phase === "scheduled";
-      apply.textContent = error && error.stage === "prepare" ? "重试准备更新" : "下载并在退出后安装";
+      apply.textContent = error && error.stage === "prepare" ? "重试更新并重启" : "更新并重启游戏";
       later.textContent = "稍后";
       renderUpdateReleaseNotes(modal, available ? result : null);
       if (phase === "preparing") {
         title.textContent = "正在准备更新";
         copy.textContent = "正在下载并校验更新包…";
-        warning.textContent = "请暂时保持游戏和本地服务运行。可以收起此面板，准备完成后按钮会变为时钟。";
+        warning.textContent = "下载并校验成功后将正常退出游戏、安装更新并重新启动。请勿编辑未保存内容；收起此面板不会取消更新。";
         apply.textContent = "正在准备…";
         later.textContent = "收起";
         status.hidden = true;
       } else if (phase === "scheduled") {
         title.textContent = "更新已准备";
         copy.textContent = "安装包已校验，正在等待游戏和启动器退出。";
-        warning.textContent = "按平常方式完全退出游戏和启动器，随后按安装程序提示完成更新。";
+        warning.textContent = state.update.operation && state.update.operation.restartGame ?
+          (state.update.exitRequestStatus === "requested" ? "已请求游戏正常退出。若游戏或启动器仍在运行，请手动完全退出；安装成功后会自动启动游戏。" : "暂时无法自动退出，请手动完全退出游戏和启动器；安装成功后会自动启动游戏。") :
+          "按平常方式完全退出游戏和启动器，随后按安装程序提示完成更新。";
         meta.textContent = "目标版本：v" + (state.update.operation && state.update.operation.version || result && result.latestVersion || "");
         apply.hidden = true;
         later.textContent = "知道了";
@@ -1148,7 +1152,7 @@
       } else if (available) {
         title.textContent = "发现补丁更新";
         copy.textContent = result.releaseName || "有新的林离本地回信补丁可用。";
-        warning.textContent = "下载并校验完成后，完全退出游戏和启动器即可进入安装流程。";
+        warning.textContent = "请先保存信件、MIDI 等未提交内容。确认后，下载与校验成功会自动退出游戏并更新重启；不会强制结束进程。";
       } else if (error) {
         title.textContent = "检查更新失败";
         copy.textContent = "暂时无法完成检查，现有本地回信功能不会受到影响。";
@@ -1163,6 +1167,14 @@
         copy.textContent = "尚未检查更新。";
       }
       warning.hidden = !warning.textContent;
+      var progress=state.update.progress,box=modal.querySelector('[data-role="update-progress"]'),bar=box.querySelector('progress'),label=modal.querySelector('[data-role="update-progress-text"]');
+      box.hidden=phase!=="preparing"||!progress;
+      bar.removeAttribute("value");
+      if(progress){
+        if(Number.isFinite(progress.percent))bar.setAttribute("value",String(Math.max(0,Math.min(100,progress.percent))));
+        label.textContent=progress.stage==="verifying"?"下载完成，正在校验安装包…":progress.stage==="ready"?"校验完成，正在准备安装交接…":
+          "已下载 "+formatUpdateBytes(progress.receivedBytes)+(progress.totalBytes>0?" / "+formatUpdateBytes(progress.totalBytes)+(Number.isFinite(progress.percent)?"（"+progress.percent+"%）":""):"（总大小未知）");
+      }else label.textContent="";
     }
     if (modal.hidden) modal.hidden = false;
     positionUpdatePopover();
@@ -1252,8 +1264,23 @@
       state.update.phase = snapshot.phase || "idle";
       state.update.error = snapshot.error || null;
       state.update.operation = snapshot.operation || null;
+      state.update.progress = snapshot.progress || null;
     }
+    requestUpdateGameExit();
     mountUpdateEntry();
+  }
+
+  // Official .627 exit command. Never use restartApp here: that would race installation.
+  function requestUpdateGameExit() {
+    var operation=state.update.operation;
+    if(!isMainRenderer()||state.update.disposed||state.update.phase!=="scheduled"||!operation||operation.restartGame!==true||operation.scheduled!==true||!operation.id)return;
+    if(state.update.exitOperationId===operation.id)return;
+    state.update.exitOperationId=operation.id;
+    try{
+      if(!window.ToyPianistClient||typeof window.ToyPianistClient.invoke!=="function")throw new Error("native-exit-unavailable");
+      window.ToyPianistClient.invoke("exitApp",undefined);
+      state.update.exitRequestStatus="requested";
+    }catch(error){state.update.exitRequestStatus="manual-required";}
   }
 
   async function refreshUpdateStatus() {
@@ -1328,17 +1355,22 @@
   async function applyUpdate() {
     var result = state.update.result;
     if (!result || !result.updateAvailable || updatePreparing() || state.update.phase === "scheduled") return;
+    if(!window.confirm("请先保存尚未提交的信件、MIDI 等内容。下载并校验成功后，游戏将正常退出，自动安装更新并重新启动。下载期间请勿编辑未保存内容。是否继续？"))return;
     state.update.applying = true;
+    state.update.progress=null;
+    state.update.exitRequestStatus=null;
     state.update.readId += 1;
     state.update.phase = "preparing";
     state.update.error = null;
     mountUpdateEntry();
     scheduleUpdateTick(2000);
     try {
-      var applied = await updateRequest("/api/update/apply", { method: "POST", body: { version: result.latestVersion } }, 16 * 60 * 1000);
+      var applied = await updateRequest("/api/update/apply", { method: "POST", body: { version: result.latestVersion,restartGame:true } }, 16 * 60 * 1000);
       if (state.update.disposed) return;
       state.update.phase = "scheduled";
       state.update.operation = applied;
+      state.update.progress=applied.progress||state.update.progress;
+      requestUpdateGameExit();
     } catch (error) {
       if (state.update.disposed) return;
       // The response may be lost after the helper was queued. Reconcile before allowing retry.
@@ -5606,7 +5638,8 @@ async function openCustomSongManager() {
     exportDialog.innerHTML = '<section class="lm-modal lm-song-export-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-song-export-title"><div class="lm-modal-title" id="lm-song-export-title">选择诊断内容</div>' +
       '<p class="lm-modal-status" role="status" data-custom-debug-status></p><p class="lm-song-warning">详细诊断包含真实歌曲名、业务标识、文件名、目录路径和已有识别依据；始终移除令牌、Cookie、密码和签名。仅私下提供，勿公开发布。片段是去凭据后的内容，不是完整原始日志。默认只导出摘要，不自动上传。</p>' +
       '<details><summary>补充资料（可选）</summary><p>默认检查当前资料和补丁备份。可选择旧日志、改名日志、gzip 日志、映射 JSON、SQLite 备份或资料文件夹；仅本次只读使用，不导出信件。</p><div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-files>选择多个文件</button><button type="button" class="lm-button" data-custom-debug-directory>添加文件夹</button><button type="button" class="lm-button" data-custom-debug-clear>清空补充资料</button></div><p data-custom-debug-sources>未选择补充资料</p></details>' +
-      '<p data-custom-debug-names></p><div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-fragments>导出详细诊断及片段</button><button type="button" class="lm-button lm-button-primary" data-custom-debug-basic>仅导出诊断摘要</button><button type="button" class="lm-button" data-custom-debug-cancel>取消</button></div></section>';
+      '<p data-custom-debug-names></p><div class="lm-modal-actions" data-custom-debug-wait-actions hidden><button type="button" class="lm-button" data-custom-debug-continue>继续等待</button><button type="button" class="lm-button" data-custom-debug-partial>导出部分排障信息</button></div>' +
+      '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-fragments>导出详细诊断及片段</button><button type="button" class="lm-button lm-button-primary" data-custom-debug-basic>仅导出诊断摘要</button><button type="button" class="lm-button" data-custom-debug-cancel>取消</button></div></section>';
     document.body.appendChild(exportDialog);
     modal.__songHelp = createCustomSongDiagnostics.createHelp(modal);
     modal.querySelector("[data-custom-close]").onclick = function () {
@@ -5661,6 +5694,7 @@ async function openCustomSongManager() {
     modal.__songDebugPackage = createCustomSongDiagnostics.createDebugPackage({
       openButton: modal.querySelector('[data-custom-diagnostic-export]'), panel: exportDialog,
       status: exportDialog.querySelector('[data-custom-debug-status]'),
+      waitActions:exportDialog.querySelector('[data-custom-debug-wait-actions]'),continueButton:exportDialog.querySelector('[data-custom-debug-continue]'),partialButton:exportDialog.querySelector('[data-custom-debug-partial]'),
       filesButton:exportDialog.querySelector('[data-custom-debug-files]'),directoryButton:exportDialog.querySelector('[data-custom-debug-directory]'),
       clearSourcesButton:exportDialog.querySelector('[data-custom-debug-clear]'),sourcesStatus:exportDialog.querySelector('[data-custom-debug-sources]'),namesStatus:exportDialog.querySelector('[data-custom-debug-names]'),
       fragmentButton: exportDialog.querySelector('[data-custom-debug-fragments]'), basicButton: exportDialog.querySelector('[data-custom-debug-basic]'), cancelButton: exportDialog.querySelector('[data-custom-debug-cancel]'),
@@ -5684,8 +5718,16 @@ async function openCustomSongManager() {
         var binary = atob(bundle.base64), bytes = new Uint8Array(binary.length);
         for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         var url = URL.createObjectURL(new Blob([bytes], { type: 'application/gzip' }));
-        var link = document.createElement('a'); link.href = url; link.download = bundle.fileName; document.body.appendChild(link); link.click(); link.remove();
-        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        var link, triggered = false;
+        try {
+          link = document.createElement('a'); link.href = url; link.download = bundle.fileName;
+          document.body.appendChild(link); link.click(); triggered = true;
+        } finally {
+          try { if (link) link.remove(); } finally {
+            if (triggered) setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+            else URL.revokeObjectURL(url);
+          }
+        }
       }
     });
     exportDialog.addEventListener('keydown', function (event) {
@@ -8087,8 +8129,12 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
     options.fragmentButton.disabled = phase !== 'ready' || busy;
     options.basicButton.disabled = !['ready', 'failed'].includes(phase) || busy;
     options.basicButton.textContent = phase === 'failed' ? '导出最小诊断' : '仅导出诊断摘要';
-    options.fragmentButton.hidden = phase === 'failed';
+    options.fragmentButton.hidden = phase === 'failed'||phase==='awaiting-choice';
+    options.basicButton.hidden = phase==='awaiting-choice';
     options.cancelButton.disabled = false;
+    if(options.waitActions){options.waitActions.hidden=phase!=='awaiting-choice';options.waitActions.style.display=phase==='awaiting-choice'?'flex':'none';}
+    if(options.continueButton)options.continueButton.disabled=busy||phase!=='awaiting-choice';
+    if(options.partialButton)options.partialButton.disabled=busy||phase!=='awaiting-choice';
     [options.filesButton,options.directoryButton,options.clearSourcesButton].forEach(function(button){if(button)button.disabled=busy||!['ready','failed'].includes(phase);});
   }
   function discard(old, root) {
@@ -8116,24 +8162,11 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
     options.status.textContent = '正在准备诊断快照，不修改曲目。完成后请选择导出方式；取消不会下载。';
     if (options.onOpen) options.onOpen(); render(); options.refreshBusy();
     try {
-      var started = await options.request('/api/custom-songs/debug-package/start', { method: 'POST', body: { mediaRoot: root, frontend:frontendEvidence, officialRoot:officialRoot,extraPaths:extraPaths.slice() } });
+      var requestId='capture-'+Date.now()+'-'+current+'-'+Math.random().toString(36).slice(2);
+      var started = await options.request('/api/custom-songs/debug-package/start', { method: 'POST', body: { mediaRoot: root, frontend:frontendEvidence, officialRoot:officialRoot,extraPaths:extraPaths.slice(),requestId:requestId } });
       if (!valid(current, root)) { void discard(started, root); if (current === generation) cancel(); return; }
       job = started;
-      while (current === generation) {
-        if (!valid(current, root)) { cancel(); return; }
-        var status = await options.request('/api/custom-songs/debug-package/status', { method: 'POST', body: { mediaRoot: root, jobId: job.jobId } });
-        if (!valid(current, root)) { if (current === generation) cancel(); return; }
-        options.status.textContent = status.state === 'verifying' ? '正在离线核对原材料与脱敏材料…' : '正在收集排障材料（已保留 ' + (status.retainedEvents || 0) + ' 条）…';
-        if (status.state === 'failed' || status.state === 'cancelled') throw new Error(status.failureCode || 'capture-failed');
-        if (status.state === 'ready') {
-          ready = status; phase = 'ready';
-          if(options.namesStatus){var count=status.nameRecovery&&status.nameRecovery.counts;
-            options.namesStatus.textContent=count?'逐首名称诊断：原名可恢复 '+(count.recoverable||0)+'；历史显示名 '+(count.historical||0)+'；冲突 '+(count.ambiguous||0)+'；已检查资料无名 '+(count.unrecoverable||0)+'；检查未完成 '+(count.incomplete||0)+'；身份待确认 '+(count.excluded||0)+'。逐首证据及预演随详细诊断导出，不会实际改名。':'逐首名称诊断未取得（旧服务或采集失败）。';}
-          options.status.textContent = status.minimal?'完整材料未采集，但已保存可取得的现场和故障原因。可导出最小故障包；详细选择仅包含实际取得的证据。':'摘要用于快速查看，详细模式另含结构化关联证据。可附带 '+status.rawRetainedEvents+' 条去凭据片段，另省略 '+status.rawOmittedEvents+' 条；扫描标识：'+status.scanId+'。';
-          return;
-        }
-        await options.delay();
-      }
+      await pollCapture(current,root);
     } catch (error) {
       if (current === generation) {
         void discard(job, root); job = null; ready = null; phase = 'failed';
@@ -8142,6 +8175,43 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
       }
     } finally { if (current === generation) { busy = false; render(); options.refreshBusy(); } }
   }
+  async function pollCapture(current,root){
+    while (current === generation) {
+        if (!valid(current, root)) { cancel(); return; }
+        var status = await options.request('/api/custom-songs/debug-package/status', { method: 'POST', body: { mediaRoot: root, jobId: job.jobId } });
+        if (!valid(current, root)) { if (current === generation) cancel(); return; }
+        options.status.textContent = status.state === 'waiting' ? '等待曲库刷新或当前写入完成…（已等待 '+Math.floor((status.wait&&status.wait.observedWaitMs||0)/1000)+' 秒，可取消）' :
+          status.state === 'verifying' ? '正在离线核对原材料与脱敏材料…' : '正在收集排障材料（已保留 ' + (status.retainedEvents || 0) + ' 条）…';
+        if(status.state==='awaiting-choice'){
+          phase='awaiting-choice';options.status.textContent='等待尚未完成。可继续等待，或查看已取得的部分排障信息；不会自动下载。';return;
+        }
+        if (status.state === 'failed' || status.state === 'cancelled') throw new Error(status.failureCode || 'capture-failed');
+        if (status.state === 'ready') {
+          ready = status; phase = 'ready';
+          if(options.namesStatus){var count=status.nameRecovery&&status.nameRecovery.counts;
+            options.namesStatus.textContent=count?'逐首名称诊断：原名可恢复 '+(count.recoverable||0)+'；历史显示名 '+(count.historical||0)+'；冲突 '+(count.ambiguous||0)+'；已检查资料无名 '+(count.unrecoverable||0)+'；检查未完成 '+(count.incomplete||0)+'；身份待确认 '+(count.excluded||0)+'。逐首证据及预演随详细诊断导出，不会实际改名。':'逐首名称诊断未取得（旧服务或采集失败）。';}
+          options.status.textContent = status.minimal?'部分排障信息已准备，包含已冻结资料及明确的缺口。请选择导出范围；不能把未检查项当作无法恢复。':'摘要用于快速查看，详细模式另含结构化关联证据。可附带 '+status.rawRetainedEvents+' 条去凭据片段，另省略 '+status.rawOmittedEvents+' 条；扫描标识：'+status.scanId+'。';
+          return;
+        }
+        await options.delay();
+    }
+  }
+  async function waitingChoice(action){
+    if(busy||phase!=='awaiting-choice'||!job)return;
+    var current=generation,root=jobRoot;busy=true;render();options.refreshBusy();
+    try{
+      await options.request('/api/custom-songs/debug-package/'+action,{method:'POST',body:{mediaRoot:root,jobId:job.jobId}});
+      if(!valid(current,root))return;
+      phase='preparing';await pollCapture(current,root);
+    }catch(error){
+      if(current===generation){
+        // Retain the known job and its frozen evidence if the choice response was lost.
+        try{await pollCapture(current,root);}catch(again){
+          phase='awaiting-choice';options.status.textContent='暂时无法确认服务状态，已保留本次诊断标识；可重试或取消。';
+        }
+      }
+    }finally{if(current===generation){busy=false;render();options.refreshBusy();}}
+  }
   async function exportChoice(include) {
     if (typeof include !== 'boolean' || busy || (phase !== 'ready' && !(phase === 'failed' && !include))) return;
     var current = generation, root = jobRoot;
@@ -8149,24 +8219,28 @@ createCustomSongDiagnostics.createDebugPackage = function (options) {
     busy = true; render(); options.refreshBusy();
     try {
       if (phase === 'failed') {
-        options.downloadBasic(minimalFront(),'linli-song-frontend-'+Date.now());
+        await options.downloadBasic(minimalFront(),'linli-song-frontend-'+Date.now());
       } else {
         var bundle = await options.request('/api/custom-songs/debug-package/download', { method: 'POST', body: {
           mediaRoot: root, jobId: job.jobId, scanId: ready.scanId, includeRaw: include,
           confirmSensitive: include, confirmationId: include ? ready.confirmationId : undefined
         } });
         if (!valid(current, root)) return;
-        options.download(bundle);
+        await options.download(bundle);
       }
-      job = null; cancel();
+      if (!valid(current, root)) return;
+      options.status.textContent = '已发起下载，请检查浏览器下载结果；无法确认文件已保存。原快照保留至关闭、取消或到期，可再次选择导出。';
       if (options.onExport) options.onExport(include);
     } catch (error) {
-      if (current === generation) { phase = 'failed'; void discard(job, root); job = null; ready = null;
+      if (valid(current, root)) {
         captureErrors.push(safeFailure(error,'diagnostic-download'));
-        options.status.textContent = '导出未完成。可重试下载前端最小现场，包含本次下载失败阶段；不会导出原始异常或自动上传。'; }
+        options.status.textContent = job && ready ? '下载未确认完成，已保留同一份诊断快照。请再次选择摘要或详细诊断重试；不会自动下载。快照到期后需关闭并重新采集。' : '前端最小现场下载未完成，可再次选择重试。';
+      }
     } finally { if (current === generation) { busy = false; render(); options.refreshBusy(); } }
   }
   options.openButton.onclick = function () { return open(); };
+  if(options.continueButton)options.continueButton.onclick=function(){return waitingChoice('continue');};
+  if(options.partialButton)options.partialButton.onclick=function(){return waitingChoice('partial');};
   var extraPaths=[];
   async function chooseSources(mode){
     if(busy||!['ready','failed'].includes(phase))return;

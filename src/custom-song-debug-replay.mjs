@@ -9,6 +9,7 @@ import { ScanDiagnostics } from './custom-song-diagnostics.mjs';
 import { FRAGMENT_POLICY } from './custom-song-fragment-redact.mjs';
 
 export const DEBUG_LIMITS = Object.freeze({ packageBytes: 12 * 1024 * 1024, decodedBytes: 20 * 1024 * 1024,
+  detailBytes: 16 * 1024 * 1024,
   events: 2048, eventBytes: 1024 * 1024, evidenceBytes: 8 * 1024 * 1024, directories: 10000, files: 20000,
   rawBytes: 256 * 1024, rawEventBytes: 32 * 1024, rawEvents: 16, ttlMs: 10 * 60 * 1000 });
 const EVENT_COUNTERS = ['relevantEvents', 'parsedEvents', 'parseFailures', 'unknownActions', 'requestTypeFailures', 'responseOnlyEvents',
@@ -116,7 +117,7 @@ export function decodeDebugPackage(buffer) {
     }
     if (bytes > DEBUG_LIMITS.rawBytes) invalid();
   }
-  if(value.details!==undefined&&(!plain(value.details)||Buffer.byteLength(JSON.stringify(value.details))>16*1024*1024))invalid();
+  if(value.details!==undefined&&(!plain(value.details)||Buffer.byteLength(JSON.stringify(value.details))>DEBUG_LIMITS.detailBytes))invalid();
   return value;
 }
 

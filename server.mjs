@@ -569,7 +569,7 @@ const server = http.createServer(async (req, res) => {
       ok(req, res, customSongs.getDiagnostics(await readJsonBody(req), url.pathname.endsWith("/export")));
       return;
     }
-    const debugPackageAction = url.pathname.match(/^\/api\/custom-songs\/debug-package\/(start|status|download|cancel)$/);
+    const debugPackageAction = url.pathname.match(/^\/api\/custom-songs\/debug-package\/(start|status|download|cancel|continue|partial)$/);
     if(req.method==='POST'&&url.pathname==='/api/custom-songs/debug-package/choose-sources'){
       const input=await readJsonBody(req),controller=new AbortController(),abort=()=>controller.abort();
       res.once('close',abort);

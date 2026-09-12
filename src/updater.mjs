@@ -75,7 +75,7 @@ export function compareVersions(left, right) {
   return a.prerelease.number > b.prerelease.number ? 1 : -1;
 }
 
-export function installerLaunchArguments(gameRoot, pid = process.pid) {
+export function installerLaunchArguments(gameRoot, pid = process.pid, restartGame = false) {
   const normalizedRoot = path.resolve(String(gameRoot || ""));
   const normalizedPid = Number(pid);
   if (!String(gameRoot || "").trim()) {
@@ -87,7 +87,8 @@ export function installerLaunchArguments(gameRoot, pid = process.pid) {
   return [
     `/GAME_ROOT=${normalizedRoot}`,
     "/CONFIRMED_UPDATE=1",
-    `/WAIT_PID=${normalizedPid}`
+    `/WAIT_PID=${normalizedPid}`,
+    ...(restartGame === true ? ["/SILENT", "/NORESTART", "/RESTART_GAME=1"] : [])
   ];
 }
 
@@ -100,7 +101,8 @@ export function handoffLaunchArguments({
   serviceRoot = null,
   serviceHost = null,
   servicePort = null,
-  serviceVersion = null
+  serviceVersion = null,
+  restartGame = false
 } = {}) {
   const normalizedRoot = path.resolve(String(gameRoot || ""));
   const normalizedCorePath = path.resolve(String(installerCorePath || ""));
@@ -145,6 +147,7 @@ export function handoffLaunchArguments({
   if (serviceHost) args.push("--service-host", String(serviceHost));
   if (servicePort != null) args.push("--service-port", String(Number(servicePort)));
   if (serviceVersion) args.push("--service-version", String(serviceVersion));
+  if (restartGame === true) args.push("--restart-game", "1");
   return args;
 }
 
@@ -324,6 +327,7 @@ export class UpdateManager {
     this.stablePhase = "idle";
     this.statusError = null;
     this.operation = null;
+    this.downloadProgress = null;
   }
 
   getStatus() {
@@ -336,7 +340,8 @@ export class UpdateManager {
       phase,
       lastCheck: cloneState(this.cachedPublicCheck),
       error: cloneState(this.statusError),
-      operation: cloneState(this.operation)
+      operation: cloneState(this.operation),
+      progress: cloneState(this.downloadProgress)
     };
   }
 
@@ -522,11 +527,14 @@ export class UpdateManager {
     fs.mkdirSync(versionDirectory, { recursive: true });
 
     if (fs.existsSync(installerPath) && this.sha256(installerPath) === expectedSha256) {
+      const bytes=fs.statSync(installerPath).size;
+      this.downloadProgress={stage:"ready",receivedBytes:bytes,totalBytes:bytes,percent:100,reused:true};
       return { installerPath, sha256: expectedSha256, reused: true };
     }
 
     const temporaryPath = path.join(versionDirectory, `${candidate.installer.name}.${process.pid}.part`);
     fs.rmSync(temporaryPath, { force: true });
+    this.downloadProgress={stage:"downloading",receivedBytes:0,totalBytes:candidate.installer.size||null,percent:candidate.installer.size>0?0:null};
     const response = await this.fetchImpl(candidate.installer.downloadUrl, {
       method: "GET",
       redirect: "follow",
@@ -545,10 +553,14 @@ export class UpdateManager {
     }
 
     const source = Readable.fromWeb(response.body);
+    const total=candidate.installer.size>0?candidate.installer.size:declaredLength>0?declaredLength:null;
+    this.downloadProgress.totalBytes=total;
+    this.downloadProgress.percent=total?0:null;
     const hash = crypto.createHash("sha256");
     let received = 0;
     source.on("data", (chunk) => {
       received += chunk.length;
+      this.downloadProgress={stage:"downloading",receivedBytes:received,totalBytes:total,percent:total?Math.min(99,Math.floor(received*100/total)):null};
       hash.update(chunk);
       if (received > MAX_INSTALLER_BYTES) {
         source.destroy(new UpdateError("更新安装包大小超过安全限制", { status: 502, code: "installer_too_large" }));
@@ -557,6 +569,7 @@ export class UpdateManager {
 
     try {
       await pipeline(source, fs.createWriteStream(temporaryPath, { flags: "wx" }));
+      this.downloadProgress={stage:"verifying",receivedBytes:received,totalBytes:total,percent:null};
       if (candidate.installer.size != null && received !== candidate.installer.size) {
         throw new UpdateError(
           `更新安装包大小不一致：预期 ${candidate.installer.size}，实际 ${received}`,
@@ -580,13 +593,14 @@ export class UpdateManager {
         }, null, 2)}\n`,
         "utf8"
       );
+      this.downloadProgress={stage:"ready",receivedBytes:received,totalBytes:total||received,percent:100,reused:false};
       return { installerPath, sha256: actualSha256, reused: false };
     } finally {
       fs.rmSync(temporaryPath, { force: true });
     }
   }
 
-  launchInstaller(installerPath, expectedSha256) {
+  launchInstaller(installerPath, expectedSha256, restartGame = false) {
     if (this.platform !== "win32") {
       throw new UpdateError("一键安装更新当前只支持 Windows", { status: 501, code: "platform_unsupported" });
     }
@@ -603,6 +617,7 @@ export class UpdateManager {
       });
     }
     const handoffArguments = handoffLaunchArguments({
+      restartGame,
       gameRoot: this.gameRoot,
       installerCorePath,
       installerPath,
@@ -624,13 +639,21 @@ export class UpdateManager {
       }
     );
     child.unref?.();
+    const spawnReady=restartGame?new Promise((resolve,reject)=>{
+      if(!child?.once){reject(new UpdateError("无法确认更新交接程序启动", {status:500,code:"handoff_spawn_failed"}));return;}
+      const timer=setTimeout(()=>reject(new UpdateError("更新交接启动超时，请稍后重试", {status:500,code:"handoff_spawn_timeout"})),10000);
+      child.once("spawn",()=>{clearTimeout(timer);resolve();});
+      child.once("error",()=>{clearTimeout(timer);reject(new UpdateError("更新交接程序启动失败", {status:500,code:"handoff_spawn_failed"}));});
+    }):null;
     return {
+      spawnReady,
       handoffStarted: true,
       handoffPid: Number.isSafeInteger(child?.pid) ? child.pid : null
     };
   }
 
-  async apply({ version } = {}) {
+  async apply({ version, restartGame = false } = {}) {
+    if(typeof restartGame!=="boolean")throw new UpdateError("更新重启选项无效", {status:400,code:"invalid_restart_option"});
     if (this.applying) {
       throw new UpdateError("补丁更新已经在处理中", { status: 409, code: "update_busy" });
     }
@@ -656,7 +679,10 @@ export class UpdateManager {
       }
       this.preparing = true;
       this.statusError = null;
+      this.downloadProgress=null;
+      const operationId=crypto.randomUUID();
       this.operation = {
+        id:operationId,restartGame,
         version: candidate.version,
         deferred: true,
         scheduled: false,
@@ -664,15 +690,18 @@ export class UpdateManager {
       };
       const expectedSha256 = await this.resolveExpectedSha256(candidate);
       const prepared = await this.downloadInstaller(candidate, expectedSha256);
-      const handoff = this.launchInstaller(prepared.installerPath, expectedSha256);
+      const handoff = this.launchInstaller(prepared.installerPath, expectedSha256, restartGame);
+      if(restartGame)await handoff.spawnReady;
       this.handoffScheduled = true;
       this.operation = {
+        id:operationId,restartGame,
         version: candidate.version,
         deferred: true,
         scheduled: true,
         restartRequired: true
       };
       return {
+        id:operationId,restartGame,progress:cloneState(this.downloadProgress),
         // Keep the legacy field, but make its meaning explicit: the Inno setup
         // process is deferred; only the detached handoff helper has started.
         launched: false,
@@ -685,11 +714,12 @@ export class UpdateManager {
         sha256: expectedSha256,
         reusedDownload: prepared.reused,
         restartRequired: true,
-        message: "更新包已校验并排队；退出游戏和启动器后将自动停止本地服务并安装。"
+        message: restartGame ? "更新包已校验，交接程序已就绪；正常退出后将自动安装并重新启动游戏。" : "更新包已校验并排队；退出游戏和启动器后将自动停止本地服务并安装。"
       };
     } catch (error) {
       if (this.preparing && !this.handoffScheduled) {
         this.statusError = publicUpdateError(error, "prepare");
+        if(this.downloadProgress)this.downloadProgress={...this.downloadProgress,stage:"failed"};
         this.stablePhase = "failed";
         this.operation = null;
       }

@@ -2,6 +2,17 @@ import {baseSongName,savedSongName,previewSongRename} from './custom-song-name-p
 const fold = value => String(value||'').toLowerCase();
 const usable = (name,key) => typeof name==='string'&&Boolean(name.trim())&&name!==key&&!/^midi_\d+_\d+$/i.test(name);
 const LABELS={recoverable:'可以恢复原名',historical:'只能恢复历史显示名',ambiguous:'无法唯一恢复',unrecoverable:'已检查资料中无法恢复',incomplete:'检查未完成',excluded:'无法建立当前歌曲身份'};
+// Drop bulky previews/files before positive evidence. This is an observation, never a write plan.
+export function compactSongNameResult(result) {
+  return {...result,files:[],filesOmitted:(result.filesOmitted||0)+(result.files||[]).length,preview:null,
+    candidates:(result.candidates||[]).map(c=>({name:c.name,field:c.field,kind:c.kind,sourceId:c.sourceId,
+      sourceNameKey:c.sourceNameKey,recordIndex:c.recordIndex,link:c.link,occurrences:c.occurrences})),
+    excludedCandidates:[],excludedCandidatesOmitted:(result.excludedCandidatesOmitted||0)+(result.excludedCandidates||[]).length,
+    status:result.status==='unrecoverable'?'incomplete':result.status,
+    label:result.status==='unrecoverable'?LABELS.incomplete:result.label,
+    relatedCoverageComplete:false,gaps:[{reason:'report-detail-budget'}],
+    positiveEvidenceDoesNotProveAbsentUnseenConflicts:Boolean(result.selectedName)};
+}
 function connection(song,record) {
   if(fold(song.nameKey)===fold(record.nameKey))return {strength:'exact',basis:'same-nameKey-independent-of-outer-root'};
   for(const left of song.files||[])for(const right of record.files||[]){
@@ -82,8 +93,7 @@ export function assessSongNames({inventory,sources=[],mappingEntries=[],captured
       originalNameProven:originalValues.size===1&&status==='recoverable',
       positiveEvidenceDoesNotProveAbsentUnseenConflicts:Boolean(selectedName&&gaps.length)};
     reportBytes+=Buffer.byteLength(JSON.stringify(result));
-    if(reportBytes>4*1024*1024){result.candidates=[];result.excludedCandidates=[];result.preview=null;result.selectedName=null;result.conflicts=[];result.originalNameProven=false;result.status='incomplete';result.label=LABELS.incomplete;result.gaps=[{reason:'report-detail-budget'}];result.relatedCoverageComplete=false;}
-    results.push(result);
+    results.push(reportBytes>4*1024*1024?compactSongNameResult(result):result);
   }
   const counts={};for(const item of results)counts[item.status]=(counts[item.status]||0)+1;
   const report={schemaVersion:1,algorithm:'song-name-evidence-v1',capturedAt,readOnly:true,

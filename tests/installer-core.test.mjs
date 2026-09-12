@@ -616,6 +616,21 @@ test("handoff waits for game processes, stops the verified service, rechecks has
   assert.equal(options.windowsHide, false);
 });
 
+test("confirmed restart handoff passes silent install and game restart flags only after process protection",async t=>{
+  const current=handoffFixture();t.after(()=>fs.rmSync(current.root,{recursive:true,force:true}));
+  const calls=[];
+  const result=await handoffUpdate({
+    restartGame:true,gameRoot:current.gameRoot,serviceRoot:current.layout.serviceRoot,
+    installerPath:current.installerPath,expectedSha256:current.installerSha256,servicePid:4321,
+    platform:"win32",processListImpl:()=>[],queryProcessImpl:()=>null,
+    shutdownImpl:async()=>assert.fail("already-stopped service must not be asked to stop"),
+    spawnImpl:(exe,args)=>{calls.push(args);return{unref(){},once(){}};},
+    logPath:path.join(current.root,"restart-handoff.log")
+  });
+  assert.equal(result.protectedProcessesCleared,true);assert.equal(result.installerStarted,true);
+  assert.deepEqual(calls[0].slice(-3),["/SILENT","/NORESTART","/RESTART_GAME=1"]);
+});
+
 test("handoff fails closed when authenticated HTTP shutdown is not confirmed", async (t) => {
   const current = handoffFixture();
   t.after(() => fs.rmSync(current.root, { recursive: true, force: true }));

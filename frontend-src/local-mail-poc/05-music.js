@@ -478,7 +478,8 @@ async function openCustomSongManager() {
     exportDialog.innerHTML = '<section class="lm-modal lm-song-export-dialog" role="dialog" aria-modal="true" aria-labelledby="lm-song-export-title"><div class="lm-modal-title" id="lm-song-export-title">选择诊断内容</div>' +
       '<p class="lm-modal-status" role="status" data-custom-debug-status></p><p class="lm-song-warning">详细诊断包含真实歌曲名、业务标识、文件名、目录路径和已有识别依据；始终移除令牌、Cookie、密码和签名。仅私下提供，勿公开发布。片段是去凭据后的内容，不是完整原始日志。默认只导出摘要，不自动上传。</p>' +
       '<details><summary>补充资料（可选）</summary><p>默认检查当前资料和补丁备份。可选择旧日志、改名日志、gzip 日志、映射 JSON、SQLite 备份或资料文件夹；仅本次只读使用，不导出信件。</p><div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-files>选择多个文件</button><button type="button" class="lm-button" data-custom-debug-directory>添加文件夹</button><button type="button" class="lm-button" data-custom-debug-clear>清空补充资料</button></div><p data-custom-debug-sources>未选择补充资料</p></details>' +
-      '<p data-custom-debug-names></p><div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-fragments>导出详细诊断及片段</button><button type="button" class="lm-button lm-button-primary" data-custom-debug-basic>仅导出诊断摘要</button><button type="button" class="lm-button" data-custom-debug-cancel>取消</button></div></section>';
+      '<p data-custom-debug-names></p><div class="lm-modal-actions" data-custom-debug-wait-actions hidden><button type="button" class="lm-button" data-custom-debug-continue>继续等待</button><button type="button" class="lm-button" data-custom-debug-partial>导出部分排障信息</button></div>' +
+      '<div class="lm-modal-actions"><button type="button" class="lm-button" data-custom-debug-fragments>导出详细诊断及片段</button><button type="button" class="lm-button lm-button-primary" data-custom-debug-basic>仅导出诊断摘要</button><button type="button" class="lm-button" data-custom-debug-cancel>取消</button></div></section>';
     document.body.appendChild(exportDialog);
     modal.__songHelp = createCustomSongDiagnostics.createHelp(modal);
     modal.querySelector("[data-custom-close]").onclick = function () {
@@ -533,6 +534,7 @@ async function openCustomSongManager() {
     modal.__songDebugPackage = createCustomSongDiagnostics.createDebugPackage({
       openButton: modal.querySelector('[data-custom-diagnostic-export]'), panel: exportDialog,
       status: exportDialog.querySelector('[data-custom-debug-status]'),
+      waitActions:exportDialog.querySelector('[data-custom-debug-wait-actions]'),continueButton:exportDialog.querySelector('[data-custom-debug-continue]'),partialButton:exportDialog.querySelector('[data-custom-debug-partial]'),
       filesButton:exportDialog.querySelector('[data-custom-debug-files]'),directoryButton:exportDialog.querySelector('[data-custom-debug-directory]'),
       clearSourcesButton:exportDialog.querySelector('[data-custom-debug-clear]'),sourcesStatus:exportDialog.querySelector('[data-custom-debug-sources]'),namesStatus:exportDialog.querySelector('[data-custom-debug-names]'),
       fragmentButton: exportDialog.querySelector('[data-custom-debug-fragments]'), basicButton: exportDialog.querySelector('[data-custom-debug-basic]'), cancelButton: exportDialog.querySelector('[data-custom-debug-cancel]'),
@@ -556,8 +558,16 @@ async function openCustomSongManager() {
         var binary = atob(bundle.base64), bytes = new Uint8Array(binary.length);
         for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         var url = URL.createObjectURL(new Blob([bytes], { type: 'application/gzip' }));
-        var link = document.createElement('a'); link.href = url; link.download = bundle.fileName; document.body.appendChild(link); link.click(); link.remove();
-        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        var link, triggered = false;
+        try {
+          link = document.createElement('a'); link.href = url; link.download = bundle.fileName;
+          document.body.appendChild(link); link.click(); triggered = true;
+        } finally {
+          try { if (link) link.remove(); } finally {
+            if (triggered) setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+            else URL.revokeObjectURL(url);
+          }
+        }
       }
     });
     exportDialog.addEventListener('keydown', function (event) {

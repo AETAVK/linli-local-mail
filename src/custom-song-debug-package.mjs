@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { setImmediate as yieldTurn } from 'node:timers/promises';
+import { setImmediate as yieldTurn, setTimeout as waitDelay } from 'node:timers/promises';
 import { gzipSync } from 'node:zlib';
 import { SERVICE_VERSION } from './constants.mjs';
 import { scanCustomSongs } from './custom-song-scan.mjs';
@@ -11,10 +11,10 @@ import { captureRelationships, diagnosticAssessment } from './custom-song-debug-
 import { evidenceType, inspectFieldShape, inspectRequestStructure, leadingStructureType } from './custom-song-structure.mjs';
 import { DetailedSongEvidence } from './custom-song-debug-evidence.mjs';
 import {collectExtraNameSources,captureNameInventory,newNameSource,observeNameLogLine,verifyNameSourceGroup,boundNameSources} from './custom-song-name-sources.mjs';
-import {assessSongNames} from './custom-song-name-recovery.mjs';
+import {assessSongNames,renderSongNameReport,compactSongNameResult} from './custom-song-name-recovery.mjs';
 import { diagnosticError } from './diagnostic-errors.mjs';
 import path from 'node:path';
-import { DEBUG_LIMITS, replayMaterial, eventInvariant, songInvariants, replayRuntimeIdentity, validateReplayMaterial } from './custom-song-debug-replay.mjs';
+import { DEBUG_LIMITS, replayMaterial, eventInvariant, songInvariants, replayRuntimeIdentity, validateReplayMaterial, decodeDebugPackage, readDetailedEvidence } from './custom-song-debug-replay.mjs';
 
 const error = (code, status = 400) => Object.assign(new Error(code), { status });
 function candidate(line, outer) {
@@ -53,12 +53,14 @@ function candidate(line, outer) {
   return { matched: false, limited: limited || pending.length > 0 };
 }
 
-export async function collectSongDebugPackage({ mediaRoot, logRoot, logRootSource = 'custom', mappingEntries = [], context = null, detailContext = null, failures = [], frozenNameSources = [], extraPaths = [], backupRoot, io = {}, signal, onProgress = () => {}, limits = {} }) {
+export async function collectSongDebugPackage({ mediaRoot, logRoot, logRootSource = 'custom', mappingEntries = [], context = null, detailContext = null, failures = [], frozenNameSources = [], extraPaths = [], backupRoot, io = {}, signal, onProgress = () => {}, onEvidence = () => {}, limits = {} }) {
   const budget = { ...DEBUG_LIMITS, ...limits };
   const diagnostics = new ScanDiagnostics({ mediaRoot, logRoot, logRootSource: logRootSource === 'default' ? 'default' : 'custom', patchVersion: SERVICE_VERSION });
   const events = [], directories = [], fileOrders = new Map();
   const details=new DetailedSongEvidence(),categoryCounts={};let order=0;
   const selectedNameSources=new Map();let nameBytes=0,logDirectorySnapshot=null;
+  let retainedInventory=null,retainedExtraSources=[];
+  const captureCoverage={inventoryComplete:false,logsComplete:false,extrasComplete:false};
   const coverage = { candidateEvents: 0, retainedEvents: 0, omittedEvents: 0, retainedBytes: 0,
     omittedDirectories: 0, omittedFiles: 0, inputFilesChanged: 0, inputFilesUnavailableAfterRead: 0,
     rawEligibleEvents: 0, rawRetainedEvents: 0, rawOmittedEvents: 0, candidateProbeLimitedEvents: 0 };
@@ -250,7 +252,9 @@ export async function collectSongDebugPackage({ mediaRoot, logRoot, logRootSourc
     manifest.failures=failures;manifest.summaryOnly=true;manifest.complete=manifest.complete&&!failures.length&&!coverage.caseFoldCollisions;
     // SQL/cache were frozen synchronously at start. No quick/search/selectRoot/present or write entry is called.
     const nameInventory=await captureNameInventory(mediaRoot,{io});
+    retainedInventory=nameInventory;captureCoverage.inventoryComplete=nameInventory.complete===true;
     const additional=await collectExtraNameSources({extraPaths,backupRoot,signal,io});
+    retainedExtraSources=additional.sources;captureCoverage.extrasComplete=additional.complete===true;
     const selected=[...selectedNameSources.values()];
     for(const source of selected){
       const before=snapshots.get(source.locator);
@@ -277,6 +281,7 @@ export async function collectSongDebugPackage({ mediaRoot, logRoot, logRootSourc
       }
     }
     const nameSources=boundNameSources([...frozenNameSources,...selected,...additional.sources]);
+    captureCoverage.logsComplete=report.paths.logRootStatus==='readable'&&selected.every(source=>source.complete===true);
     if(report.stages.suspectedEncodingLines||coverage.candidateProbeLimitedEvents)nameSources.push({id:'log-format-coverage',complete:false,gaps:[{reason:'log-format-understanding-incomplete'}],records:[]});
     const nameRecovery=assessSongNames({inventory:nameInventory,sources:nameSources,mappingEntries});
     manifest.nameRecovery={schemaVersion:1,counts:nameRecovery.counts,inventoryComplete:nameRecovery.inventoryComplete,complete:nameRecovery.complete};
@@ -288,70 +293,309 @@ export async function collectSongDebugPackage({ mediaRoot, logRoot, logRootSourc
     // Freeze a validated downloadable default before exposing ready; never defer a default format/size failure to download.
     const defaultArchive = encodeSongDebugPackage(bundle);
     return { bundle, sensitive, defaultArchive,details:detailPayload };
+  } catch(caught) {
+    if(!signal?.aborted)try{onEvidence({events:details.snapshot(),directories:structuredClone(directories),inventory:retainedInventory,
+      coverage:captureCoverage,sources:boundNameSources([...selectedNameSources.values(),...retainedExtraSources]),capturedAt:Date.now()});}catch{}
+    throw caught;
   } finally { events.length = 0; directories.length = 0; snapshots.clear(); readPaths.clear(); }
 }
 
-export function fitSongDetailBudget(details,manifest,maxBytes=15*1024*1024){
-  const size=()=>Buffer.byteLength(JSON.stringify(details));
-  if(size()<=maxBytes)return;
+const jsonBytes = value => Buffer.byteLength(JSON.stringify(value) ?? 'null');
+function omittedValue(value) {
+  const json=JSON.stringify(value)??'null';
+  return {omitted:true,reason:'package-budget',originalBytes:Buffer.byteLength(json),
+    sha256:crypto.createHash('sha256').update(json).digest('hex')};
+}
+// Ancillary evidence is a bounded prefix with an explicit gap, never a silently truncated value.
+function boundedEvidence(value,limit,depth=0){
+  if(value==null||jsonBytes(value)<=limit)return value;
+  if(typeof value!=='object'||depth>=8||limit<512)return omittedValue(value);
+  if(Array.isArray(value)){
+    const kept=[];let bytes=2;
+    for(const item of value){
+      const size=jsonBytes(item)+1;if(bytes+size>limit-512)break;kept.push(item);bytes+=size;
+    }
+    return {records:kept,complete:false,omitted:value.length-kept.length,
+      omittedIndexRange:[kept.length,value.length-1],reason:'package-budget'};
+  }
+  const entries=Object.entries(value),out={};
+  const each=Math.max(160,Math.floor((limit-512)/Math.max(1,entries.length)));
+  for(const [key,item] of entries)out[key]=boundedEvidence(item,each,depth+1);
+  return jsonBytes(out)<=limit?out:omittedValue(value);
+}
+function boundedRows(rows,limit,convert){
+  const kept=[],omitted=[];let bytes=2;
+  for(let i=0;i<rows.length;i++){
+    const row=convert(rows[i],i),size=jsonBytes(row)+1;
+    if(bytes+size<=limit-1024){kept.push(row);bytes+=size;}else omitted.push(i);
+  }
+  return {records:kept,coverage:{complete:false,originalCount:rows.length,retainedCount:kept.length,
+    omittedCount:omitted.length,omittedIndexRanges:compactRanges(omitted),reason:'package-budget'}};
+}
+function compactRanges(indices){
+  const ranges=[];for(const index of indices){const last=ranges.at(-1);if(last&&last[1]+1===index)last[1]=index;else ranges.push([index,index]);}
+  // Pathological alternating oversized rows still cannot create unbounded coverage metadata.
+  return ranges.length<=64?ranges:{first:ranges.slice(0,32),last:ranges.slice(-32),rangeCount:ranges.length,complete:false};
+}
+function cumulativeCoverage(current,previous){
+  if(!previous)return current;
+  return {...current,inputCount:current.originalCount,originalCount:previous.originalCount,
+    omittedCount:(previous.omittedCount||0)+current.omittedCount,
+    indexBasis:'this-pass-input; earlier omissions in budget.previousPasses'};
+}
+export function fitSongDetailBudget(details,manifest,maxBytes=DEBUG_LIMITS.detailBytes-1024*1024){
+  if(jsonBytes(details)<=maxBytes)return;
+  const inputBytes=jsonBytes(details),previousBudget=details.budget;
+  const originalBytes=previousBudget?.originalBytes??inputBytes,
+    originalFields=previousBudget?.originalFields??Object.fromEntries(Object.entries(details).map(([key,value])=>[key,jsonBytes(value)]));
+  // First remove large duplicate event/file bodies only; a small existing name report need not change.
+  for(const field of ['events','files','retainedCapture','directories']){
+    if(jsonBytes(details[field])<=Math.floor(maxBytes*.15))continue;
+    details.coverage={...details.coverage,complete:false,packageBudgetLimited:true,
+      [field+'OmittedForNameEvidence']:{originalBytes:jsonBytes(details[field]),
+        count:Array.isArray(details[field])?details[field].length:null,reason:'package-budget'}};
+    details[field]=Array.isArray(details[field])?[]:null;
+    manifest.complete=false;manifest.detailBudgetLimited=true;
+    if(jsonBytes(details)<=maxBytes)return;
+  }
+  const report=details.nameRecovery,evidence=details.nameEvidence;
+  // Keep independent per-song essentials before duplicate source bodies, file inventories and services.
+  const songs=boundedRows(report?.songs||[],Math.floor(maxBytes*.44),song=>{
+    const compact=compactSongNameResult(song);
+    const candidates=boundedRows(compact.candidates,8192,c=>c);
+    return {nameKey:compact.nameKey,currentName:compact.currentName,selectedName:compact.selectedName,
+      status:candidates.coverage.omittedCount?'incomplete':compact.status,
+      label:candidates.coverage.omittedCount?'检查未完成':compact.label,
+      candidates:candidates.records,candidateCoverage:cumulativeCoverage(candidates.coverage,song.candidateCoverage),
+      excludedCandidates:[],excludedCandidatesOmitted:compact.excludedCandidatesOmitted,
+      files:[],filesOmitted:compact.filesOmitted,conflicts:(compact.conflicts||[]).slice(0,8),
+      conflictsOmitted:(song.conflictsOmitted||0)+Math.max(0,(compact.conflicts||[]).length-8),preview:null,
+      gaps:compact.gaps,relatedCoverageComplete:false,conclusionScope:'budget-limited-evidence-not-a-write-plan'};
+  });
+  const inventory=boundedRows(evidence?.inventory?.songs||[],Math.floor(maxBytes*.08),song=>({
+    nameKey:song.nameKey,name:song.name,exclusion:song.exclusion,files:[],filesOmitted:(song.filesOmitted||0)+(song.files||[]).length}));
+  const sourceRows=boundedRows(evidence?.sources||[],Math.floor(maxBytes*.12),source=>({
+    id:source.id,kind:source.kind,locator:boundedEvidence(source.locator,1024),snapshot:boundedEvidence(source.snapshot,2048),
+    complete:false,originalRecordCount:source.originalRecordCount??(source.records||[]).length,
+    records:[],gaps:[{reason:'package-budget-source-body-omitted',originalGaps:boundedEvidence(source.gaps,1024)}]}));
+  const replacement={schemaVersion:1,coverage:{complete:false,packageBudgetLimited:true},
+    budget:{originalBytes,originalFields,inputBytes,limitBytes:maxBytes,policy:'per-song-names-and-source-links-first',
+      previousPasses:previousBudget?[...(previousBudget.previousPasses||[]),{limitBytes:previousBudget.limitBytes,
+        songCoverage:previousBudget.songCoverage,inventoryCoverage:previousBudget.inventoryCoverage,sourceCoverage:previousBudget.sourceCoverage}].slice(-4):[],
+      songCoverage:cumulativeCoverage(songs.coverage,previousBudget?.songCoverage),
+      inventoryCoverage:cumulativeCoverage(inventory.coverage,previousBudget?.inventoryCoverage),
+      sourceCoverage:cumulativeCoverage(sourceRows.coverage,previousBudget?.sourceCoverage),
+      note:'recordIndex and sourceNameKey refer to original source records; omitted bodies are not replayable. Retained rows are not a complete inventory or recovery plan.'},
+    service:boundedEvidence(details.service,Math.floor(maxBytes*.12)),
+    failures:boundedEvidence(details.failures,Math.floor(maxBytes*.01)),
+    wait:boundedEvidence(details.wait,Math.floor(maxBytes*.01)),
+    beforeWait:boundedEvidence(details.beforeWait,Math.floor(maxBytes*.01)),snapshotAt:details.snapshotAt,
+    retainedCapture:boundedEvidence(details.retainedCapture,Math.floor(maxBytes*.02)),
+    events:boundedEvidence(details.events,Math.floor(maxBytes*.02)),
+    files:boundedEvidence(details.files,Math.floor(maxBytes*.01)),directories:boundedEvidence(details.directories,Math.floor(maxBytes*.01))};
+  if(evidence)replacement.nameEvidence={schemaVersion:1,inventory:{root:boundedEvidence(evidence.inventory?.root,2048),
+    complete:false,songs:inventory.records,gaps:[{reason:'package-budget',...inventory.coverage}]},
+    sources:sourceRows.records,mappingEntries:boundedEvidence(evidence.mappingEntries,Math.floor(maxBytes*.02))};
+  if(report){
+    const counts={};for(const song of songs.records)counts[song.status]=(counts[song.status]||0)+1;
+    replacement.nameRecovery={schemaVersion:1,algorithm:report.algorithm,capturedAt:report.capturedAt,readOnly:true,
+      complete:false,inventoryComplete:false,counts,songs:songs.records,inventoryGaps:[{reason:'package-budget'}],
+      sources:sourceRows.records.map(({records,...source})=>source),scope:'retained-budget-limited-song-evidence',
+      readableComplete:false,readable:'诊断包达到容量限制；逐首保留名称与来源关联见 songs，省略范围见 details.budget。不可据此直接执行恢复。'};
+  }
+  // Fixed allocation leaves room for JSON framing and explicit omission metadata. Fail closed if violated.
+  if(jsonBytes(replacement)>maxBytes)throw error('DEBUG_DETAIL_BUDGET_FAILED',413);
+  for(const key of Object.keys(details))delete details[key];Object.assign(details,replacement);
   manifest.complete=false;manifest.detailBudgetLimited=true;
-  details.coverage={...details.coverage,complete:false,packageBudgetLimited:true};
-  for(const field of ['events','files']){
-    if(size()<=maxBytes)return;
-    details.coverage[field+'OmittedForNameEvidence']=(details[field]||[]).length;details[field]=[];
-  }
-  for(const [key,component] of Object.entries(details.service?.components||{})){
-    if(size()<=maxBytes)return;
-    details.service.components[key]={available:false,reason:'package-budget',recordsOmitted:component.records?.length||0};
-    details.service.coverage={...details.service.coverage,complete:false};
-  }
-  if(size()>maxBytes&&details.nameEvidence){
-    const evidence=details.nameEvidence;
-    evidence.sources=boundNameSources(evidence.sources,Math.max(1024,Math.floor(maxBytes/8)));
-    details.nameRecovery=assessSongNames(evidence);
-    manifest.nameRecovery={schemaVersion:1,counts:details.nameRecovery.counts,complete:false,inventoryComplete:evidence.inventory.complete};
-  }
+  if(replacement.nameRecovery)manifest.nameRecovery={schemaVersion:1,counts:replacement.nameRecovery.counts,complete:false,inventoryComplete:false};
 }
 
 export function minimalDebugPackage(input,cause){
   const diagnostics=new ScanDiagnostics();diagnostics.finish('SCAN_FAILED');const report=diagnostics.snapshot().report;
-  const failures=[...(input.failures||[]),diagnosticError(cause,'capture-failure')];
+  const timeout=cause?.code==='DEBUG_WAIT_TIMEOUT';
+  const failures=[...(input.failures||[]),...(!timeout?[diagnosticError(cause,'capture-failure')]:[])];
   const bundle={format:'linli-song-debug',schemaVersion:3,manifest:{scanId:report.scanId,createdAt:new Date().toISOString(),sourceVersion:SERVICE_VERSION,minimal:true,summaryOnly:true,complete:false,scope:'available-components-only',context:input.context||{available:false},failures,coverage:{rawEligibleEvents:0,rawOmittedEvents:0}},diagnostics:report,material:{events:[],directories:[],mappings:[]},verification:{events:[],scope:'not-captured'}};
-  return{bundle,sensitive:[],details:{schemaVersion:1,service:input.detailContext,failures,coverage:{complete:false,reason:'capture-unavailable'}},defaultArchive:encodeSongDebugPackage(bundle)};
+  const sources=boundNameSources([...(input.frozenNameSources||[]),...(input.retained?.sources||[])]);
+  const rows=new Map();
+  const sameRoot=value=>String(value||'').replace(/\\/g,'/').replace(/\/+$/,'').toLowerCase()===String(input.mediaRoot||'').replace(/\\/g,'/').replace(/\/+$/,'').toLowerCase();
+  for(const source of sources.filter(s=>/db-songs$|db-cache$/.test(s.kind||'')))for(const row of source.records||[]){
+    if(row.nameKey&&sameRoot(row.root)&&!rows.has(row.nameKey))rows.set(row.nameKey,{nameKey:row.nameKey,root:row.root,
+      files:row.files||[],name:row.customName||row.name,basis:'frozen-index-not-live-directory'});
+  }
+  for(const row of input.retained?.directories||[])if(!rows.has(row.key))rows.set(row.key,{nameKey:row.key,root:input.mediaRoot,
+    files:row.files.map(fileName=>({fileName})),basis:'observed-prefix-not-complete-directory'});
+  if(input.retained?.inventory?.songs)for(const row of input.retained.inventory.songs)rows.set(row.nameKey,row);
+  const coverage=input.retained?.coverage||{},gaps=[{reason:'partial-diagnostic-capture'}];
+  for(const [key,label] of [['inventoryComplete','live-directory'],['logsComplete','logs'],['extrasComplete','backups-and-extra-sources']])
+    if(!coverage[key])gaps.push({reason:label+(input.retained?'-coverage-not-established':'-not-checked')});
+  const inventory={root:input.mediaRoot,songs:[...rows.values()].slice(0,10000),complete:false,
+    basis:'frozen-index-and-any-observed-prefix-not-live-inventory',
+    observedCoverage:coverage,gaps};
+  if(rows.size>10000)inventory.gaps.push({reason:'partial-inventory-budget'});
+  const nameEvidence={schemaVersion:1,inventory,sources,mappingEntries:input.mappingEntries||[]};
+  const nameRecovery=assessSongNames(nameEvidence);
+  for(const song of nameRecovery.songs)if(song.preview){song.preview.applicable=false;song.preview.prerequisites.push('verify-live-state-after-partial-capture');}
+  nameRecovery.complete=false;
+  const partialText=renderSongNameReport(nameRecovery);nameRecovery.readableComplete=partialText.length<=250000;
+  nameRecovery.readable='部分排障信息：只覆盖明确已取得资料，未完成项见逐首缺口；不是无法恢复名单。\n'+partialText.slice(0,250000);
+  bundle.manifest.partialReason=timeout?'wait-timeout':'capture-unavailable';
+  bundle.manifest.nameRecovery={schemaVersion:1,counts:nameRecovery.counts,complete:false,inventoryComplete:false};
+  const details={schemaVersion:1,service:input.detailContext,failures,coverage:{complete:false,reason:'capture-unavailable'},nameEvidence,nameRecovery,
+    retainedCapture:input.retained?.events||null,snapshotAt:input.snapshotAt??input.detailContext?.capturedAt??null};
+  fitSongDetailBudget(details,bundle.manifest);
+  for(const song of details.nameRecovery.songs)if(song.preview){song.preview.applicable=false;
+    if(!song.preview.prerequisites.includes('verify-live-state-after-partial-capture'))song.preview.prerequisites.push('verify-live-state-after-partial-capture');}
+  details.nameRecovery.readable='部分排障信息：须重新核对实时资料，不可直接执行恢复计划。\n'+renderSongNameReport(details.nameRecovery).slice(0,250000);
+  return{bundle,sensitive:[],details,defaultArchive:encodeSongDebugPackage(bundle)};
 }
 
 export function encodeSongDebugPackage(bundle) {
   validateReplayMaterial(bundle.material);
+  if(bundle.details&&jsonBytes(bundle.details)>DEBUG_LIMITS.detailBytes)throw error('DEBUG_DETAILS_TOO_LARGE',413);
   if(bundle.manifest.context&&Buffer.byteLength(JSON.stringify(bundle.manifest.context))>65536)throw error('DEBUG_CONTEXT_TOO_LARGE',413);
   const json = Buffer.from(JSON.stringify(bundle));
   if (json.length > DEBUG_LIMITS.decodedBytes) throw error('DEBUG_PACKAGE_TOO_LARGE', 413);
   const buffer = gzipSync(json, { level: 1 });
   if (buffer.length > DEBUG_LIMITS.packageBytes) throw error('DEBUG_PACKAGE_TOO_LARGE', 413);
+  // Validate exactly the emitted bytes with the consumer, not just an estimated JSON size.
+  if(bundle.details)readDetailedEvidence(buffer,{confirmSensitive:true});else decodeDebugPackage(buffer);
   return buffer;
 }
 
+function prepareDownloadArchives(snapshot){
+  fitSongDetailBudget(snapshot.details,snapshot.bundle.manifest);
+  const detailed={...snapshot.bundle,manifest:{...snapshot.bundle.manifest,summaryOnly:false,sensitivity:'SENSITIVE-PRIVATE-SHARING-ONLY'},
+    sensitive:snapshot.sensitive,details:snapshot.details};
+  try{snapshot.detailedArchive=encodeSongDebugPackage(detailed);}catch(caught){
+    if(!['DEBUG_PACKAGE_TOO_LARGE','DEBUG_DETAILS_TOO_LARGE'].includes(caught.message))throw caught;
+    detailed.manifest.summaryMaterialOmittedForDetailedBudget=true;detailed.manifest.complete=false;
+    detailed.manifest.omittedReplayMaterial={events:detailed.material.events.length,directories:detailed.material.directories.length,
+      mappings:detailed.material.mappings.length,sensitive:detailed.sensitive.length,reason:'package-budget'};
+    detailed.material={events:[],directories:[],mappings:[]};detailed.sensitive=[];
+    detailed.verification={events:[],scope:'summary-replay-omitted-for-detailed-budget'};
+    // A second fixed, conservative ceiling bounds both uncompressed and incompressible output.
+    fitSongDetailBudget(detailed.details,detailed.manifest,4*1024*1024);
+    snapshot.detailedArchive=encodeSongDebugPackage(detailed);
+  }
+  if(detailed.manifest.detailBudgetLimited){snapshot.bundle.manifest.complete=false;
+    snapshot.bundle.manifest.detailBudgetLimited=true;snapshot.bundle.manifest.nameRecovery=detailed.manifest.nameRecovery;}
+  snapshot.defaultArchive=encodeSongDebugPackage(snapshot.bundle);
+}
+
 export class SongDebugPackageManager {
-  constructor({ collect = collectSongDebugPackage, ttlMs = DEBUG_LIMITS.ttlMs } = {}) { this.collect = collect; this.ttlMs = ttlMs; this.job = null; }
-  clear() {
+  constructor({ collect = collectSongDebugPackage, ttlMs = DEBUG_LIMITS.ttlMs, waitMs=60000, pollMs=100,
+    now=()=>Date.now(), sleep=(ms,signal)=>waitDelay(ms,undefined,{signal}) } = {}) {
+    this.collect=collect;this.ttlMs=ttlMs;this.waitMs=waitMs;this.pollMs=pollMs;this.now=now;this.sleep=sleep;this.job=null;
+  }
+  hasPriority(){return this.job?.priorityHeld===true;}
+  allowsRefresh(ticket){return Boolean(ticket&&this.hasPriority()&&this.job.admittedRefresh===ticket);}
+  allowsVisual(token){return Boolean(token&&this.hasPriority()&&this.job.admittedVisual===token);}
+  reuse(input){
+    const job=this.job;
+    return job&&job.root===input.mediaRoot&&(job.input?.requestId??null)===(input.requestId??null)&&JSON.stringify(job.input?.extraPaths||[])===JSON.stringify(input.extraPaths||[])?
+      {jobId:job.id,state:job.state}:null;
+  }
+  release(job,reason){
+    if(!job.priorityHeld)return;
+    job.priorityHeld=false;job.wait.releasedAt=this.now();job.wait.releaseReason=reason;
+    try{job.input?.releasePriority?.(reason);}catch(caught){job.wait.releaseError=diagnosticError(caught,'diagnostic-release');}
+  }
+  clear(reason='cancelled') {
     if (!this.job) return;
-    this.job.controller.abort(); clearTimeout(this.job.timer); this.job.snapshot = null;
-    this.job.confirmationId = null; this.job.state = 'cancelled'; this.job = null;
+    const job=this.job;
+    job.controller.abort();clearTimeout(job.timer);this.release(job,reason);
+    job.snapshot=null;job.retained=null;job.latestInput=null;job.admittedRefresh=null;job.admittedVisual=null;
+    job.confirmationId=null;job.state='cancelled';job.input=null;this.job=null;
   }
   start(input) {
-    if (this.job && ['collecting', 'verifying'].includes(this.job.state)) throw error('DEBUG_CAPTURE_BUSY', 409);
-    this.clear();
-    const job = { id: crypto.randomUUID(), root: input.mediaRoot, state: 'collecting', controller: new AbortController(), progress: 0 };
+    const reused=this.reuse(input);if(reused)return reused;
+    this.clear(this.job?.root===input.mediaRoot?'superseded':'root-changed');
+    const job = { id: crypto.randomUUID(), root: input.mediaRoot, state: 'waiting', controller: new AbortController(), progress: 0,
+      input,snapshot:null,retained:null,wait:{requestedAt:this.now(),cycles:0,observedWaitMs:0,observations:[],beforeSnapshotAt:input.snapshotAt??null} };
     this.job = job;
-    job.timer = setTimeout(() => { if (this.job === job) this.clear(); }, this.ttlMs); job.timer.unref?.();
-    job.promise = (input.minimalOnly?Promise.resolve(minimalDebugPackage(input,{code:'DEBUG_CAPTURE_BUSY'})):this.collect({ ...input, signal: job.controller.signal, onProgress: progress => {
-      if (this.job === job) { job.state = progress.phase; job.progress = progress.retainedEvents; }
-    } })).then(snapshot => {
-      if (this.job !== job || job.controller.signal.aborted) return;
-      job.snapshot = snapshot; job.state = 'ready'; job.confirmationId = crypto.randomBytes(24).toString('base64url');
-    }).catch(caught => { if (this.job === job) {
-      job.snapshot=minimalDebugPackage(input,caught);job.state='ready';job.confirmationId=crypto.randomBytes(24).toString('base64url');
-    } });
+    job.timer=setTimeout(()=>{if(this.job===job)this.clear('expired');},this.ttlMs);job.timer.unref?.();
+    job.promise=this.run(job);
     return { jobId: job.id, state: job.state };
+  }
+  observe(job,reasons){
+    const signature=JSON.stringify(reasons),last=job.wait.observations.at(-1);
+    if(last?.signature===signature)return;
+    if(job.wait.observations.length>=32){job.wait.observations.shift();job.wait.omittedObservations=(job.wait.omittedObservations||0)+1;}
+    job.wait.observations.push({at:this.now(),reasons,signature});
+  }
+  waitSummary(job){
+    const {observations,...summary}=job.wait;
+    return {...summary,observations:observations.map(item=>({at:item.at,reasons:item.reasons.map(reason=>reason.kind)}))};
+  }
+  finish(job,snapshot){
+    this.release(job,'ready');
+    job.wait.finishedAt=this.now();
+    snapshot.bundle.manifest.wait=this.waitSummary(job);
+    snapshot.details??={schemaVersion:1,coverage:{complete:false}};
+    snapshot.details.wait={...job.wait,observations:job.wait.observations.map(({signature,...item})=>item)};
+    if(job.wait.hasObservedBusy)snapshot.details.beforeWait={snapshotAt:job.input.snapshotAt??null,context:job.input.context||null,
+      sourceSnapshots:(job.input.frozenNameSources||[]).map(source=>({id:source.id,kind:source.kind,snapshot:source.snapshot??null,records:source.records?.length||0}))};
+    fitSongDetailBudget(snapshot.details,snapshot.bundle.manifest);
+    if(snapshot.bundle.manifest.minimal&&snapshot.details.nameRecovery){
+      for(const song of snapshot.details.nameRecovery.songs)if(song.preview){song.preview.applicable=false;
+        if(!song.preview.prerequisites.includes('verify-live-state-after-partial-capture'))song.preview.prerequisites.push('verify-live-state-after-partial-capture');}
+      const text=renderSongNameReport(snapshot.details.nameRecovery);
+      snapshot.details.nameRecovery.readableComplete=text.length<=250000;
+      snapshot.details.nameRecovery.readable='部分排障信息：实时条件仍需核对，不能直接执行恢复计划。\n'+text.slice(0,250000);
+    }
+    prepareDownloadArchives(snapshot);
+    job.snapshot=snapshot;job.state='ready';job.confirmationId=crypto.randomBytes(24).toString('base64url');
+  }
+  async run(job){
+    const original=job.input,roundStart=this.now(),previousWait=job.wait.observedWaitMs;
+    job.wait.cycles++;job.wait.deadline=roundStart+this.waitMs;job.wait.timedOut=false;job.priorityHeld=true;
+    let input=original,observedThisRound=false;
+    try{
+      job.admittedRefresh=original.existingRefresh?.()||null;job.admittedVisual=original.existingVisual?.()||null;
+      let reasons=original.externalBusy?.()||[];
+      this.observe(job,reasons);
+      while(reasons.length){
+        observedThisRound=true;job.state='waiting';job.wait.hasObservedBusy=true;job.wait.observedWaitMs=previousWait+Math.max(0,this.now()-roundStart);
+        if(this.now()>=job.wait.deadline){
+          job.wait.timedOut=true;job.state='awaiting-choice';
+          job.snapshot=minimalDebugPackage({...input,retained:job.retained},{code:'DEBUG_WAIT_TIMEOUT'});
+          this.release(job,'wait-timeout');return;
+        }
+        await this.sleep(Math.max(1,Math.min(this.pollMs,job.wait.deadline-this.now())),job.controller.signal);
+        if(this.job!==job||job.controller.signal.aborted)return;
+        reasons=original.externalBusy?.()||[];this.observe(job,reasons);
+      }
+      job.wait.observedWaitMs=previousWait+(observedThisRound?Math.max(0,this.now()-roundStart):0);
+      job.wait.externalBusyClearedAt=job.wait.hasObservedBusy?this.now():null;
+      if(job.wait.hasObservedBusy&&original.refreshSnapshot){
+        const fresh=original.refreshSnapshot();
+        input={...original,...fresh,frozenNameSources:[...(fresh.frozenNameSources||[]),
+          ...(original.frozenNameSources||[]).map(source=>({...source,id:'before-wait/'+source.id,kind:'before-wait/'+source.kind}))]};
+        job.wait.afterSnapshotAt=fresh.snapshotAt??this.now();
+      }
+      job.latestInput=input;job.state='collecting';
+      const snapshot=input.minimalOnly?minimalDebugPackage(input,{code:'DEBUG_CAPTURE_BUSY'}):await this.collect({...input,
+        signal:job.controller.signal,onEvidence:retained=>{if(this.job===job&&!job.controller.signal.aborted)job.retained=retained;},
+        onProgress:progress=>{if(this.job===job&&!job.controller.signal.aborted){job.state=progress.phase;job.progress=progress.retainedEvents;}}
+      });
+      if(this.job===job&&!job.controller.signal.aborted)this.finish(job,snapshot);
+    }catch(caught){
+      if(this.job===job&&!job.controller.signal.aborted){
+        try{this.finish(job,minimalDebugPackage({...input,retained:job.retained},caught));}
+        catch(fallback){this.release(job,'failed');job.state='failed';job.failureCode='DEBUG_CAPTURE_FAILED';}
+      }
+    }
+  }
+  continue(input){
+    const job=this.current(input);
+    if(job.state!=='awaiting-choice')throw error('DEBUG_NOT_WAITING_FOR_CHOICE',409);
+    job.confirmationId=null;job.state='waiting';job.promise=this.run(job);return{jobId:job.id,state:job.state};
+  }
+  partial(input){
+    const job=this.current(input);
+    if(job.state!=='awaiting-choice')throw error('DEBUG_NOT_WAITING_FOR_CHOICE',409);
+    this.finish(job,job.snapshot||minimalDebugPackage({...job.input,retained:job.retained},{code:'DEBUG_WAIT_TIMEOUT'}));
+    return this.status(input);
   }
   current({ jobId, mediaRoot }) {
     if (!this.job || this.job.id !== jobId || this.job.root !== mediaRoot) throw error('DEBUG_SNAPSHOT_EXPIRED', 409);
@@ -359,7 +603,7 @@ export class SongDebugPackageManager {
   }
   status(input) {
     const job = this.current(input), snapshot = job.snapshot;
-    return { jobId: job.id, state: job.state, retainedEvents: job.progress, ...(job.state === 'failed' ? { failureCode: job.failureCode } : {}), ...(snapshot ? {
+    return { jobId: job.id, state: job.state, retainedEvents: job.progress, wait:this.waitSummary(job), ...(job.state === 'failed' ? { failureCode: job.failureCode } : {}), ...(snapshot ? {
       scanId: snapshot.bundle.manifest.scanId, confirmationId: job.confirmationId,
       minimal:snapshot.bundle.manifest.minimal===true,detailsAvailable:Boolean(snapshot.details),
       nameRecovery:snapshot.bundle.manifest.nameRecovery||null,
@@ -375,17 +619,13 @@ export class SongDebugPackageManager {
     if (job.state !== 'ready' || !job.snapshot || input.scanId !== job.snapshot.bundle.manifest.scanId) throw error('DEBUG_SNAPSHOT_NOT_READY', 409);
     if (typeof input.includeRaw !== 'boolean' || (input.confirmSensitive !== undefined && typeof input.confirmSensitive !== 'boolean') ||
       input.includeRaw && (input.confirmSensitive !== true || input.confirmationId !== job.confirmationId)) throw error('DEBUG_RAW_REQUIRES_EXPLICIT_CONFIRMATION', 403);
-    const bundle = structuredClone(job.snapshot.bundle);
-    if (input.includeRaw) { bundle.sensitive = job.snapshot.sensitive;bundle.details=job.snapshot.details;bundle.manifest.summaryOnly=false;bundle.manifest.sensitivity = 'SENSITIVE-PRIVATE-SHARING-ONLY'; }
-    let bytes;
-    try{bytes=!input.includeRaw&&job.snapshot.defaultArchive?job.snapshot.defaultArchive:encodeSongDebugPackage(bundle);}catch(caught){
-      if(!input.includeRaw)throw caught;
-      bundle.material={events:[],directories:[],mappings:[]};bundle.sensitive=[];bundle.manifest.summaryMaterialOmittedForDetailedBudget=true;bundle.manifest.complete=false;
-      bytes=encodeSongDebugPackage(bundle);
-    }
+    const bundle = job.snapshot.bundle;
+    const bytes=input.includeRaw?job.snapshot.detailedArchive:job.snapshot.defaultArchive;
     const result = { scanId: bundle.manifest.scanId, fileName: `linli-song-debug-${input.includeRaw ? 'SENSITIVE-' : ''}${bundle.manifest.scanId}.json.gz`,
       mimeType: 'application/gzip', base64: bytes.toString('base64'), bytes: bytes.length };
-    this.clear(); return result;
+    // HTTP completion and a browser click cannot prove that the player saved the file.
+    // Keep the immutable, prevalidated bytes until an explicit lifecycle boundary or TTL.
+    return result;
   }
   cancel(input) {
     // An exact job id remains cancellable after the selected root changes.
