@@ -83,7 +83,8 @@ Root: HKA; Subkey: "Software\LinliLocalMail"; ValueType: string; ValueName: "Ser
 Root: HKA; Subkey: "Software\LinliLocalMail"; ValueType: string; ValueName: "Version"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletekeyifempty
 
 [Run]
-Filename: "{code:GetGameLauncher}"; Description: "启动游戏"; Flags: nowait postinstall skipifsilent
+Filename: "{code:GetGameLauncher}"; Description: "启动游戏"; Flags: nowait postinstall skipifsilent; Check: OfferManualGameLaunch
+Filename: "{code:GetGameLauncher}"; Flags: nowait; Check: RestartGameAfterConfirmedUpdate
 
 [Code]
 var
@@ -159,6 +160,18 @@ end;
 function IsSilentCommandLine: Boolean;
 begin
   Result := HasParameter('SILENT', 'silent') or HasParameter('VERYSILENT', 'verysilent');
+end;
+
+function RestartGameAfterConfirmedUpdate: Boolean;
+begin
+  Result := TransactionCommitted and
+    (ParameterValue('CONFIRMED_UPDATE', 'confirmed-update') = '1') and
+    (ParameterValue('RESTART_GAME', 'restart-game') = '1');
+end;
+
+function OfferManualGameLaunch: Boolean;
+begin
+  Result := TransactionCommitted and not RestartGameAfterConfirmedUpdate;
 end;
 
 function NormalizeGameRoot(const Value: String): String;

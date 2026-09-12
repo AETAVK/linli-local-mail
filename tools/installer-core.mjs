@@ -719,7 +719,7 @@ export async function requestAuthenticatedShutdown({
   }
 }
 
-export function installerLaunchArguments(gameRoot, pid = process.pid) {
+export function installerLaunchArguments(gameRoot, pid = process.pid, restartGame = false) {
   const normalizedRoot = path.resolve(String(gameRoot || ""));
   const normalizedPid = Number(pid);
   if (!String(gameRoot || "").trim()) {
@@ -731,7 +731,8 @@ export function installerLaunchArguments(gameRoot, pid = process.pid) {
   return [
     `/GAME_ROOT=${normalizedRoot}`,
     "/CONFIRMED_UPDATE=1",
-    `/WAIT_PID=${normalizedPid}`
+    `/WAIT_PID=${normalizedPid}`,
+    ...(restartGame === true ? ["/SILENT", "/NORESTART", "/RESTART_GAME=1"] : [])
   ];
 }
 
@@ -852,6 +853,7 @@ export async function stopVerifiedService({
 }
 
 export async function handoffUpdate({
+  restartGame = false,
   gameRoot,
   installerPath,
   expectedSha256,
@@ -963,7 +965,7 @@ export async function handoffUpdate({
         code: "handoff_installer_hash_mismatch"
       });
     }
-    const installerArguments = installerLaunchArguments(layout.gameRoot, handoffPid);
+    const installerArguments = installerLaunchArguments(layout.gameRoot, handoffPid, restartGame);
     let child;
     try {
       child = spawnImpl(normalizedInstallerPath, installerArguments, {
@@ -1764,6 +1766,7 @@ async function main() {
   const gameRoot = options["game-root"] || path.dirname(DEFAULT_SERVICE_ROOT);
   if (command === "handoff") {
     printResult(await handoffUpdate({
+      restartGame:options["restart-game"]==="1",
       gameRoot,
       installerPath: options.installer,
       expectedSha256: options.sha256,

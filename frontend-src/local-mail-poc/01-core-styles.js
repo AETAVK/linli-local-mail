@@ -826,6 +826,7 @@
       ".lm-update-primary:hover{background:#fffaf0}.lm-update-primary:disabled{cursor:default;opacity:.65}",
       ".lm-update-later{display:block;margin:9px auto 0;padding:6px 12px;border:0;background:transparent;color:#a1a5ad;font:inherit;font-size:13px;cursor:pointer}",
       ".lm-update-preference{margin:10px 0 6px}.lm-update-setting-state{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}",
+      ".lm-update-progress{margin:12px 0;color:#a1a5ad;font-size:12px}.lm-update-progress[hidden]{display:none!important}.lm-update-progress progress{display:block;width:100%;height:7px;margin:8px 0;accent-color:#a9d9c0;border:0;border-radius:4px;overflow:hidden}.lm-update-progress progress::-webkit-progress-bar{background:#37383c}.lm-update-progress progress::-webkit-progress-value{background:#a9d9c0}",
       "#local-mail-local-navigation{position:fixed;top:18px;left:18px;z-index:45;display:flex;align-items:center;gap:5px;padding:5px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(28,29,33,.94);box-shadow:0 8px 24px rgba(0,0,0,.24);color-scheme:dark;backdrop-filter:blur(10px);-webkit-app-region:no-drag;pointer-events:auto}",
       "#local-mail-local-navigation[hidden]{display:none!important}",
       ".lm-local-nav-button{display:flex;align-items:center;gap:6px;height:42px;padding:0 18px;border:0;border-radius:8px;background:transparent;color:var(--tp-text-secondary,#a1a5ad);font:inherit;font-size:16px;font-weight:600;cursor:pointer;white-space:nowrap;-webkit-app-region:no-drag;pointer-events:auto}",

@@ -15,7 +15,10 @@ export class VisionTaskService {
   }
   root(input) { return this.catalog.root(input); }
   currentRoot() { return this.catalog.refresh?.root || this.catalog.scannedRoot || this.catalog.root(); }
-  blocked() { return Boolean(this.userMutation || this.catalog.inFlight || this.catalog.mappingMutation || ['collecting', 'verifying'].includes(this.catalog.debugPackages?.job?.state)); }
+  blocked(admittedToken=null) {
+    const manager=this.catalog.debugPackages,priority=manager?.hasPriority?manager.hasPriority():['collecting','verifying'].includes(manager?.job?.state);
+    return Boolean(this.userMutation||this.catalog.inFlight||this.catalog.mappingMutation||priority&&!manager?.allowsVisual?.(admittedToken));
+  }
   assertRoot(root) { if (this.currentRoot() !== root) throw failure('当前曲库已变化，请重新选择任务'); }
   reap() {
     const lease = this.store.lease();
@@ -130,15 +133,15 @@ export class VisionTaskService {
     });
     return { state: 'claimed', lease, algorithm: VISION_ALGORITHM, policy: VISION_POLICY };
   }
-  assertLease(input) {
+  assertLease(input, {heartbeat=false} = {}) {
     const lease = this.store.lease(), job = lease && this.store.job(lease.jobId);
     if (!lease || lease.token !== input.token || lease.clientId !== input.clientId || lease.generation !== input.generation || lease.revoked || lease.expiresAt <= this.store.clock() ||
-      !job || job.generation !== lease.generation || !['queued', 'running'].includes(job.status) || job.mode === 'auto' && !this.enabled() || job.root !== this.currentRoot() || this.blocked())
+      !job || job.generation !== lease.generation || !['queued', 'running'].includes(job.status) || job.mode === 'auto' && !this.enabled() || job.root !== this.currentRoot() || !heartbeat&&this.blocked(lease.token))
       throw failure('任务已暂停、停止或数据环境变化，忽略迟到结果');
     return lease;
   }
   heartbeat(input) {
-    try { const lease = this.assertLease(input); lease.expiresAt = this.store.clock() + VISION_LIMITS.leaseMs; this.store.setLease(lease); return { accepted: true, expiresAt: lease.expiresAt }; }
+    try { const lease = this.assertLease(input,{heartbeat:true}); lease.expiresAt = this.store.clock() + VISION_LIMITS.leaseMs; this.store.setLease(lease); return { accepted: true, expiresAt: lease.expiresAt }; }
     catch { return { accepted: false }; }
   }
   async submit(input) {
@@ -150,13 +153,13 @@ export class VisionTaskService {
         this.release(lease); this.store.updateJob(job.id, 'paused', 'save-failed', true);
       }
       throw error;
-    }
+    }finally{this.catalog.refresh?.releaseDiagnosticPriority();}
   }
   release(input) {
     const lease = this.store.lease();
     if (!lease || lease.token !== input.token || lease.clientId !== input.clientId) return { released: false };
     for (const target of lease.targets) if (this.store.item(target.itemId)?.state === 'claimed') this.store.updateItem(target.itemId, 'pending', 'decoder-released');
-    this.store.setLease(null); return { released: true };
+    this.store.setLease(null);this.catalog.refresh?.releaseDiagnosticPriority();return { released: true };
   }
   waitForEnvironment(lease, reason) {
     this.release(lease); this.store.updateJob(lease.jobId, 'waiting-environment', reason, true);
@@ -228,7 +231,7 @@ export class VisionTaskService {
       this.store.updateJob(automatic.id, 'paused', 'manual-priority', true); this.revoke(automatic.id);
     }
     try { return await undoVisionJob(this, job); }
-    finally { this.userMutation = false; this.resumeAutomatic(root); }
+    finally { this.userMutation = false; this.resumeAutomatic(root);this.catalog.refresh?.releaseDiagnosticPriority(); }
   }
   async locate({ mediaRoot, nameKey } = {}) {
     const root = this.root(mediaRoot); this.assertRoot(root); let index = 0;

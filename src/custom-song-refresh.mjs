@@ -41,10 +41,12 @@ export class CustomSongRefresh {
 
   selectRoot(root) {
     if (this.root !== root) {
+      const manager=this.catalog.debugPackages,preserving=manager?.hasPriority()&&manager.job?.root===root;
+      if(manager?.hasPriority()&&!preserving)manager.clear('root-changed');
       this.root = root; this.epoch += 1; this.memo = null;
       // Song/media identity is globally keyed by nameKey in the native bridge.
       // A snapshot from another selected root must never retain old media URLs.
-      this.catalog.db.prepare("DELETE FROM custom_song_catalog_cache WHERE root<>?").run(root);
+      if(!preserving)this.catalog.db.prepare("DELETE FROM custom_song_catalog_cache WHERE root<>?").run(root);
     }
     if (!this.states.has(root)) {
       if (this.states.size >= 16) this.states.clear();
@@ -74,7 +76,7 @@ export class CustomSongRefresh {
       if (saved?.mapping_hash === mapping.hash && saved.base_url === this.catalog.baseUrl && saved.snapshot_json) {
         try { result = JSON.parse(saved.snapshot_json); } catch { /* derived cache can be reconstructed */ }
       }
-      if (!result) result = this.catalog.savedPresentation(root, mapping.entries, saved?.snapshot_json);
+      if (!result) result = this.catalog.savedPresentation(root, mapping.entries, saved?.snapshot_json,{readOnly:this.catalog.debugPackages?.hasPriority()===true});
       if (result.list.length <= MAX_SONGS && Buffer.byteLength(JSON.stringify(result)) <= MAX_BYTES) {
         this.memo = { root, mappingHash: mapping.hash, result };
       }
@@ -95,14 +97,20 @@ export class CustomSongRefresh {
 
   schedule(root, retry = false) {
     if (this.closed || root !== this.root) return;
+    const known=this.states.get(root);
+    if (known?.refreshing || (known?.checkedAt != null && this.catalog.clock() - known.checkedAt < CHECK_INTERVAL)) return;
+    if(this.catalog.debugPackages?.hasPriority()){
+      this.diagnosticDeferredRoot=root;this.diagnosticDeferredRetry=Boolean(this.diagnosticDeferredRetry||retry);return;
+    }
     const state = this.selectRoot(root);
-    if (state.refreshing || (state.checkedAt !== null && this.catalog.clock() - state.checkedAt < CHECK_INTERVAL)) return;
+    if(this.diagnosticDeferredRoot===root){this.diagnosticDeferredRoot=null;this.diagnosticDeferredRetry=false;}
     if (!retry) state.retries = 0;
     state.refreshing = true;
     state.error = "";
     if (this.job) { this.nextRoot = root; return; }
     let done;
     this.job = new Promise((resolve) => { done = resolve; });
+    const diagnosticRefresh=this.job;
     // Yield past the HTTP response: no directory or log work is on the first
     // response's critical path, even when the previous scan found missing data.
     this.timer = setTimeout(async () => {
@@ -121,7 +129,7 @@ export class CustomSongRefresh {
           this.catalog.scannedRoot = root;
           return;
         }
-        await this.catalog.rebuild({ mediaRoot: root }, { inputs });
+        await this.catalog.rebuild({ mediaRoot: root }, { inputs,diagnosticRefresh });
       } catch (error) {
         if (!this.closed && root === this.root && epoch === this.epoch) {
           if (error.code === "MAPPING_CHANGED") this.retryChangedInputs(root);
@@ -152,6 +160,17 @@ export class CustomSongRefresh {
       if (!this.job) { this.nextRoot = null; state.checkedAt = null; this.schedule(root, true); }
     }
     else state.error = "文件或映射仍在变化，已保留当前曲目；可在管理中重新扫描";
+  }
+
+  releaseDiagnosticPriority(reason){
+    if(['root-changed','root-or-selection-changed','closed'].includes(reason)){
+      this.diagnosticDeferredRoot=null;this.diagnosticDeferredRetry=false;return;
+    }
+    if(this.catalog.debugPackages?.hasPriority()||!this.diagnosticDeferredRoot)return;
+    if(this.catalog.mappingMutation||this.catalog.visionTasks?.userMutation||this.catalog.activeDiagnosticLease?.())return;
+    const root=this.diagnosticDeferredRoot,retry=this.diagnosticDeferredRetry;
+    this.diagnosticDeferredRoot=null;this.diagnosticDeferredRetry=false;
+    if(!this.closed&&root===this.root)this.schedule(root,retry);
   }
 
   save(root, result, before, after) {

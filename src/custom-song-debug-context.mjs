@@ -101,7 +101,7 @@ export function captureDebugContext(catalog, input, mappingEntries) {
   if(indexRoots.length>16)gaps.push('index-roots-truncated');if(index.omittedRows||index.omittedBytes||index.omittedFiles)gaps.push('index-evidence-truncated');
   return { schemaVersion:1,capturedAt,basis:'before-debug-capture-read-only',frontend:safeFrontendEvidence(input.frontend),
     service:{version:SERVICE_VERSION,startedAt:catalog.diagnosticStartedAt||null,historyScope:'current-service-memory-only',autoEnabled:catalog.visionTasks.enabled(),
-      busyBeforeCapture:catalog.visionTasks.blocked(),refresh:{available:Boolean(refresh),refreshing:Boolean(refresh?.refreshing),hasFailure:Boolean(refresh?.error)},tasks},
+      busyBeforeCapture:catalog.diagnosticBusyReasons?catalog.diagnosticBusyReasons().length>0:catalog.visionTasks.blocked(),refresh:{available:Boolean(refresh),refreshing:Boolean(refresh?.refreshing),hasFailure:Boolean(refresh?.error)},tasks},
     paths,index,mapping,gaps:[...new Set(gaps)],limitations:['no-other-accounts-or-disks','no-video-decoding-or-content-hashing','no-historical-logs-outside-selected-root','file-moves-can-invalidate-visual-revisions','labels-do-not-prove-correct-periods'] };
 }
 

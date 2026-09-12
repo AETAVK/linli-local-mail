@@ -169,7 +169,7 @@ export class CustomSongCatalog {
     return this.pagePresentation(await fill.promise, paging);
   }
 
-  savedPresentation(root, entries, priorJson) {
+  savedPresentation(root, entries, priorJson, {readOnly=false} = {}) {
     let prior = { list: [], warnings: [] };
     try { if (priorJson) prior = JSON.parse(priorJson); } catch { /* optional derived cache */ }
     const previous = new Map(prior.list.map((song) => [song.nameKey, song]));
@@ -187,7 +187,7 @@ export class CustomSongCatalog {
     // An imported table can populate the first list even before any scan has
     // run. Register only safe relative media names; media() still resolves the
     // real path and checks availability before serving a single byte.
-    if (!this.inFlight) {
+    if (!this.inFlight && !readOnly) {
       const insert = this.db.prepare(`INSERT INTO custom_songs
         (name_key,song_id,name,root,files_json,metadata_source,media_token,available,updated_at)
         VALUES(?,?,?,?,?,'mapping',?,1,?) ON CONFLICT(name_key) DO UPDATE SET
@@ -241,6 +241,8 @@ export class CustomSongCatalog {
   }
 
   async rebuild({ mediaRoot } = {}, internal = {}) {
+    if(this.debugPackages.hasPriority()&&!this.debugPackages.allowsRefresh(internal.diagnosticRefresh))
+      throw fail("诊断正在等待或采集，请完成或取消诊断后再扫描",409);
     if (this.mappingMutation) throw fail("正在保存歌曲映射，请稍后再试", 409);
     const root = this.root(mediaRoot);
     this.refresh?.selectRoot(root);
@@ -299,9 +301,23 @@ export class CustomSongCatalog {
     return structuredClone(exportOnly ? snapshot.report : snapshot);
   }
 
-  debugPackage(action, input = {}) {
+  activeDiagnosticLease(){
+    const lease=this.visionTasks.store.lease(),job=lease&&this.visionTasks.store.job(lease.jobId);
+    return lease&&!lease.revoked&&lease.expiresAt>this.clock()&&lease.root===this.visionTasks.currentRoot()&&
+      job&&job.generation===lease.generation&&["queued","running"].includes(job.status)?lease:null;
+  }
+  diagnosticBusyReasons(){
+    const reasons=[];
+    if(this.inFlight)reasons.push({kind:"scan",root:this.inFlight.root});
+    if(this.mappingMutation)reasons.push({kind:"mapping-write"});
+    if(this.visionTasks.userMutation)reasons.push({kind:"visual-user-write"});
+    if(this.refresh?.job)reasons.push({kind:this.refresh.timer?"scheduled-refresh":"running-refresh",root:this.refresh.root});
+    const lease=this.activeDiagnosticLease();if(lease)reasons.push({kind:"visual-active-group",root:lease.root});
+    return reasons;
+  }
+  captureDiagnosticInput(input = {}) {
     const mediaRoot = this.root(input.mediaRoot);
-    if (action === 'start') {
+    const snapshotAt=Date.now();
       const extraPaths=validateExtraSourcePaths(input.extraPaths||[]);
       let frozenNameSources=[];
       try{frozenNameSources=snapshotSongDatabase(this.db);}
@@ -323,11 +339,24 @@ export class CustomSongCatalog {
         const absent=original?.error?.code==='ENOENT';
         frozenNameSources.push({id:'current-mapping-original',kind:'mapping-original',state:absent?'confirmed-absent':'unavailable',complete:absent,gaps:absent?[]:[{reason:'mapping-original-unavailable'}],records:[]});
       }
-      return this.debugPackages.start({ mediaRoot, logRoot: this.logRoot, logRootSource: this.logRootSource, mappingEntries, context,detailContext,failures,frozenNameSources,extraPaths,
+      return { mediaRoot, logRoot: this.logRoot, logRootSource: this.logRootSource, mappingEntries, context,detailContext,failures,frozenNameSources,extraPaths,snapshotAt,requestId:input.requestId??null,
         backupRoot:this.mappings?path.join(path.dirname(path.dirname(this.mappings.filePath)),'backups'):null,
-        minimalOnly:Boolean(this.inFlight||this.mappingMutation||this.visionTasks.userMutation) });
+      };
+  }
+  debugPackage(action,input={}){
+    const mediaRoot=this.root(input.mediaRoot);
+    if(action==='start'){
+      if(input.requestId!=null&&(typeof input.requestId!=="string"||!/^[a-zA-Z0-9._-]{1,128}$/.test(input.requestId)))throw fail("诊断请求标识无效",400);
+      const extraPaths=validateExtraSourcePaths(input.extraPaths||[]);
+      const reused=this.debugPackages.reuse({mediaRoot,extraPaths,requestId:input.requestId});if(reused)return reused;
+      if(this.debugPackages.job)this.debugPackages.clear(this.debugPackages.job.root===mediaRoot?'superseded':'root-changed');
+      const captured=this.captureDiagnosticInput(input);
+      return this.debugPackages.start({...captured,externalBusy:()=>this.diagnosticBusyReasons(),
+        existingRefresh:()=>this.refresh?.job,existingVisual:()=>this.activeDiagnosticLease()?.token,
+        refreshSnapshot:()=>this.captureDiagnosticInput(input),
+        releasePriority:reason=>this.refresh?.releaseDiagnosticPriority(this.closing?'closed':reason)});
     }
-    if (!['status', 'download', 'cancel'].includes(action)) throw fail('未知排障操作', 404);
+    if (!['status', 'download', 'cancel','continue','partial'].includes(action)) throw fail('未知排障操作', 404);
     return this.debugPackages[action]({ ...input, mediaRoot });
   }
 
@@ -509,6 +538,7 @@ export class CustomSongCatalog {
   }
 
   async importMappings({ document } = {}) {
+    if(this.debugPackages.hasPriority())throw fail("诊断正在等待或采集，请稍后导入映射",409);
     if (!this.mappings) throw fail("歌曲映射表未配置", 503);
     if (this.inFlight || this.mappingMutation) throw fail("正在处理歌曲映射，请稍后再试", 409);
     const merged = this.mappings.mergeImport(document);
@@ -713,13 +743,15 @@ export class CustomSongCatalog {
   }
 
   async update({ nameKey, name, mappings } = {}) {
+    if(this.debugPackages.hasPriority())throw fail("诊断正在等待或采集，请稍后保存",409);
     if (this.inFlight || this.mappingMutation) throw fail("正在处理歌曲映射，请稍后再试", 409);
     this.mappingMutation = true;
-    try { return await this.updateMapping({ nameKey, name, mappings }); }
-    finally { this.mappingMutation = false; }
+    try { return await this.updateMapping({ nameKey, name, mappings },{admitted:true}); }
+    finally { this.mappingMutation = false;this.refresh?.releaseDiagnosticPriority(); }
   }
 
-  async updateMapping({ nameKey, name, mappings } = {}) {
+  async updateMapping({ nameKey, name, mappings } = {},internal={}) {
+    if(this.debugPackages.hasPriority()&&!internal.admitted)throw fail("诊断正在等待或采集，请稍后保存",409);
     if (!NAME_KEY.test(String(nameKey))) throw fail("曲目编号无效");
     const row = this.db.prepare("SELECT * FROM custom_songs WHERE name_key=?").get(nameKey);
     if (!row) throw fail("找不到曲目", 404);
@@ -779,5 +811,6 @@ export class CustomSongCatalog {
     return this.present(this.db.prepare("SELECT * FROM custom_songs WHERE name_key=?").get(nameKey));
   }
 
-  async close() { this.visionTasks.close(); this.debugPackages.clear(); await this.refresh?.close(); }
+  async close() { this.closing=true;const diagnostic=this.debugPackages.job?.promise;this.debugPackages.clear('closed');
+    this.visionTasks.close();await this.refresh?.close();await diagnostic; }
 }
