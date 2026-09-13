@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { SongNameRecognition } from "./song-recognition.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -68,7 +69,7 @@ async function mp4Duration(filePath) {
 }
 
 export class CustomSongCatalog {
-  constructor({ db, baseUrl, mediaRoot, logRoot, mappingPath, scan = scanCustomSongs, clock = () => Date.now(), refreshOptions }) {
+  constructor({ db, baseUrl, mediaRoot, logRoot, mappingPath, scan = scanCustomSongs, clock = () => Date.now(), refreshOptions, nameOptions = {} }) {
     this.db = db;
     this.diagnosticStartedAt = Date.now();
     this.baseUrl = baseUrl.replace(/\/$/, "");
@@ -96,6 +97,7 @@ export class CustomSongCatalog {
     )`);
     this.refresh = this.mappings ? new CustomSongRefresh(this, refreshOptions) : null;
     this.visionTasks = new VisionTaskService(this, { clock });
+    this.nameRecognition = new SongNameRecognition({ catalog: this, ...nameOptions });
   }
 
   root(input, detectedRoot) {
@@ -493,6 +495,7 @@ export class CustomSongCatalog {
     }
     if (!this.refresh || (this.refresh.root === root && this.refresh.epoch === epoch)) this.scannedRoot = root;
     this.lastWarnings = result.warnings || [];
+    this.nameRecognition.observeScan(result.songs, root);
     return { ...assembled.result, mappingHash: writtenMappingHash };
   }
 
@@ -760,7 +763,10 @@ export class CustomSongCatalog {
     if(name!==undefined&&mappings===undefined){
       // The same pure plan is used by diagnostics. A name edit cannot reclassify video periods.
       const plan=planSongRename(row,this.mappings?.read()||[],nextName);
-      this.commitMappings(this.mappings?plan.nextEntries:undefined,()=>this.db.prepare("UPDATE custom_songs SET custom_name=?,updated_at=? WHERE name_key=?").run(nextName,Date.now(),nameKey));
+      this.commitMappings(this.mappings?plan.nextEntries:undefined,()=>{
+        this.db.prepare("UPDATE custom_songs SET custom_name=?,updated_at=? WHERE name_key=?").run(nextName,Date.now(),nameKey);
+        this.nameRecognition.noteManualName(nameKey,nextName);
+      });
       this.invalidatePresentationCache();this.refresh?.invalidate();
       return this.present(this.db.prepare("SELECT * FROM custom_songs WHERE name_key=?").get(nameKey));
     }
@@ -812,5 +818,5 @@ export class CustomSongCatalog {
   }
 
   async close() { this.closing=true;const diagnostic=this.debugPackages.job?.promise;this.debugPackages.clear('closed');
-    this.visionTasks.close();await this.refresh?.close();await diagnostic; }
+    await this.nameRecognition.close();this.visionTasks.close();await this.refresh?.close();await diagnostic; }
 }

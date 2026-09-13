@@ -26,10 +26,13 @@ export async function fingerprintCustomSongInputs({ mediaRoot, logRoot, maxEntri
     truncated: false,
     records: [],
   };
-  const roots = {
-    media: await sampleMediaRoot(mediaRoot, fileSystem, state),
-    logs: await sampleLogRoot(logRoot, fileSystem, state),
-  };
+  const media = await sampleMediaRoot(mediaRoot, fileSystem, state);
+  // Capture media evidence before log sampling consumes its budget or records.
+  const mediaCacheable = state.cacheable && !state.truncated;
+  const mediaSignature = 'media-v1:' + crypto.createHash('sha256').update(JSON.stringify({
+    root: media, records: [...state.records].sort(compareRecords), truncated: state.truncated,
+  })).digest('hex');
+  const roots = { media, logs: await sampleLogRoot(logRoot, fileSystem, state) };
 
   state.records.sort(compareRecords);
   const payload = {
@@ -41,6 +44,8 @@ export async function fingerprintCustomSongInputs({ mediaRoot, logRoot, maxEntri
   const signature = `v1:${crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex')}`;
   return {
     signature,
+    mediaSignature,
+    mediaCacheable,
     cacheable: state.cacheable && !state.truncated,
     entries: state.records.length,
   };

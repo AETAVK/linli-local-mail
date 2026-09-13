@@ -5,8 +5,9 @@ function createVisionTaskController(options) {
   var timer = null, heartbeat = null, running = false, lease = null, aborter = null, epoch = 0, disposed = false;
   var lastSignal = '', environmentHold = false, panelOpen = false, requestBusy = false, message = '', preparedRoot = null, decodeFlight = null, viewSequence = 0, pendingInput = null;
   var now = options.now || Date.now;
+  var manualFeedback = '', manualJobId = null, manualSequence = 0;
   var evidenceStartedAt=now(), errorScope=0, requestSequence=0, latestRequests={}, currentFailures={}, recentFailures=[];
-  function clearScope(){errorScope++;currentFailures={};latestRequests={};message='';}
+  function clearScope(){errorScope++;currentFailures={};latestRequests={};message='';manualFeedback='';manualJobId=null;manualSequence++;}
   function failureEvidence(item){var copy=Object.assign({},item);copy.scope=item.scopeEpoch===errorScope&&item.applicable?'current':'previous';delete copy.scopeEpoch;delete copy.applicable;return copy;}
   function failureText(item){return item.category==='busy'?'曲库或识别任务暂忙，稍后重试。':item.category==='access-denied'?'识别请求未获授权，请重新连接本地服务。':item.category==='invalid-request'?'识别请求未完成，请检查当前任务后重试。':'识别任务暂不可用，请确认本地服务后重试。';}
   async function observed(endpoint,operation,body,run){
@@ -27,7 +28,15 @@ function createVisionTaskController(options) {
     }
   }
   function request(action, body, scopeBody) { return observed('vision/'+action,action==='control'?String(body&&body.action||'unknown'):action,scopeBody||body,function(){return options.request('/api/custom-songs/vision/' + action, { method: 'POST', body: body || {} });}); }
-  function render() { var failures=Object.values(currentFailures), failure=failures[failures.length-1];options.render({ data: data, job: data && data.job, message: failure?failureText(failure):message, busy: requestBusy, decoding: running }); }
+  function feedback(){var failures=Object.values(currentFailures),failure=failures[failures.length-1];return failure?failureText(failure):manualFeedback||message;}
+  function completedFeedback(job){
+    var counts=job.counts||{},inventory=job.inventory||{};
+    if(!Number.isFinite(counts.totalVideos))return '时段任务已结束，但结果统计未取得，请查看任务详情。';
+    if(!counts.totalVideos)return inventory.songs?'已检查 '+inventory.songs+' 首歌曲、'+(inventory.protectedVideos||0)+' 个视频：已有时段或手动设置，本次无需处理，未作修改。':'当前文件夹没有可识别的视频，本次未作修改。';
+    var remaining=(counts.review||0)+(counts.missing||0)+(counts.failed||0)+(counts.skipped||0);
+    return '本次处理完成：新增 '+(counts.saved||0)+' 个时段映射'+(remaining?'，仍有 '+remaining+' 个视频需查看任务详情。':'。已有设置保持不变。');
+  }
+  function render() { options.render({ data: data, job: data && data.job, message: feedback(), busy: requestBusy, decoding: running }); }
   function schedule(delay) {
     if (disposed || timer !== null) return;
     timer = options.setTimeout(function () { timer = null; void tick(); }, delay === undefined ? 1500 : delay);
@@ -42,7 +51,7 @@ function createVisionTaskController(options) {
     var current=function(){return !disposed&&sequence===viewSequence&&root===requestedRoot&&options.getRoot()===requestedRoot&&selected===requestedJob&&cursor===requestedCursor;};
     try {
       var next=await request('status', { mediaRoot: requestedRoot || undefined, jobId: requestedJob || undefined, cursor: requestedCursor });
-      if(current()){data=next;if(!next.job||['completed','stopped','undone'].indexOf(next.job.status)>=0){message='';environmentHold=false;}render();}return data;
+      if(current()){data=next;if(next.job&&next.job.id===manualJobId&&next.job.status==='completed')manualFeedback=completedFeedback(next.job);if(!next.job||['completed','stopped','undone'].indexOf(next.job.status)>=0){message='';environmentHold=false;}render();}return data;
     } catch(error){if(current())throw error;return data;}
   }
   async function handleEnvironment() {
@@ -71,7 +80,7 @@ function createVisionTaskController(options) {
           var inputRoot=pendingInput.mediaRoot||root;pendingInput=await observed('catalog/status','refresh',null,function(){return options.inputStatus(inputRoot);});
           if(!autoEnabled)return;
           if(pendingInput.refreshing){pendingAuto=true;message='等待曲库检查完成后处理新索引。';schedule(1000);return;}
-          if(pendingInput.error){message='曲库检查未完成，请重新扫描后再试。';pendingAuto=true;return;}
+          if(pendingInput.error){message='曲库检查暂未完成，稍后自动重试；已有曲目可继续使用。';pendingAuto=true;preparedRoot=null;schedule(5000);return;}
           pendingInput=null;message='';
         }
         await request('start', { mediaRoot: root || undefined, mode: 'auto', retryUnknown: false });
@@ -140,18 +149,23 @@ function createVisionTaskController(options) {
     }
   }
   async function startManual() {
-    if (requestBusy || options.isHumanBusy()) return;
+    if (requestBusy || options.isHumanBusy()) { manualFeedback='曲库或识别任务正在处理，请稍后再试。';render();return; }
     clearScope();
-    requestBusy = true; environmentHold = false; stopDecode(); render();
+    var sequence=manualSequence,requestedRoot=root;
+    requestBusy = true; environmentHold = false;manualFeedback='正在检查需要补齐时段的视频…';stopDecode(); render();
     try {
       var result = await request('start', { mediaRoot: root || undefined, mode: 'manual', retryUnknown: true });
+      if(sequence!==manualSequence||root!==requestedRoot||options.getRoot()!==requestedRoot||disposed)return;
+      if(!result||!result.job)throw new Error('识别任务未返回，请稍后重试');
       selected = result.job && result.job.id; cursor = 0; message = '';
+      manualJobId=result.job.id;manualFeedback=result.job.status==='completed'?completedFeedback(result.job):'';
       await refresh(); schedule(0);
-    } catch (error) { message = ''; }
+    } catch (error) { if(sequence===manualSequence&&root===requestedRoot){message='';manualFeedback='时段识别未能开始，请检查服务或稍后重试。';} }
     finally { requestBusy = false; render(); }
   }
   async function control(action) {
     var job = data && data.job; if (!job) return;
+    manualFeedback='';
     stopDecode(); environmentHold = false;
     try { await request(action === 'undo' ? 'undo' : 'control', { mediaRoot: job.mediaRoot, jobId: job.id, action: action, clientId: clientId }); message='';await refresh(); }
     catch (error) { message = '';render(); }
@@ -194,10 +208,12 @@ function createVisionTaskController(options) {
     schedule(0);
   }
   return { startManual: startManual, control: control, stopCurrent: stopCurrent, sync: sync, environmentChanged: environmentChanged,
+    prepareManual:function(){clearScope();manualFeedback='正在检查曲库和已有时段…';render();},
+    failManual:function(text){manualFeedback='时段检查未完成：'+text;render();},
     open: function () { panelOpen = true; schedule(0); }, closePanel: function () { panelOpen = false; },
     select: function (id) { clearScope();selected = id; cursor = 0; void refresh().catch(function(){render();}); }, next: function () { cursor = data && data.job && data.job.nextCursor || 0; void refresh().catch(function(){render();}); },
     diagnostic: function(){return {startedAt:evidenceStartedAt,historyScope:'current-renderer-memory-only',currentFailures:Object.values(currentFailures).map(failureEvidence),recentFailures:recentFailures.map(failureEvidence),capabilities:evidenceEnvironment(),autoEnabled:autoEnabled,environmentHold:environmentHold,decoding:running};},
-    status: function () { return data; }, isDecoding: function () { return running; },
+    status: function () { return data; }, feedback:feedback, isDecoding: function () { return running; },
     humanActivity: function () { stopDecode(); return decodeFlight || Promise.resolve(); },
     clientId: clientId,
     dispose: function () {

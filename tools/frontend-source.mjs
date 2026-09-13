@@ -18,6 +18,7 @@ export const FRAGMENT_MANIFEST = Object.freeze([
   Object.freeze({ file: "05-music.js", owner: "music" }),
   Object.freeze({ file: "05a-music-diagnostics.js", owner: "music-diagnostics" }),
   Object.freeze({ file: "05b-visual-tasks.js", owner: "visual-tasks" }),
+  Object.freeze({ file: "05c-song-recognition.js", owner: "song-recognition" }),
   Object.freeze({ file: "06-bootstrap.js", owner: "bootstrap" })
 ]);
 

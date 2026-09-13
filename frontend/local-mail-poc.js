@@ -74,7 +74,7 @@
     }
   };
   var sessionPromise = null;
-  var LOCAL_FRONTEND_BUILD = {"version":"0.11.15","sha256":"8ed16979517cf5628c71a0cbb174dfab07c5bfc0fae4b265b04b28a7fe965a42","basis":"assembled-input-hash-not-runtime-attestation"};
+  var LOCAL_FRONTEND_BUILD = {"version":"0.11.16","sha256":"dfa2ebd158a87116f38d521d3d78f4a5887dee94606e07e6dd733a26cac32637","basis":"assembled-input-hash-not-runtime-attestation"};
   function musicFailureFields(error,phase,links){
     var code=error&&error.code;
     if(typeof code!=='string'||code.length>80||!(/^(?:E[A-Z0-9_]+|SQLITE_[A-Z0-9_]+|DEBUG_[A-Z0-9_]+|MAPPING_[A-Z0-9_]+)$/.test(code))||/(TOKEN|SECRET|PASSWORD|COOKIE)/.test(code))code=null;
@@ -666,6 +666,8 @@
       "@media(max-width:600px){.lm-song-manager-footer{gap:8px}.lm-song-manager-footer .lm-button{font-size:13px;padding:7px 12px}.lm-song-path-row{gap:8px}.lm-song-path-row button{font-size:12px;padding:7px 10px}.lm-song-mapping-row{gap:8px}}",
       ".lm-song-manager{width:min(700px,94vw)}.lm-song-manager[data-view=home]{height:auto}.lm-song-home{padding:4px 4px 10px}.lm-song-home-section{border:0;padding:8px 0}.lm-song-home-section+.lm-song-home-section{margin-top:20px}.lm-song-home-section h3{margin:0 0 5px}.lm-song-path{padding:4px 0;border:0;border-radius:0;background:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#b9bdc5;font-family:Consolas,'Microsoft YaHei',monospace;user-select:text;-webkit-user-select:text}.lm-song-auto-control{display:flex;align-items:center;gap:10px;flex:none}.lm-song-organize-row{display:flex;align-items:center;gap:18px;margin-top:14px}.lm-song-run-context{flex:1;min-width:0}.lm-song-run-context p{margin:3px 0;font-size:12px}.lm-song-organize-row .lm-button{min-width:108px}.lm-song-run-context progress{display:block;width:100%;height:4px;accent-color:#ded8cf;border:0;margin-top:6px}.lm-song-home-section.lm-song-mapping-row{border-top:1px solid rgba(255,255,255,.1);padding-top:20px}.lm-song-mapping-row .lm-button{min-width:86px}.lm-song-manager[data-view=home] .lm-song-feedback{display:none}.lm-song-home [data-song-home-notice]{margin-bottom:0}.lm-song-manager[data-view=home] .lm-song-manager-footer{flex-wrap:nowrap}.lm-song-export-dialog .lm-modal-title{font-size:18px;line-height:1.5}",
       "@media(max-height:570px){.lm-song-home-section+.lm-song-home-section{margin-top:12px}.lm-song-home-section.lm-song-mapping-row{padding-top:14px}.lm-song-organize-row{margin-top:10px}.lm-song-home{padding-bottom:0}}@media(max-width:480px){.lm-song-organize-row{gap:10px}.lm-song-auto-control{gap:7px}.lm-song-organize-row .lm-button{min-width:88px}.lm-song-home-section h3{font-size:14px}.lm-song-mapping-row .lm-button{min-width:70px}}",
+      ".lm-song-recognition-section>.lm-song-auto-row h3{font-size:15px;font-weight:500;line-height:1.5;color:var(--tp-text-title,#d9dade)}.lm-song-recognition-section>.lm-song-auto-row{align-items:center}.lm-song-recognition-section>.lm-song-auto-row>.lm-song-auto-control{margin-left:auto}.lm-song-recognition-section+.lm-song-recognition-section{border-top:1px solid rgba(255,255,255,.1);padding-top:22px;margin-top:22px}.lm-name-settings-fold{margin:12px 0 0 16px;padding-left:12px;border-left:2px solid rgba(255,255,255,.13)}.lm-name-settings-fold>summary{font-size:13px;font-weight:400;line-height:1.5;color:var(--tp-text-secondary,#afb3bb);cursor:pointer;padding:4px 0}.lm-name-settings-fold>summary:hover{color:#ece8e2}.lm-name-settings-fold>summary:focus-visible{outline:2px solid #bdb2a2;outline-offset:3px;border-radius:3px}.lm-name-settings-fold>[data-name-settings]{padding:12px 0 4px}.lm-name-settings-fold h4{font-size:13px;font-weight:500;line-height:1.5;margin:0 0 8px}.lm-song-home-section.lm-song-management-row{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid rgba(255,255,255,.1);padding-top:20px}.lm-song-management-row p{margin:0}.lm-song-management-row>.lm-button{min-width:108px;flex:none}@media(max-width:480px){.lm-song-recognition-section>.lm-song-auto-row h3{font-size:14px}.lm-name-settings-fold{margin-left:10px;padding-left:10px}.lm-song-management-row>.lm-button{min-width:88px}}",
+      ".lm-song-home-section.lm-song-management-row{display:block}.lm-song-management-row>.lm-song-auto-row>.lm-button{min-width:108px;flex:none}.lm-name-review-shortcuts{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px}.lm-name-review-shortcuts button{border:0;background:transparent;padding:4px 0;color:var(--tp-text-secondary,#b8b6b2);font:inherit;font-size:12px;cursor:pointer}.lm-name-review-shortcuts button:hover{text-decoration:underline;color:#ece8e2}.lm-name-review-shortcuts button:focus-visible{outline:2px solid #bdb2a2;outline-offset:3px}.lm-name-review-filter{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}.lm-name-review-filter label{font-size:13px}.lm-name-review-filter .lm-select{margin-left:8px}.lm-name-job{margin:10px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--tp-text-secondary,#b8b6b2);font-size:12px;line-height:1.6}.lm-name-job:empty{display:none}.lm-name-job>span{flex-basis:100%}.lm-name-job .lm-button{margin:0}.lm-name-row>span{overflow-wrap:anywhere}",
       ".lm-song-manager-footer [data-custom-diagnostic-export],.lm-song-manager-footer [data-song-manual]{border-color:transparent;color:var(--tp-text-secondary,#afb3bb);background:transparent}.lm-song-manager-footer [data-custom-diagnostic-export]:hover,.lm-song-manager-footer [data-song-manual]:hover{background:rgba(255,255,255,.05)}",
       ".lm-modal-status{min-width:0;margin-right:auto;font-size:12px;line-height:1.45;white-space:pre-line;color:var(--tp-text-secondary,#a1a5ad)}",
       ".lm-modal-status[data-kind='error']{color:#e5aaa5}",
@@ -897,7 +899,9 @@
       "@media(max-width:900px){.lm-grid,.lm-provider-grid,.lm-parameter-grid{grid-template-columns:1fr}.lm-provider-grid .lm-wide,.lm-parameter-wide{grid-column:auto}.lm-toolbar{align-items:flex-start;flex-direction:column}.lm-config-item{flex-direction:column;align-items:flex-start}.lm-import-methods{grid-template-columns:1fr}.lm-model-manager-body{grid-template-columns:210px minmax(0,1fr)}.lm-provider-detail-scroll{padding:18px}.lm-model-edit-grid{grid-template-columns:1fr}}",
       "@media(max-width:680px){#local-mail-local-navigation{top:10px}.lm-modal.lm-model-manager{height:90vh}.lm-model-manager-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.lm-provider-nav{max-height:190px;border-right:0;border-bottom:1px solid rgba(255,255,255,.09)}.lm-provider-detail-head{flex-direction:column}.lm-provider-detail-actions{justify-content:flex-start}}"
     ].join("");
+    style.textContent += ".lm-name-pane[hidden],.lm-name-pane [hidden]{display:none!important}.lm-name-nav,.lm-name-batch,.lm-name-pager,[data-name-job]{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}.lm-name-filters{display:grid;grid-template-columns:minmax(120px,1fr) 125px 110px auto;gap:8px}.lm-name-columns,.lm-name-row{display:grid;grid-template-columns:minmax(0,1fr) 120px 80px;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #ffffff18}.lm-name-columns{font-size:12px;color:#aeb1b8}.lm-name-title{display:flex;align-items:center;gap:10px;min-width:0}.lm-name-link{background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer;overflow-wrap:anywhere}.lm-name-link:hover{text-decoration:underline}.lm-name-credentials,.lm-name-budgets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}.lm-name-credentials input,.lm-name-budgets input,.lm-name-budgets select{display:block;width:100%;box-sizing:border-box;margin-top:6px}.lm-name-level-setting{padding:12px 0}.lm-name-candidate{display:block;width:100%;text-align:left;margin:8px 0}.lm-name-pane [data-name-detail]>.lm-input{width:100%;box-sizing:border-box;margin:16px 0}.lm-name-pane [data-name-detail]>button{margin:5px}.lm-name-pane details{margin:16px 0}.lm-song-manager[data-view=names]{width:min(820px,94vw)}#local-mail-song-recognition-settings .lm-title-row{display:flex;justify-content:space-between;align-items:center}@media(max-width:600px){.lm-name-filters{grid-template-columns:1fr 1fr}.lm-name-credentials,.lm-name-budgets{grid-template-columns:1fr}.lm-name-columns,.lm-name-row{grid-template-columns:minmax(0,1fr) 95px 45px;font-size:12px}}";
     document.head.appendChild(style);
+    style.textContent += ".lm-recognition-settings{color:#ece8e2}.lm-recognition-settings .lm-name-credentials>label,.lm-recognition-settings .lm-name-budgets>label{display:block;min-width:0;color:#e6e2dc;font-size:13px;font-weight:400;line-height:1.6}.lm-recognition-settings .lm-input,.lm-recognition-settings .lm-select{color:#ece8e2;background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.16);min-height:40px}.lm-recognition-settings .lm-input:focus,.lm-recognition-settings .lm-select:focus{outline:2px solid #bdb2a2;outline-offset:2px}.lm-recognition-settings .lm-name-credentials{gap:16px;margin:20px 0 12px}.lm-recognition-settings .lm-name-credentials input{margin-top:8px}.lm-recognition-upload-note{margin:10px 0!important}.lm-recognition-limits{margin:14px 0 20px}.lm-recognition-limits [hidden]{display:none!important}.lm-recognition-limit-heading{display:flex;align-items:center;gap:9px}.lm-recognition-limit-toggle{display:inline-flex;align-items:center;gap:8px;padding:5px 0;background:transparent;border:0;color:#d8d3cb;font:inherit;font-size:13px;cursor:pointer}.lm-recognition-limit-toggle:hover{color:#fff}.lm-recognition-limit-toggle:focus-visible{outline:2px solid #bdb2a2;outline-offset:3px;border-radius:4px}.lm-recognition-help{position:relative;display:inline-flex;align-items:center}.lm-recognition-help .lm-song-help{color:#c4bfb6;border-color:rgba(255,255,255,.3);font-size:12px;width:19px;height:19px;min-width:19px;min-height:19px;box-sizing:border-box;line-height:17px;padding:0;border-radius:50%;background:transparent;cursor:help}.lm-recognition-trial-tooltip{visibility:hidden;opacity:0;pointer-events:none;position:fixed;z-index:2147483646;top:calc(100% + 8px);left:-24px;width:300px;max-width:calc(100vw - 88px);box-sizing:border-box;padding:12px 14px;border:1px solid #5b5b60;border-radius:8px;background:#303236;color:#eeeae3;font:12px/1.8 'Microsoft YaHei',sans-serif;box-shadow:0 8px 24px #0007;white-space:normal;overflow-wrap:anywhere}.lm-recognition-trial-tooltip[data-visible=true]{visibility:visible;opacity:1;pointer-events:auto}.lm-recognition-settings>.lm-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}@media(max-width:600px){.lm-recognition-settings .lm-name-credentials{grid-template-columns:1fr;gap:12px}}";
   }
 
   // Icon nodes copied from Lucide 1.8.0 (ISC; Download/X also Feather MIT).
@@ -3779,7 +3783,7 @@
     },
     {
       key: "visionAutoFillEnabled",
-      label: "本地演奏自动整理",
+      label: "本地演奏时段自动识别",
       description: "首次使用默认开启，保留已有关闭选择。前端可用时识别并保存缺项，不覆盖手工设置；关闭不撤销已保存结果。"
     }
   ];
@@ -3845,8 +3849,9 @@
     if (patchSection && patchSection.parentElement === container && nextLocalElement(patchSection) !== section) {
       container.insertBefore(patchSection, localSection);
     }
-    if (nextLocalElement(section) !== localSection) {
-      container.insertBefore(section, localSection);
+    var nameSection=mountSongRecognitionSettings(container,localSection);
+    if (nextLocalElement(section) !== nameSection) {
+      container.insertBefore(section, nameSection);
     }
     bindMusicEnhancementSettings(section);
     updateMusicEnhancementSettings(section);
@@ -5281,12 +5286,12 @@ function syncVisionTasks(signal) {
 }
 function renderVisionTaskPanel(view) {
   var modal = document.getElementById('local-mail-custom-song-modal'); if (!modal || modal.hidden) return;
-  modal.__visionViewMessage=view.message||'';
+  modal.__visionViewMessage=view.message||(visionTaskCoordinator&&visionTaskCoordinator.feedback&&visionTaskCoordinator.feedback())||'';
   var job = view.job, coordinator = visionTaskCoordinator, busy = visionTaskHumanBusy() || view.busy;
   var labels = { queued: '准备中', running: '运行中', paused: '已暂停', 'waiting-environment': '等待可用前端', interrupted: '上次任务中断，请继续', completed: '本次处理完成', stopped: '已停止，保留已保存结果', undone: '撤销处理完成' };
   var counts = job && job.counts;
   var summary = modal.querySelector('[data-vision-batch-status]');
-  summary.textContent = view.message || (!job ? '' :
+  summary.textContent = modal.__visionViewMessage || (!job ? '' :
     (job.mode === 'auto' ? '自动补齐 · ' : '手动任务 · ') + (labels[job.status] || job.status) + '：处理 ' + (counts.totalVideos-counts.pending-counts.claimed) + '/' + counts.totalVideos +
     ' 个视频；新增映射 ' + counts.saved + '，待确认 ' + counts.review + '，缺文件 ' + counts.missing + '，失败/跳过 ' + (counts.failed+counts.skipped) + '，复用缓存 ' + counts.cached + '，已撤销 ' + counts.undone +
     (job.status === 'completed' && counts.review+counts.missing+counts.failed+counts.skipped ? '。仍有未补齐项，可查看曲目后手工修正。' : '。'));
@@ -5645,6 +5650,8 @@ async function openCustomSongManager() {
     modal.querySelector("[data-custom-close]").onclick = function () {
       if (!customSongsState.busy && !customSongDiagnosticsFor(modal).isExporting()) {
         if (modal.__visionDirty && !window.confirm('当前修改尚未保存，放弃修改并关闭？')) return;
+        if(modal.__nameRecognition&&!modal.__nameRecognition.leave())return;
+        if(modal.__nameRecognition)modal.__nameRecognition.close();
         modal.__songDebugPackage.cancel();
         modal.__songHelp.hide();
         modal.__visionDirty=false;if(visionTaskCoordinator)visionTaskCoordinator.closePanel();
@@ -5683,7 +5690,7 @@ async function openCustomSongManager() {
     customSongDiagnosticsFor(modal);
     var tasks=getVisionTaskCoordinator();
     modal.__visionTasks=tasks;
-    modal.querySelector('[data-vision-batch-start]').onclick=function(){void refreshAndOrganizeCustomSongs(modal);};
+    modal.querySelector('[data-vision-batch-start]').onclick=function(){return refreshAndOrganizeCustomSongs(modal);};
     ['pause','resume','stop','undo'].forEach(function(action){modal.querySelector('[data-vision-batch-'+action+']').onclick=function(){
       if(action==='undo'&&!window.confirm('仅撤销仍属于本次任务且未被后来修改的项；已修改项会跳过。继续？'))return;void tasks.control(action);
     };});
@@ -5762,6 +5769,7 @@ async function openCustomSongManager() {
       void saveCustomSongEditor(modal);
     };
     installCustomSongHome(modal);
+    installSongNameRecognition(modal);
   }
   modal.hidden = false;
   setCustomSongView(modal, 'home');
@@ -5785,8 +5793,8 @@ function installCustomSongHome(modal) {
   body.appendChild(manual);
   var home=document.createElement('div');home.className='lm-song-home';home.setAttribute('data-song-home','');
   home.innerHTML='<section class="lm-song-home-section"><h3>歌曲文件夹</h3><div class="lm-song-path-row"><span data-song-effective-path class="lm-song-path" tabindex="0" aria-label="生效的歌曲文件夹"></span><button class="lm-button lm-button-small" data-song-folder-change>更换歌曲文件夹</button></div></section>'+
-    '<section class="lm-song-home-section"><div class="lm-song-auto-row"><div><div class="lm-song-inline"><h3>自动整理</h3><button class="lm-song-help" type="button" aria-label="自动整理说明" data-song-help="整理当前文件夹中的全部歌曲，保留人工或导入设置。画面仅辅助补时段，不凭画面识别曲名；推测可能不准确，可在任务详情撤销。">?</button></div><p class="lm-modal-status">新增歌曲自动识别并保存。</p></div><div class="lm-song-auto-control"><span data-song-auto-state class="lm-modal-status"></span><label class="lm-music-switch"><input type="checkbox" role="switch" data-song-home-auto aria-label="自动整理"></label></div></div>'+
-    '<div class="lm-song-organize-row"><div class="lm-song-run-context"><p class="lm-modal-status" data-song-run-scope>范围：当前文件夹中的全部歌曲</p><div data-song-run-status></div><progress data-song-run-progress aria-label="整理进度" hidden></progress></div><div data-song-run-action></div></div></section>'+
+    '<section class="lm-song-home-section lm-song-recognition-section" data-song-period-home><div class="lm-song-auto-row"><div><div class="lm-song-inline"><h3>时段自动识别</h3><button class="lm-song-help" type="button" aria-label="自动识别说明" data-song-help="识别当前文件夹中的全部歌曲，保留人工或导入设置。画面仅辅助补时段，不凭画面识别曲名；推测可能不准确，可在任务详情撤销。">?</button></div><p class="lm-modal-status">自动识别新增歌曲的视频时段并保存。</p></div><div class="lm-song-auto-control"><span data-song-auto-state class="lm-modal-status"></span><label class="lm-music-switch"><input type="checkbox" role="switch" data-song-home-auto aria-label="时段自动识别"></label></div></div>'+
+    '<div class="lm-song-organize-row"><div class="lm-song-run-context"><p class="lm-modal-status" data-song-run-scope>范围：当前文件夹中的全部歌曲</p><div data-song-run-status></div><progress data-song-run-progress aria-label="识别进度" hidden></progress></div><div data-song-run-action></div></div></section>'+
     '<section class="lm-song-home-section lm-song-mapping-row"><div class="lm-song-inline"><h3>歌曲映射</h3><button class="lm-song-help" type="button" aria-label="歌曲映射说明" data-song-help="映射保存曲名、文件对应关系与时段，不包含演奏视频。可以导出备份，或导入已有映射；覆盖已有内容前会再次确认。">?</button></div><div class="lm-modal-actions" data-song-home-mappings></div></section><p class="lm-modal-status" role="status" data-song-home-notice></p><div data-song-operation-feedback></div><div data-song-home-tasks></div>';
   body.insertBefore(home,manual);
   var list=document.createElement('div');list.setAttribute('data-song-list-pane','');
@@ -5804,13 +5812,13 @@ function installCustomSongHome(modal) {
   back.onclick=function(){leaveCustomSongView(modal);};
   var exportButton=modal.querySelector('[data-custom-diagnostic-export]');footer.insertBefore(exportButton,footer.firstChild);
   var actions=modal.querySelector('[data-custom-save]').parentElement;
-  var manualButton=document.createElement('button');manualButton.className='lm-button';manualButton.setAttribute('data-song-manual','');manualButton.textContent='手动整理';actions.insertBefore(manualButton,actions.firstChild);
+  var manualButton=document.createElement('button');manualButton.className='lm-button';manualButton.setAttribute('data-song-manual','');manualButton.textContent='手动识别';actions.insertBefore(manualButton,actions.firstChild);
   manualButton.onclick=function(){setCustomSongView(modal,'list');};
-  var organize=modal.querySelector('[data-vision-batch-start]');organize.textContent='立即整理';home.querySelector('[data-song-run-action]').appendChild(organize);
+  var organize=modal.querySelector('[data-vision-batch-start]');organize.textContent='立即识别';home.querySelector('[data-song-run-action]').appendChild(organize);
   var detailedStatus=modal.querySelector('[data-vision-batch-status]');
   var taskDetails=modal.querySelector('[data-song-task-details]');taskDetails.appendChild(detailedStatus);
   var compactStatus=document.createElement('p');compactStatus.className='lm-modal-status';compactStatus.setAttribute('role','status');compactStatus.setAttribute('data-song-run-summary','');home.querySelector('[data-song-run-status]').appendChild(compactStatus);
-  var stop=document.createElement('button');stop.className='lm-button lm-button-small';stop.textContent='停止整理';stop.setAttribute('data-song-stop-current','');stop.hidden=true;home.querySelector('[data-song-run-action]').appendChild(stop);
+  var stop=document.createElement('button');stop.className='lm-button lm-button-small';stop.textContent='停止识别';stop.setAttribute('data-song-stop-current','');stop.hidden=true;home.querySelector('[data-song-run-action]').appendChild(stop);
   stop.onclick=function(){void getVisionTaskCoordinator().stopCurrent();};
   modal.querySelector('[data-custom-save]').textContent='保存修改';
   modal.querySelector('[data-custom-close]').classList.toggle('lm-button-primary',true);
@@ -5818,8 +5826,8 @@ function installCustomSongHome(modal) {
   cancel.onclick=function(){leaveCustomSongView(modal);};
   home.querySelector('[data-song-folder-change]').onclick=function(){void changeCustomSongFolder(modal);};
   home.querySelector('[data-song-home-auto]').onchange=async function(){
-    var value=this.checked;try{await setMusicFeature('visionAutoFillEnabled',value);modal.querySelector('[data-custom-status]').textContent=value?'自动整理已开启':'自动整理已关闭，已有结果保留';}
-    catch(error){modal.querySelector('[data-custom-status]').textContent=error.message||'自动整理设置未保存';}finally{renderCustomSongHome(modal);}
+    var value=this.checked;try{await setMusicFeature('visionAutoFillEnabled',value);modal.querySelector('[data-custom-status]').textContent=value?'自动识别已开启':'自动识别已关闭，已有结果保留';}
+    catch(error){modal.querySelector('[data-custom-status]').textContent=error.message||'自动识别设置未保存';}finally{renderCustomSongHome(modal);}
   };
   list.querySelector('[data-song-list-search]').oninput=function(){renderCustomSongList(modal);};
   modal.__managerHomeReady=true;
@@ -5835,14 +5843,16 @@ function setCustomSongView(modal, view) {
   modal.querySelector('[data-song-home]').hidden=view!=='home';
   modal.querySelector('[data-song-list-pane]').hidden=view!=='list';
   modal.querySelector('[data-song-editor-pane]').hidden=view!=='editor';
-  modal.querySelector('[data-song-view-back]').hidden=view!=='list';
+  modal.querySelector('[data-song-view-back]').hidden=view!=='list'&&view!=='names';
   modal.querySelector('#local-custom-song-title').textContent=view==='home'?'本地演奏':view==='list'?'本地歌曲':'修正这首歌';
   modal.querySelector('.lm-song-manager-footer').hidden=view==='list';
   var operationStatus=modal.querySelector('[data-custom-status]');
   (view==='home'?modal.querySelector('[data-song-operation-feedback]'):modal.querySelector('.lm-song-feedback')).appendChild(operationStatus);
-  operationStatus.hidden=false;
+  operationStatus.hidden=view==='names';
   ['[data-custom-diagnostic-export]','[data-song-manual]','[data-vision-batch-start]','[data-custom-close]'].forEach(function(selector){modal.querySelector(selector).hidden=view!=='home';});
   ['[data-custom-save]','[data-song-edit-cancel]'].forEach(function(selector){modal.querySelector(selector).hidden=view!=='editor';});
+  if(modal.__nameRecognition)modal.__nameRecognition.changedView(view);
+  if(view==='names'){modal.querySelector('#local-custom-song-title').textContent='歌曲名称';modal.querySelector('[data-custom-close]').hidden=false;}
   if(view==='list')renderCustomSongList(modal);
   if(view==='home')renderCustomSongHome(modal);
   modal.querySelector('.lm-song-manager-body').scrollTop=0;
@@ -5858,6 +5868,7 @@ function refreshCustomSongDirty(modal) {
 }
 function leaveCustomSongView(modal) {
   if(customSongsState.busy)return;
+  if(modal.__nameRecognition&&!modal.__nameRecognition.leave())return;
   if(modal.__visionDirty&&!window.confirm('这首歌还有未保存的修改，放弃并返回？'))return;
   if(modal.__managerView==='editor'){clearCustomSongVision(modal);renderCustomSongEditor(modal);setCustomSongView(modal,'list');}
   else setCustomSongView(modal,'home');
@@ -5870,7 +5881,7 @@ function renderCustomSongList(modal) {
     var button=document.createElement('button');button.className='lm-button lm-button-small';button.textContent='修正';button.setAttribute('data-song-edit',song.nameKey);
     button.onclick=function(){customSongsState.selected=song.nameKey;modal.querySelector('[data-custom-song]').value=song.nameKey;clearCustomSongVision(modal);renderCustomSongEditor(modal);setCustomSongView(modal,'editor');customSongManagerBusy(modal,false);};row.appendChild(button);rows.appendChild(row);
   });
-  if(!rows.childNodes.length)rows.textContent=query?'本页没有匹配的歌曲':'此文件夹尚无可整理的歌曲';
+  if(!rows.childNodes.length)rows.textContent=query?'本页没有匹配的歌曲':'此文件夹尚无可识别的歌曲';
   modal.querySelector('[data-song-list-count]').textContent=data?'共 '+data.total+' 首':'';
 }
 function renderCustomSongHome(modal) {
@@ -5886,8 +5897,8 @@ function renderCustomSongHome(modal) {
   var activeStates=['queued','running','waiting-environment','paused','interrupted'];
   var active=task&&((task.jobs||[]).find(function(job){return activeStates.indexOf(job.status)>=0;}) || task.job&&activeStates.indexOf(task.job.status)>=0&&task.job);
   var current=active&&task.job&&active.id===task.job.id?task.job:null, counts=current&&current.counts;
-  var labels={queued:'准备整理',running:'正在整理','waiting-environment':'等待前端可用',paused:'已暂停',interrupted:'等待继续'};
-  var compact=modal.__visionViewMessage||(!active?'':(labels[active.status]||'正在整理')+(counts?' '+Math.max(0,counts.totalVideos-counts.pending-counts.claimed)+' / '+counts.totalVideos+' 个视频':''));
+  var labels={queued:'准备识别',running:'正在识别','waiting-environment':'等待前端可用',paused:'已暂停',interrupted:'等待继续'};
+  var compact=modal.__visionViewMessage||(!active?'':(labels[active.status]||'正在识别')+(counts?' '+Math.max(0,counts.totalVideos-counts.pending-counts.claimed)+' / '+counts.totalVideos+' 个视频':''));
   setLocalElementText(modal.querySelector('[data-song-run-summary]'),compact);setLocalElementHidden(modal.querySelector('[data-song-run-summary]'),!compact);
   setLocalElementHidden(modal.querySelector('[data-vision-batch-start]'),Boolean(active));
   setLocalElementHidden(modal.querySelector('[data-song-stop-current]'),!active);
@@ -5913,9 +5924,11 @@ async function changeCustomSongFolder(modal) {
   if(changed){customSongsChanged();await loadCustomSongManager(modal,false);syncVisionTasks('folder-changed');}
 }
 async function refreshAndOrganizeCustomSongs(modal) {
-  if(customSongsState.busy||modal.__visionDirty)return;
+  if(customSongsState.busy||modal.__visionDirty){modal.__visionViewMessage=modal.__visionDirty?'请先保存或取消当前修改，再检查时段。':'正在检查曲库，请稍候。';renderCustomSongHome(modal);return;}
+  getVisionTaskCoordinator().prepareManual();
   await loadCustomSongManager(modal,true);
   if(!customSongsState.error)await getVisionTaskCoordinator().startManual();
+  else getVisionTaskCoordinator().failManual(customSongsState.error);
   renderCustomSongHome(modal);
 }
 
@@ -5980,6 +5993,7 @@ function customSongManagerBusy(modal, busy) {
   customSongDiagnosticsFor(modal).render();
   if (modal.__songDebugPackage) modal.__songDebugPackage.render();
   if(visionTaskCoordinator)renderVisionTaskPanel({data:visionTaskCoordinator.status(),job:visionTaskCoordinator.status()&&visionTaskCoordinator.status().job,busy:false,message:''});
+  if(modal.__nameRecognition)modal.__nameRecognition.setBusy(busy||reviewing||Boolean(customSongDiagnosticsFor(modal).isExporting())||Boolean(modal.__songDebugPackage&&modal.__songDebugPackage.isBusy()));
 }
 
 async function loadCustomSongManager(modal, scan) {
@@ -8301,8 +8315,9 @@ function createVisionTaskController(options) {
   var timer = null, heartbeat = null, running = false, lease = null, aborter = null, epoch = 0, disposed = false;
   var lastSignal = '', environmentHold = false, panelOpen = false, requestBusy = false, message = '', preparedRoot = null, decodeFlight = null, viewSequence = 0, pendingInput = null;
   var now = options.now || Date.now;
+  var manualFeedback = '', manualJobId = null, manualSequence = 0;
   var evidenceStartedAt=now(), errorScope=0, requestSequence=0, latestRequests={}, currentFailures={}, recentFailures=[];
-  function clearScope(){errorScope++;currentFailures={};latestRequests={};message='';}
+  function clearScope(){errorScope++;currentFailures={};latestRequests={};message='';manualFeedback='';manualJobId=null;manualSequence++;}
   function failureEvidence(item){var copy=Object.assign({},item);copy.scope=item.scopeEpoch===errorScope&&item.applicable?'current':'previous';delete copy.scopeEpoch;delete copy.applicable;return copy;}
   function failureText(item){return item.category==='busy'?'曲库或识别任务暂忙，稍后重试。':item.category==='access-denied'?'识别请求未获授权，请重新连接本地服务。':item.category==='invalid-request'?'识别请求未完成，请检查当前任务后重试。':'识别任务暂不可用，请确认本地服务后重试。';}
   async function observed(endpoint,operation,body,run){
@@ -8323,7 +8338,15 @@ function createVisionTaskController(options) {
     }
   }
   function request(action, body, scopeBody) { return observed('vision/'+action,action==='control'?String(body&&body.action||'unknown'):action,scopeBody||body,function(){return options.request('/api/custom-songs/vision/' + action, { method: 'POST', body: body || {} });}); }
-  function render() { var failures=Object.values(currentFailures), failure=failures[failures.length-1];options.render({ data: data, job: data && data.job, message: failure?failureText(failure):message, busy: requestBusy, decoding: running }); }
+  function feedback(){var failures=Object.values(currentFailures),failure=failures[failures.length-1];return failure?failureText(failure):manualFeedback||message;}
+  function completedFeedback(job){
+    var counts=job.counts||{},inventory=job.inventory||{};
+    if(!Number.isFinite(counts.totalVideos))return '时段任务已结束，但结果统计未取得，请查看任务详情。';
+    if(!counts.totalVideos)return inventory.songs?'已检查 '+inventory.songs+' 首歌曲、'+(inventory.protectedVideos||0)+' 个视频：已有时段或手动设置，本次无需处理，未作修改。':'当前文件夹没有可识别的视频，本次未作修改。';
+    var remaining=(counts.review||0)+(counts.missing||0)+(counts.failed||0)+(counts.skipped||0);
+    return '本次处理完成：新增 '+(counts.saved||0)+' 个时段映射'+(remaining?'，仍有 '+remaining+' 个视频需查看任务详情。':'。已有设置保持不变。');
+  }
+  function render() { options.render({ data: data, job: data && data.job, message: feedback(), busy: requestBusy, decoding: running }); }
   function schedule(delay) {
     if (disposed || timer !== null) return;
     timer = options.setTimeout(function () { timer = null; void tick(); }, delay === undefined ? 1500 : delay);
@@ -8338,7 +8361,7 @@ function createVisionTaskController(options) {
     var current=function(){return !disposed&&sequence===viewSequence&&root===requestedRoot&&options.getRoot()===requestedRoot&&selected===requestedJob&&cursor===requestedCursor;};
     try {
       var next=await request('status', { mediaRoot: requestedRoot || undefined, jobId: requestedJob || undefined, cursor: requestedCursor });
-      if(current()){data=next;if(!next.job||['completed','stopped','undone'].indexOf(next.job.status)>=0){message='';environmentHold=false;}render();}return data;
+      if(current()){data=next;if(next.job&&next.job.id===manualJobId&&next.job.status==='completed')manualFeedback=completedFeedback(next.job);if(!next.job||['completed','stopped','undone'].indexOf(next.job.status)>=0){message='';environmentHold=false;}render();}return data;
     } catch(error){if(current())throw error;return data;}
   }
   async function handleEnvironment() {
@@ -8367,7 +8390,7 @@ function createVisionTaskController(options) {
           var inputRoot=pendingInput.mediaRoot||root;pendingInput=await observed('catalog/status','refresh',null,function(){return options.inputStatus(inputRoot);});
           if(!autoEnabled)return;
           if(pendingInput.refreshing){pendingAuto=true;message='等待曲库检查完成后处理新索引。';schedule(1000);return;}
-          if(pendingInput.error){message='曲库检查未完成，请重新扫描后再试。';pendingAuto=true;return;}
+          if(pendingInput.error){message='曲库检查暂未完成，稍后自动重试；已有曲目可继续使用。';pendingAuto=true;preparedRoot=null;schedule(5000);return;}
           pendingInput=null;message='';
         }
         await request('start', { mediaRoot: root || undefined, mode: 'auto', retryUnknown: false });
@@ -8436,18 +8459,23 @@ function createVisionTaskController(options) {
     }
   }
   async function startManual() {
-    if (requestBusy || options.isHumanBusy()) return;
+    if (requestBusy || options.isHumanBusy()) { manualFeedback='曲库或识别任务正在处理，请稍后再试。';render();return; }
     clearScope();
-    requestBusy = true; environmentHold = false; stopDecode(); render();
+    var sequence=manualSequence,requestedRoot=root;
+    requestBusy = true; environmentHold = false;manualFeedback='正在检查需要补齐时段的视频…';stopDecode(); render();
     try {
       var result = await request('start', { mediaRoot: root || undefined, mode: 'manual', retryUnknown: true });
+      if(sequence!==manualSequence||root!==requestedRoot||options.getRoot()!==requestedRoot||disposed)return;
+      if(!result||!result.job)throw new Error('识别任务未返回，请稍后重试');
       selected = result.job && result.job.id; cursor = 0; message = '';
+      manualJobId=result.job.id;manualFeedback=result.job.status==='completed'?completedFeedback(result.job):'';
       await refresh(); schedule(0);
-    } catch (error) { message = ''; }
+    } catch (error) { if(sequence===manualSequence&&root===requestedRoot){message='';manualFeedback='时段识别未能开始，请检查服务或稍后重试。';} }
     finally { requestBusy = false; render(); }
   }
   async function control(action) {
     var job = data && data.job; if (!job) return;
+    manualFeedback='';
     stopDecode(); environmentHold = false;
     try { await request(action === 'undo' ? 'undo' : 'control', { mediaRoot: job.mediaRoot, jobId: job.id, action: action, clientId: clientId }); message='';await refresh(); }
     catch (error) { message = '';render(); }
@@ -8490,10 +8518,12 @@ function createVisionTaskController(options) {
     schedule(0);
   }
   return { startManual: startManual, control: control, stopCurrent: stopCurrent, sync: sync, environmentChanged: environmentChanged,
+    prepareManual:function(){clearScope();manualFeedback='正在检查曲库和已有时段…';render();},
+    failManual:function(text){manualFeedback='时段检查未完成：'+text;render();},
     open: function () { panelOpen = true; schedule(0); }, closePanel: function () { panelOpen = false; },
     select: function (id) { clearScope();selected = id; cursor = 0; void refresh().catch(function(){render();}); }, next: function () { cursor = data && data.job && data.job.nextCursor || 0; void refresh().catch(function(){render();}); },
     diagnostic: function(){return {startedAt:evidenceStartedAt,historyScope:'current-renderer-memory-only',currentFailures:Object.values(currentFailures).map(failureEvidence),recentFailures:recentFailures.map(failureEvidence),capabilities:evidenceEnvironment(),autoEnabled:autoEnabled,environmentHold:environmentHold,decoding:running};},
-    status: function () { return data; }, isDecoding: function () { return running; },
+    status: function () { return data; }, feedback:feedback, isDecoding: function () { return running; },
     humanActivity: function () { stopDecode(); return decodeFlight || Promise.resolve(); },
     clientId: clientId,
     dispose: function () {
@@ -8504,6 +8534,295 @@ function createVisionTaskController(options) {
       stopDecode(); if (timer !== null) options.clearTimeout(timer);
     },
     refresh: refresh, tick: tick
+  };
+}
+// Names are persisted separately from video-period mappings.
+
+// Shared folded limits in both configuration entry points. No rerender on toggle.
+function songRecognitionLimitHtml(prefix,includeSamples) {
+  var help='注册后有14天免费试用，不是永久免费。2026-09-13核对的中国站试用限制：每天5000次识别请求、QPS 2、最多1个AVR项目；以个人控制台为准。每个片段算一次请求，每首最多5段。本地上限不是服务商剩余额度，修改它不能增加服务商配额。';
+  return '<div class="lm-recognition-limits"><div class="lm-recognition-limit-heading">'+
+    '<button class="lm-recognition-limit-toggle" type="button" data-'+prefix+'-limits-toggle aria-expanded="false" aria-controls="lm-'+prefix+'-limits-body"><span data-limit-arrow>▸</span> 请求额度</button>'+
+    '<span class="lm-recognition-help"><button type="button" class="lm-song-help" data-trial-help aria-label="免费试用说明" aria-describedby="lm-'+prefix+'-trial-help">?</button>'+
+    '<span id="lm-'+prefix+'-trial-help" class="lm-recognition-trial-tooltip" role="tooltip">'+help+'</span></span></div>'+
+    '<div id="lm-'+prefix+'-limits-body" data-'+prefix+'-limits-body hidden><div class="lm-name-budgets">'+
+    '<label>单次请求上限<input type="number" class="lm-input" min="1" max="5000" value="5000" data-'+prefix+'-budget aria-label="单次请求上限"></label>'+
+    '<label>每日请求上限<input type="number" class="lm-input" min="1" max="5000" value="5000" data-'+prefix+'-daily aria-label="每日请求上限"></label>'+
+    (includeSamples?'<label>每首最多片段<select class="lm-select" data-name-max aria-label="每首最多片段"><option>3</option><option>4</option><option selected>5</option></select></label>':'')+
+    '</div><p class="lm-modal-status">达到上限后暂停，保留已识别结果；继续前可调整额度。</p></div></div>';
+}
+var songRecognitionHelpBindings = {};
+function bindSongRecognitionLimits(scope,prefix) {
+  var toggle=scope.querySelector('[data-'+prefix+'-limits-toggle]'),panel=scope.querySelector('[data-'+prefix+'-limits-body]');
+  toggle.onclick=function(){panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));toggle.querySelector('[data-limit-arrow]').textContent=panel.hidden?'▸':'▾';};
+  if(songRecognitionHelpBindings[prefix])songRecognitionHelpBindings[prefix].dispose();
+  var button=scope.querySelector('[data-trial-help]'),tip=scope.querySelector('[role="tooltip"]'),pinned=false;
+  document.body.appendChild(tip);tip.style.position='fixed';
+  function hide(){pinned=false;tip.setAttribute('data-visible','false');button.setAttribute('aria-expanded','false');}
+  function show(){
+    tip.setAttribute('data-visible','true');button.setAttribute('aria-expanded','true');
+    var anchor=button.getBoundingClientRect(),box=tip.getBoundingClientRect(),width=window.innerWidth||800,height=window.innerHeight||600;
+    tip.style.left=Math.max(8,Math.min(anchor.left,width-box.width-8))+'px';
+    var below=anchor.bottom+8;
+    tip.style.top=Math.max(8,Math.min(below+box.height<=height-8?below:anchor.top-box.height-8,height-box.height-8))+'px';
+  }
+  button.onmouseenter=show;button.onfocus=show;button.onblur=hide;
+  button.onmouseleave=function(){if(!pinned&&document.activeElement!==button)hide();};
+  button.onclick=function(event){if(event&&event.stopPropagation)event.stopPropagation();if(pinned)hide();else{show();pinned=true;}};
+  button.onkeydown=function(event){if(event.key==='Escape'){event.preventDefault();hide();}};
+  function outside(event){if(event.target!==button&&!tip.contains(event.target))hide();}
+  document.addEventListener('click',outside);document.addEventListener('scroll',hide,true);
+  window.addEventListener('resize',hide);window.addEventListener('hashchange',hide);window.addEventListener('popstate',hide);
+  hide();
+  var binding={hide:hide,dispose:function(){hide();tip.remove();document.removeEventListener('click',outside);document.removeEventListener('scroll',hide,true);window.removeEventListener('resize',hide);window.removeEventListener('hashchange',hide);window.removeEventListener('popstate',hide);}};
+  songRecognitionHelpBindings[prefix]=binding;return binding;
+}
+
+
+function mountSongRecognitionSettings(container,localSection) {
+  var id='local-mail-song-recognition-settings',section=document.getElementById(id);
+  if(!section){
+    section=document.createElement('section');section.id=id;section.className='tp-settings-item lm-recognition-settings';
+    section.innerHTML='<div class="lm-title-row"><div class="lm-title">听音识曲</div><button class="lm-button lm-button-small" data-recognition-guide>注册与配置教程</button></div>'+
+      '<p class="lm-modal-status">使用自己的 ACRCloud 中国大陆翻奏识别项目。密钥加密保存在此电脑，不会回显。</p>'+
+      '<div class="lm-name-credentials"><label>Access Key<input class="lm-input" type="password" autocomplete="off" data-recognition-key aria-label="识曲 Access Key"></label><label>Secret Key<input class="lm-input" type="password" autocomplete="off" data-recognition-secret aria-label="识曲 Secret Key"></label></div>'+
+      '<p class="lm-modal-status lm-recognition-upload-note">开始识别时发送匿名音频片段至 ACRCloud，可能消耗额度或产生费用。</p>'+
+      songRecognitionLimitHtml('recognition',false)+
+      '<div class="lm-actions"><button class="lm-button lm-button-primary" data-recognition-save>保存识曲设置</button><button class="lm-button" data-recognition-clear>清除识曲密钥</button></div><p class="lm-modal-status" role="status" data-recognition-status>读取中</p>';
+    bindSongRecognitionLimits(section,'recognition');
+    var q=function(s){return section.querySelector(s);};
+    var request=function(action,body){return callApi('/api/custom-songs/names/'+action,{method:'POST',body:body||{}});};
+    var render=function(c){q('[data-recognition-budget]').value=c.requestBudget;q('[data-recognition-daily]').value=c.dailyBudget;q('[data-recognition-status]').textContent=c.configured?'已配置识曲服务':'尚未配置识曲服务';};
+    var busy=false;
+    async function saveSettings(clear){
+      if(busy)return;if(clear&&!window.confirm('清除识曲密钥并停止自动识别？已有歌名和候选保留。'))return;
+      busy=true;section.querySelectorAll('button').forEach(function(b){b.disabled=true;});
+      try{
+        var input=clear?{clearCredentials:true}:{requestBudget:Number(q('[data-recognition-budget]').value),dailyBudget:Number(q('[data-recognition-daily]').value)};
+        if(!clear&&(q('[data-recognition-key]').value||q('[data-recognition-secret]').value)){input.accessKey=q('[data-recognition-key]').value;input.accessSecret=q('[data-recognition-secret]').value;}
+        var result=await request('config',input);q('[data-recognition-key]').value='';q('[data-recognition-secret]').value='';render(result);musicNotice(clear?'识曲密钥已清除':'识曲设置已保存','success');
+      }catch(e){q('[data-recognition-status]').textContent=e.message||'识曲设置保存失败';}
+      finally{busy=false;section.querySelectorAll('button').forEach(function(b){b.disabled=false;});}
+    }
+    q('[data-recognition-save]').onclick=function(){return saveSettings(false);};
+    q('[data-recognition-clear]').onclick=function(){return saveSettings(true);};
+    q('[data-recognition-guide]').onclick=function(){window.open(API_BASE+'/song-recognition-guide','_blank','noopener,noreferrer');};
+    request('status').then(function(data){render(data.config);}).catch(function(e){q('[data-recognition-status]').textContent='无法读取识曲设置：'+e.message;});
+  }
+  if(section.parentElement!==container||nextLocalElement(section)!==localSection)container.insertBefore(section,localSection);
+  return section;
+}
+
+function installSongNameRecognition(modal) {
+  var home=modal.querySelector('[data-song-home]'),body=modal.querySelector('.lm-song-manager-body');
+  var entry=document.createElement('section');entry.className='lm-song-home-section lm-song-recognition-section';entry.setAttribute('data-name-home','');
+  entry.innerHTML='<div class="lm-song-auto-row"><div><div class="lm-song-inline"><h3>曲名自动识别</h3></div><p class="lm-modal-status">自动识别新增歌曲的曲名。</p></div><div class="lm-song-auto-control"><span class="lm-modal-status" data-name-auto-state>读取中</span><label class="lm-music-switch"><input type="checkbox" role="switch" data-name-auto aria-label="曲名自动识别" disabled></label></div></div>'+
+    '<div class="lm-song-organize-row"><div class="lm-song-run-context"><p class="lm-modal-status" data-name-home-status role="status"></p></div><div><button class="lm-button" data-name-home-start disabled>立即识别</button></div></div><div class="lm-name-job" data-name-home-job role="status"></div>'+
+    '<p class="lm-modal-status" data-name-action-feedback role="status" hidden></p><details class="lm-name-settings-fold" data-name-settings-fold><summary>识别设置</summary></details>';
+  home.insertBefore(entry,home.querySelector('[data-song-home-auto]').closest('section'));
+  var management=document.createElement('section');management.className='lm-song-home-section lm-song-management-row';management.setAttribute('data-name-management','');
+  management.innerHTML='<div class="lm-song-auto-row"><div><h3>歌曲管理</h3><p class="lm-modal-status" data-name-review-summary>查看歌曲、候选与已确认名称</p></div><button class="lm-button" data-name-open>管理歌曲</button></div><div class="lm-name-review-shortcuts" aria-label="快速查看识别结果">'+
+    '<button type="button" data-name-review-shortcut="suggestions">待确认建议</button><button type="button" data-name-review-shortcut="low">低可信建议</button><button type="button" data-name-review-shortcut="unresolved">未识别 / 无结果</button><button type="button" data-name-review-shortcut="failed">识别失败</button></div>';
+  home.insertBefore(management,home.querySelector('.lm-song-mapping-row'));
+  var pane=document.createElement('div');pane.className='lm-name-pane lm-recognition-settings';pane.hidden=true;body.appendChild(pane);
+  pane.innerHTML='<p class="lm-modal-status" data-name-pane-feedback role="status" hidden></p><div class="lm-name-job" data-name-job role="status"></div><div data-name-songs><div class="lm-name-review-filter"><label>查看结果 <select class="lm-select" data-name-review aria-label="识别结果筛选"><option value="all">全部结果</option><option value="suggestions">待确认建议</option><option value="low">低可信建议</option><option value="unresolved">未识别 / 无结果</option><option value="failed">识别失败</option></select></label><span class="lm-modal-status">暂用不等于确认；批量操作仅影响所选歌曲。</span></div><div class="lm-name-filters">'+
+    '<input class="lm-input" data-name-search aria-label="搜索歌曲名称" placeholder="搜索歌名或候选名称">'+
+    '<select class="lm-select" data-name-source aria-label="名称状态筛选"><option value="all">全部状态</option><option value="manual">已手动确认</option><option value="native">原生恢复</option><option value="legacy">已有名称</option><option value="auto">未确认建议</option><option value="none">未识别</option></select>'+
+    '<select class="lm-select" data-name-level aria-label="可信度筛选"><option value="all">全部可信度</option><option value="high">高可信度</option><option value="medium">中可信度</option><option value="low">低可信度</option></select><button class="lm-button" data-name-start>立即识别</button></div>'+
+    '<div class="lm-name-batch"><label><input type="checkbox" data-name-all aria-label="全选本页"> 全选本页</label><span data-name-count></span><button class="lm-button lm-button-small" data-name-confirm>确认当前名</button><button class="lm-button lm-button-small" data-name-provisional>暂用最强建议</button><button class="lm-button lm-button-small" data-name-retry>重新识别</button></div>'+
+    '<div class="lm-name-columns"><span>歌曲名称</span><span>名称状态</span><span>可信度 <button class="lm-song-help" aria-label="可信度说明" data-song-help="可信度取决于服务商曲库和识别服务，实际准确度还受定制歌曲对原曲的还原程度影响。">?</button></span></div>'+
+    '<div data-name-rows></div><div class="lm-name-pager"><button class="lm-button" data-name-prev>上一页</button><button class="lm-button" data-name-next>下一页</button></div></div>'+
+    '<div class="lm-recognition-settings" data-name-settings hidden><p class="lm-modal-status">自动模式仅处理没有识别记录的新歌曲；失败记录不会自动重跑。</p>'+
+    '<section class="lm-song-home-section"><h4>自动暂用建议</h4><p class="lm-modal-status">仅影响后续结果，不更改已保存歌名，也不重新识别。</p><div data-name-levels></div></section>'+
+    '<section class="lm-song-home-section"><h4>识曲服务 · ACRCloud 中国大陆</h4><p class="lm-modal-status" data-name-key-state></p><p class="lm-modal-status">使用自己的翻奏识别项目。服务商可能计费；仅发送匿名短音频，不发送歌名、路径或完整视频。</p>'+
+    '<div class="lm-name-credentials"><label>Access Key<input class="lm-input" type="password" autocomplete="off" data-name-key aria-label="Access Key"></label><label>Secret Key<input class="lm-input" type="password" autocomplete="off" data-name-secret aria-label="Secret Key"></label></div>'+
+    songRecognitionLimitHtml('name',true)+
+    '<button class="lm-button" data-name-config-save>保存服务设置</button> <button class="lm-button" data-name-config-clear>清除密钥</button><p class="lm-modal-status">按需增加片段，最多5段。本地请求计数不代表服务商账单。</p></section></div><div data-name-detail hidden></div>';
+  var settings=pane.querySelector('[data-name-settings]'),fold=entry.querySelector('[data-name-settings-fold]');
+  fold.open=false;settings.hidden=false;fold.appendChild(settings);
+  var limitHelp=bindSongRecognitionLimits(settings,'name');
+  fold.ontoggle=function(){if(!fold.open)limitHelp.hide();};
+  var state={data:null,page:0,selected:new Set(),detail:null,tab:'songs',busy:false,externalBusy:false,epoch:0,timer:null,searchTimer:null,undoId:null,dirty:false};
+  var startSequence=0,actionRoot=null;
+  var footer=modal.querySelector('.lm-song-manager-footer');
+  var save=document.createElement('button');save.className='lm-button lm-button-primary';save.textContent='保存名称';save.hidden=true;save.setAttribute('data-name-save','');footer.querySelector('.lm-modal-actions').appendChild(save);
+  var undo=document.createElement('button');undo.className='lm-button';undo.textContent='撤销名称修改';undo.hidden=true;undo.setAttribute('data-name-undo','');footer.insertBefore(undo,footer.firstChild);
+  var q=function(s){return pane.querySelector(s)||entry.querySelector(s)||management.querySelector(s);},root=function(){return visionTaskRoot();};
+  var api=function(action,input){return callApi('/api/custom-songs/names/'+action,{method:'POST',body:action==='config'?(input||{}):Object.assign({mediaRoot:root()},input||{})});};
+  var labels={manual:'已手动确认',native:'原生恢复',legacy:'已有名称',auto:'未确认建议',none:'未识别'},levels={high:'高',medium:'中',low:'低'};
+  function message(text,error){musicNotice(text,error?'error':'success');}
+  function actionFeedback(text,kind){actionRoot=root();['[data-name-action-feedback]','[data-name-pane-feedback]'].forEach(function(selector){var node=q(selector);node.textContent=text;node.hidden=!text;node.setAttribute('data-kind',kind||'info');});}
+  function dirtyLeave(){return!state.dirty||window.confirm('放弃尚未保存的修改？已保存名称和候选不会改变。');}
+  function active(){return!modal.hidden&&['names','home'].indexOf(modal.__managerView)>=0;}
+  function later(){clearTimeout(state.timer);if(active()&&state.data&&state.data.job&&['queued','running'].indexOf(state.data.job.status)>=0)state.timer=setTimeout(function(){void load(false);},1200);}
+  async function load(reset){
+    if(reset){state.page=0;state.selected.clear();}
+    var epoch=++state.epoch,currentRoot=root();
+    try{
+      var data=await api('list',{cursor:state.page*50,pageSize:50,search:q('[data-name-search]').value,status:q('[data-name-source]').value,confidence:q('[data-name-level]').value,review:q('[data-name-review]').value||'all'});
+      if(epoch!==state.epoch||root()!==currentRoot)return;
+      if(!data||!Array.isArray(data.list)||!data.config)throw new Error('识曲列表响应不完整，请检查本地服务版本');
+      state.data=data;var visible=new Set(data.list.map(function(s){return s.nameKey;}));
+      state.selected.forEach(function(key){if(!visible.has(key))state.selected.delete(key);});
+      if(state.page&&data.total<=state.page*50){state.page=0;return load(false);}
+      render();later();
+    }catch(error){if(epoch===state.epoch){q('[data-name-home-status]').textContent='曲名识别状态读取失败，请重新打开后重试。';message(error.message||'读取歌曲名失败',true);}}
+  }
+  function renderJob(){
+    var boxes=[q('[data-name-job]'),q('[data-name-home-job]')];boxes.forEach(function(box){box.textContent='';});var job=state.data&&state.data.job;if(!job)return;
+    var human={queued:'准备中',running:'正在识别',paused:'已暂停',interrupted:'上次识别中断',complete:'本次处理完成',stopped:'已停止'};
+    var reasons={budget:'达到本次请求上限','daily-budget':'达到每日请求上限',credentials:'请检查密钥',quota:'额度不足（3003）：请检查试用期限或套餐后手动继续','rate-limit':'服务商限流',service:'服务暂不可用，请检查控制台后重试','wrong-engine':'请把项目引擎设为翻奏识别',diagnostic:'请先完成或取消诊断','root-changed':'歌曲文件夹已变化','settings-changed':'识别设置已变化','internal-error':'任务异常，可继续或停止'};
+    boxes.forEach(function(box){
+    var counts=job.counts||{},text=document.createElement('span');text.textContent=(human[job.status]||job.status)+' · 已处理 '+((counts.done||0)+(counts.failed||0))+'/'+job.total+' 首'+(counts.failed?' · 失败 '+counts.failed+' 首':'')+' · 请求 '+job.requests+'/'+job.budget+(reasons[job.reason]?' · '+reasons[job.reason]:'')+(job.status==='complete'?'；有无匹配结果请在歌曲管理中查看。':'');box.appendChild(text);
+    ['pause','resume','stop'].forEach(function(action){
+      if(action==='pause'&&['running','queued'].indexOf(job.status)<0||action==='resume'&&['paused','interrupted'].indexOf(job.status)<0||action==='stop'&&['complete','stopped'].indexOf(job.status)>=0)return;
+      var button=document.createElement('button');button.className='lm-button lm-button-small';button.textContent={pause:'暂停',resume:'继续',stop:'停止'}[action];button.disabled=state.busy;
+      button.onclick=function(){var input={jobId:job.id,action:action};if(action==='resume'&&job.reason==='budget'){var budget=state.data.config.requestBudget;if(!window.confirm('继续识别并追加最多'+budget+'次请求？服务商可能计费。'))return;input.additionalBudget=budget;}return perform(function(){return api('control',input);},'任务状态已更新');};box.appendChild(button);
+    });
+    });
+  }
+  function resultLabel(song){
+    if(song.source!=='auto')return labels[song.source];
+    if(song.history&&song.history.status==='failed')return '识别失败'+(song.candidates.length?'（已有建议保留）':'');
+    if(song.history&&['queued','running'].indexOf(song.history.status)>=0)return '本次尚未完成';
+    if(!song.candidates.length)return '无匹配结果';
+    return song.applied?'已暂用 · 未确认':'有建议 · 未应用';
+  }
+  function render(){
+    if(actionRoot!==null&&actionRoot!==root())actionFeedback('');
+    if(!state.data)return;renderJob();var rows=q('[data-name-rows]');rows.textContent='';
+    state.data.list.forEach(function(song){
+      var row=document.createElement('div');row.className='lm-name-row';row.setAttribute('data-name-row',song.nameKey);
+      var first=document.createElement('div');first.className='lm-name-title';
+      var check=document.createElement('input');check.type='checkbox';check.checked=state.selected.has(song.nameKey);check.disabled=state.busy;check.setAttribute('aria-label','选择 '+song.name);
+      check.onchange=function(){if(this.checked)state.selected.add(song.nameKey);else state.selected.delete(song.nameKey);renderSelection();};first.appendChild(check);
+      var name=document.createElement('button');name.className='lm-name-link';name.textContent=song.name;name.onclick=function(){openDetail(song);};first.appendChild(name);row.appendChild(first);
+      var status=document.createElement('span');status.textContent=resultLabel(song);row.appendChild(status);
+      var level=document.createElement('span');level.textContent=levels[song.confidence]||'—';row.appendChild(level);rows.appendChild(row);
+    });
+    if(!state.data.list.length)rows.textContent='没有符合条件的歌曲';
+    q('[data-name-count]').textContent=state.data.total+' 首';q('[data-name-prev]').disabled=state.page===0||state.busy;q('[data-name-next]').disabled=!state.data.hasMore||state.busy;
+    var hasJob=Boolean(state.data.job&&['queued','running','paused','interrupted'].indexOf(state.data.job.status)>=0);
+    q('[data-name-start]').disabled=state.busy||hasJob;q('[data-name-home-start]').disabled=state.busy||hasJob;
+    q('[data-name-auto]').checked=state.data.config.autoEnabled;q('[data-name-auto]').disabled=state.busy;
+    q('[data-name-auto-state]').textContent=state.data.config.autoEnabled?'已开启':'已关闭';
+    q('[data-name-home-status]').textContent=hasJob?'已有识别任务，请在歌曲管理中查看。':state.data.eligible===0?'当前没有待识别的新歌曲；已有名称或识别记录保持不变。':state.data.config.configured?'范围：当前文件夹中尚未识别的歌曲':'请先展开识别设置，配置识曲服务。';
+    var summary=state.data.summary;
+    q('[data-name-review-summary]').textContent=summary?'待确认 '+summary.suggestions+' 首 · 未识别或无结果 '+summary.unresolved+' 首'+(summary.failed?' · 失败 '+summary.failed+' 首':''):'查看歌曲、候选与已确认名称';
+    management.querySelectorAll('[data-name-review-shortcut]').forEach(function(button){var key=button.getAttribute('data-name-review-shortcut'),label={suggestions:'待确认建议',low:'低可信建议',unresolved:'未识别 / 无结果',failed:'识别失败'}[key];button.textContent=label+(summary?' '+summary[key]:'');button.hidden=Boolean(summary&&summary[key]===0);button.disabled=state.busy;});
+    renderSelection();
+    if(!state.dirty)renderSettings();
+    refreshDisabled();
+  }
+  function refreshDisabled(){
+    var busy=state.busy||state.externalBusy;
+    [entry,pane,management].forEach(function(scope){scope.querySelectorAll('button,input,select').forEach(function(node){node.disabled=busy;});});
+    if(busy)return;
+    var data=state.data,hasJob=Boolean(data&&data.job&&['queued','running','paused','interrupted'].indexOf(data.job.status)>=0);
+    q('[data-name-home-start]').disabled=!data||hasJob;q('[data-name-start]').disabled=!data||hasJob;q('[data-name-auto]').disabled=!data;
+    q('[data-name-prev]').disabled=!data||state.page===0;q('[data-name-next]').disabled=!data||!data.hasMore;
+    q('[data-name-level]').disabled=['manual','native','legacy','none'].indexOf(q('[data-name-source]').value)>=0;
+    renderSelection();
+  }
+  function renderSelection(){
+    var songs=state.data?state.data.list:[],selected=songs.filter(function(s){return state.selected.has(s.nameKey);});
+    var busy=state.busy||state.externalBusy;
+    q('[data-name-all]').checked=!!songs.length&&selected.length===songs.length;q('[data-name-all]').indeterminate=selected.length>0&&selected.length<songs.length;q('[data-name-all]').disabled=!songs.length||busy;
+    q('[data-name-confirm]').disabled=busy||!selected.some(function(s){return s.applied&&s.source!=='manual';});
+    q('[data-name-provisional]').disabled=busy||!selected.some(function(s){return s.source==='auto'&&s.confidence==='low'&&s.candidates.length;});
+    q('[data-name-retry]').disabled=busy||!selected.length;
+  }
+  async function perform(action,notice){
+    if(state.busy||state.externalBusy)return;state.busy=true;render();save.disabled=true;
+    try{var result=await action();if(result.undoId){state.undoId=result.undoId;undo.hidden=false;}customSongsChanged();if(notice)message(typeof notice==='function'?notice(result):notice);await load(false);return result;}
+    catch(error){message(error.message||'操作未完成',true);}
+    finally{state.busy=false;save.disabled=false;render();}
+  }
+  function selectTab(tab){
+    if(!dirtyLeave())return;limitHelp.hide();state.dirty=false;state.tab=tab;state.detail=null;
+    q('[data-name-songs]').hidden=tab!=='songs';q('[data-name-detail]').hidden=true;save.hidden=true;
+    if(tab==='settings'){setCustomSongView(modal,'home');fold.open=true;renderSettings();}
+    else if(modal.__managerView!=='names')setCustomSongView(modal,'names');modal.__songHelp.refresh();
+  }
+  function renderSettings(){
+    if(!state.data)return;var c=state.data.config;q('[data-name-auto]').checked=c.autoEnabled;
+    ['high','medium','low'].forEach(function(level){q('[data-name-apply="'+level+'"]').checked=c.autoApply[level];});
+    q('[data-name-key-state]').textContent=c.configured?'已保存密钥（不会回显）':'尚未配置密钥';
+    q('[data-name-max]').value=String(c.maxSamples);q('[data-name-budget]').value=c.requestBudget;q('[data-name-daily]').value=c.dailyBudget;
+  }
+  function openDetail(song){
+    if(!dirtyLeave())return;state.detail=song;state.dirty=false;q('[data-name-songs]').hidden=true;
+    var detail=q('[data-name-detail]');detail.hidden=false;detail.textContent='';
+    function button(text,action){var b=document.createElement('button');b.className='lm-button';b.textContent=text;b.onclick=action;detail.appendChild(b);return b;}
+    button('返回歌曲列表',function(){selectTab('songs');});
+    var heading=document.createElement('h3');heading.textContent=song.name;detail.appendChild(heading);
+    var status=document.createElement('p');status.className='lm-modal-status';status.textContent=resultLabel(song)+(levels[song.confidence]?' · '+levels[song.confidence]+'可信度':'');detail.appendChild(status);
+    var intro=document.createElement('p');intro.textContent='点选候选即手动确认，后台不会覆盖。';detail.appendChild(intro);
+    song.candidates.forEach(function(c){var b=button(c.name,function(){return confirm(song,c.name);});b.className+=' lm-name-candidate';});
+    if(!song.candidates.length){var empty=document.createElement('p');empty.className='lm-modal-status';empty.textContent='暂无可用候选，可以手动重新识别或输入歌名。';detail.appendChild(empty);}
+    if(song.source==='auto'&&song.confidence==='low'&&song.candidates.length)button('暂用最强建议（不确认）',async function(){if(!window.confirm('暂用这个低可信建议？它仍是未确认名称，可以稍后修改。'))return;var result=await perform(function(){return api('update',{nameKey:song.nameKey,action:'provisional',confirmProvisional:true,expectedRevision:song.revision});},'已暂用建议，仍未确认');if(result&&result.items&&result.items[0]){state.dirty=false;openDetail(result.items[0]);}});
+    var input=document.createElement('input');input.className='lm-input';input.maxLength=240;input.value=song.name;input.setAttribute('data-name-editor','');input.setAttribute('aria-label','自定义歌曲名称');input.oninput=function(){state.dirty=this.value!==song.name;};detail.appendChild(input);
+    var evidence=document.createElement('details'),summary=document.createElement('summary');summary.textContent='查看识别依据';evidence.appendChild(summary);
+    var note=document.createElement('p');note.className='lm-modal-status';note.textContent='评分来自服务商，不是准确率。'+(song.history?'已采样 '+song.history.samples+' 段。':'尚无识别记录。');evidence.appendChild(note);
+    song.candidates.forEach(function(c){var line=document.createElement('p');line.className='lm-modal-status';line.textContent=c.name+'：'+c.support+'段支持，最高评分 '+Number(c.topSupport||0).toFixed(2);evidence.appendChild(line);});detail.appendChild(evidence);
+    button('手动重新识别',function(){return start([song.nameKey],true);});button('恢复原名',function(){return confirm(song,song.originalName);});button('就用当前名称',function(){return confirm(song,song.name);});
+    save.hidden=false;save.onclick=function(){return confirm(song,input.value);};
+  }
+  async function confirm(song,name){var result=await perform(function(){return api('update',{nameKey:song.nameKey,name:name,expectedRevision:song.revision});},'歌名已手动确认');if(result&&result.items[0]){state.dirty=false;openDetail(result.items[0]);}}
+  async function start(keys,manual){
+    if(state.busy||state.externalBusy){actionFeedback('正在处理当前操作，请稍后再试。');return;}
+    var sequence=++startSequence,currentRoot=root(),valid=function(){return sequence===startSequence&&root()===currentRoot&&!modal.hidden;};
+    state.busy=true;actionFeedback('正在检查需要识别曲名的歌曲…');render();
+    try{
+      var inspection=await api('list',{cursor:0,pageSize:1,status:'all',confidence:'all',review:'all'});
+      if(!valid())return;
+      if(!inspection||!Array.isArray(inspection.list)||!inspection.config)throw new Error('识曲检查结果不完整，请检查本地服务版本');
+      if(inspection.job&&['queued','running','paused','interrupted'].indexOf(inspection.job.status)>=0){actionFeedback('已有识别任务，请查看进度或选择继续、停止；本次未创建新任务。');await load(false);return;}
+      if(!manual&&inspection.eligible===0){actionFeedback(inspection.total===0?'当前文件夹没有可识别的歌曲，本次未发送音频或消耗请求额度。':'已检查 '+inspection.total+' 首歌曲，本次无需识别：已有名称或识别记录的歌曲保持不变；未发送音频或消耗请求额度。','success');return;}
+      var c=inspection.config;
+      if(!c.configured){selectTab('settings');actionFeedback('请先配置识曲服务密钥，本次未开始识别。');return;}
+      if(!window.confirm('识别会发送匿名音频片段，最多使用'+c.requestBudget+'次请求，服务商可能计费。继续？')){actionFeedback('已取消本次识别，未提交新任务。');return;}
+      if(!valid())return;
+      actionFeedback('正在提交识曲任务…');
+      var result=await api('start',{mode:manual?'manual':'missing',nameKeys:keys,requestBudget:c.requestBudget});
+      if(!valid())return;
+      if(!result||typeof result.started!=='boolean')throw new Error('未取得明确的任务提交结果，请检查任务状态');
+      if(!result.started){actionFeedback(result.reason==='already-recognized'?'本次无需识别：没有符合条件的待处理歌曲，未提交新任务或消耗请求额度。':'本次未开始识别，请检查自动开关或任务状态。');return;}
+      actionFeedback('已提交识别任务'+(Number.isInteger(result.eligibleSongs)?'：'+result.eligibleSongs+' 首歌曲':'')+'，处理进度显示在识别区域。','success');
+      customSongsChanged();await load(false);return result;
+    }catch(error){if(valid())actionFeedback('曲名识别未完成：'+(error.message||'请检查本地服务后重试'),'error');}
+    finally{state.busy=false;if(valid())render();else refreshDisabled();}
+  }
+  q('[data-name-all]').onchange=function(){state.selected.clear();if(this.checked&&state.data)state.data.list.forEach(function(s){state.selected.add(s.nameKey);});render();};
+  function batch(action){var revisions={},selectedCount=state.selected.size;state.data.list.forEach(function(s){revisions[s.nameKey]=s.revision;});return perform(function(){return api('batch',{action:action,nameKeys:Array.from(state.selected),expectedRevisions:revisions,confirmProvisional:action==='provisional'});},function(result){var changed=result.changed||0;return(action==='confirm'?'已确认 ':'已暂用 ')+changed+' 首'+(action==='provisional'?'，仍未确认':'')+(changed<selectedCount?'；其余 '+(selectedCount-changed)+' 首未改动':'');});}
+  q('[data-name-confirm]').onclick=function(){if(window.confirm('确认所选歌曲的当前名称？确认后后台不会自动覆盖；未适用的歌曲保持不变。'))return batch('confirm');};
+  q('[data-name-provisional]').onclick=function(){if(window.confirm('暂用所选低可信歌曲的最强建议？暂用后仍为低可信、未确认。'))return batch('provisional');};
+  q('[data-name-retry]').onclick=function(){return start(Array.from(state.selected),true);};q('[data-name-start]').onclick=function(){return start(undefined,false);};
+  q('[data-name-home-start]').onclick=function(){return start(undefined,false);};
+  q('[data-name-search]').oninput=function(){clearTimeout(state.searchTimer);state.searchTimer=setTimeout(function(){void load(true);},250);};
+  q('[data-name-source]').onchange=function(){var disabled=['manual','native','legacy','none'].indexOf(this.value)>=0;if(disabled)q('[data-name-level]').value='all';q('[data-name-level]').disabled=disabled;return load(true);};
+  q('[data-name-level]').onchange=function(){return load(true);};q('[data-name-prev]').onclick=function(){state.page--;return load(false);};q('[data-name-next]').onclick=function(){state.page++;return load(false);};
+  q('[data-name-review]').onchange=function(){return load(true);};
+  q('[data-name-auto]').onchange=function(){var value=this.checked;return perform(function(){return api('config',{autoEnabled:value});},'自动识别设置已保存');};
+  ['high','medium','low'].forEach(function(level){
+    var row=document.createElement('div');row.className='lm-song-auto-row lm-name-level-setting';row.innerHTML='<span>'+levels[level]+'可信度</span><label class="lm-music-switch"><input type="checkbox" role="switch" data-name-apply="'+level+'" aria-label="'+levels[level]+'可信度自动暂用"></label>';q('[data-name-levels]').appendChild(row);
+    row.querySelector('input').onchange=function(){var apply={};apply[level]=this.checked;return perform(function(){return api('config',{autoApply:apply});},'自动暂用设置已保存');};
+  });
+  q('[data-name-config-save]').onclick=function(){
+    var input={maxSamples:Number(q('[data-name-max]').value),requestBudget:Number(q('[data-name-budget]').value),dailyBudget:Number(q('[data-name-daily]').value)};
+    if(q('[data-name-key]').value||q('[data-name-secret]').value){input.accessKey=q('[data-name-key]').value;input.accessSecret=q('[data-name-secret]').value;}
+    return perform(async function(){var result=await api('config',input);q('[data-name-key]').value='';q('[data-name-secret]').value='';state.dirty=false;return result;},'服务设置已保存');
+  };
+  ['[data-name-key]','[data-name-secret]','[data-name-max]','[data-name-budget]','[data-name-daily]'].forEach(function(selector){q(selector).oninput=function(){state.dirty=true;};});
+  q('[data-name-config-clear]').onclick=function(){if(window.confirm('清除识曲密钥并关闭自动识别？已保存的歌曲名不受影响。'))return perform(function(){return api('config',{clearCredentials:true});},'密钥已清除');};
+  undo.onclick=function(){return perform(async function(){var result=await api('undo',{undoId:state.undoId});state.undoId=null;undo.hidden=true;return result;},'已撤销仍可恢复的名称修改');};
+  async function openManagement(review){if(!dirtyLeave())return;state.dirty=false;q('[data-name-search]').value='';q('[data-name-source]').value='all';q('[data-name-level]').value='all';q('[data-name-level]').disabled=false;q('[data-name-review]').value=review;setCustomSongView(modal,'names');selectTab('songs');await load(true);}
+  management.querySelector('[data-name-open]').onclick=function(){return openManagement('all');};
+  management.querySelectorAll('[data-name-review-shortcut]').forEach(function(button){button.onclick=function(){return openManagement(button.getAttribute('data-name-review-shortcut'));};});
+  modal.__nameRecognition={pane:pane,leave:dirtyLeave,
+    setBusy:function(value){state.externalBusy=Boolean(value);refreshDisabled();},
+    changedView:function(view){pane.hidden=view!=='names';save.hidden=view!=='names'||!state.detail;undo.hidden=view!=='names'||!state.undoId;if(view!=='names'){limitHelp.hide();clearTimeout(state.timer);state.epoch++;state.dirty=false;q('[data-name-key]').value='';q('[data-name-secret]').value='';}if(view==='home'){fold.open=false;void load(true);}},
+    close:function(){startSequence++;actionFeedback('');limitHelp.hide();fold.open=false;clearTimeout(state.timer);state.epoch++;state.dirty=false;q('[data-name-key]').value='';q('[data-name-secret]').value='';}
   };
 }
 

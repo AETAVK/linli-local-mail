@@ -2,12 +2,12 @@
 
 Repository: https://github.com/AETAVK/linli-local-mail
 
-本项目公开源码位于上述仓库。当前源码版本为 `0.11.15`；安装包版本取自 `package.json`。
-当前正式安装包 `0.11.15` 对应标签 `v0.11.15`。
+本项目公开源码位于上述仓库。当前源码版本为 `0.11.16`；安装包版本取自 `package.json`。
+当前正式安装包 `0.11.16` 对应标签 `v0.11.16`。
 
-`v0.11.15` 的安装器与校验附件可从以下发布页获取：
-[GitHub](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.11.15) 与
-[Gitee](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.11.15)。两个发布页提供同一批附件，
+`v0.11.16` 的安装器与校验附件可从以下发布页获取：
+[GitHub](https://github.com/AETAVK/linli-local-mail/releases/tag/v0.11.16) 与
+[Gitee](https://gitee.com/sforlife/linli-local-mail/releases/tag/v0.11.16)。两个发布页提供同一批附件，
 安装器的 SHA-256 见同名 `.sha256` 附件。
 
 每个已发布标签用于固定相应安装包的对应源码，不得移动、删除或重写。
