@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "641df66305daa67b90d09c71551a1c4fcaa60f53",
+  "canonicalCommit": "36ff66f549fc35673617ada8e49ba1dc254876be",
   "packageVersion": "0.11.16",
   "releaseVersion": "0.11.16",
   "files": [
@@ -109,6 +109,36 @@
       "path": "frontend/local-mail-poc.js",
       "gitBlob": "f54ff7f795819334f7edac3924c5d37ef5e2c9c0",
       "sha256": "0dc30ffb0db98992135085b62946317ce6f83f8a30a32d994637a363d9b52069"
+    },
+    {
+      "path": "frontend/song-recognition-guide.html",
+      "gitBlob": "946a9fe2a357ded08a5523155d81da2f9d6896be",
+      "sha256": "38e9b28b5b8b17e14f2c47d7d018884c44323708087ce9f85f03525b46b2f101"
+    },
+    {
+      "path": "frontend/song-recognition-guide/create-project.jpg",
+      "gitBlob": "dfa9966e29fdcddf30f31231bb5b15eac6d28862",
+      "sha256": "223d2fabaea4035cd46ad0593536b579c46b1510dec143c79efcebee11c7a8e5"
+    },
+    {
+      "path": "frontend/song-recognition-guide/find-keys.png",
+      "gitBlob": "460f8163c2d9c9b8ddb6027946c278124643602a",
+      "sha256": "ebae5a0ab13cdd8476419dcdf24b9e5323eb001eab9ce0589021b910ae58d483"
+    },
+    {
+      "path": "frontend/song-recognition-guide/local-settings.jpg",
+      "gitBlob": "ada7f9bde53c59a960c87832e99b796c74d601b0",
+      "sha256": "c7a50bba14aa0a10885ea2c9c51e5212b6e67d4bc484fc0bbda32b533decbb3f"
+    },
+    {
+      "path": "frontend/song-recognition-guide/register.jpg",
+      "gitBlob": "3baac61fba060dcdba7ad7b12706ab2f553b83c9",
+      "sha256": "5e210fc3496db6b426f805ca10d3ea6562bc60ba211900af3a330af34a51eb91"
+    },
+    {
+      "path": "frontend/song-recognition-guide/trial-limits.jpg",
+      "gitBlob": "851685d20b5f0abf8b794204587231a7efda9b12",
+      "sha256": "cf60c347adca8f86fe703895ef4ff16153cf188f116b2a0e3531512f337c11fb"
     },
     {
       "path": "Install.cmd",
