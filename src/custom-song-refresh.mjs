@@ -90,7 +90,8 @@ export class CustomSongRefresh {
   status(root) {
     const state = this.states.get(root);
     return { mediaRoot: root, revision: state?.revision || this.stored(root)?.revision || "",
-      refreshing: Boolean(state?.refreshing), error: state?.error || "" };
+      refreshing: Boolean(state?.refreshing), error: state?.error || "",
+      ...(state?.warning ? { warning: state.warning } : {}) };
   }
 
   inputs(root) { return this.fingerprint({ mediaRoot: root, logRoot: this.catalog.logRoot }); }
@@ -107,6 +108,7 @@ export class CustomSongRefresh {
     if (!retry) state.retries = 0;
     state.refreshing = true;
     state.error = "";
+    state.warning = "";
     if (this.job) { this.nextRoot = root; return; }
     let done;
     this.job = new Promise((resolve) => { done = resolve; });
@@ -191,8 +193,16 @@ export class CustomSongRefresh {
       const state = this.selectRoot(root);
       state.revision = revision;
       state.error = "";
+      state.warning = "";
       this.memo = snapshot ? { root, mappingHash: mapping.hash, result: presentation } : null;
-      if (before?.cacheable && after?.cacheable && before.signature !== after.signature) this.retryChangedInputs(root);
+      if (before?.cacheable && after?.cacheable && before.signature !== after.signature) {
+        if (before.mediaCacheable === true && after.mediaCacheable === true &&
+            typeof before.mediaSignature === 'string' && before.mediaSignature === after.mediaSignature) {
+          // Keep the combined cache signature invalid: newer log evidence is checked on the
+          // next ordinary refresh. Log churn alone must not block a verified media inventory.
+          state.warning = "日志仍在写入，本次曲库结果可用；新的日志信息将在后续检查中读取。";
+        } else this.retryChangedInputs(root);
+      }
     }
   }
 

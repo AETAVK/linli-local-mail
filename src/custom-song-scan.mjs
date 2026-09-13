@@ -189,6 +189,7 @@ async function readMedia(mediaRoot, metadata, limits, warnings, evidenceOptions)
       files: files.map((fileName) => fileResult(fileName, mapping)),
       metadataSource: mappedName ? 'mapping' : record ? 'log' : 'directory',
       evidenceVersion: 1,
+      ...(record?.nameEvidence && (!mappedName || mappedName === record.name) ? { nameEvidence: record.nameEvidence } : {}),
     };
     // Apply table fields before inference so imported values cannot be replaced
     // or misrepresented as new official-log evidence.
@@ -656,11 +657,13 @@ function collectObjectRecords(value, records, context, diagnostics) {
 
 function recordFromObject(value, context) {
   if (typeof value.nameKey !== 'string' || !value.nameKey) return null;
+  const mapping = mappingsFromValue(value.videoByTodView, { ...context, nameKey: value.nameKey });
   return {
     id: numericId(value.id),
     name: typeof value.name === 'string' && value.name ? value.name : null,
     nameKey: value.nameKey,
-    mapping: mappingsFromValue(value.videoByTodView, { ...context, nameKey: value.nameKey }),
+    mapping,
+    nameEvidence: originalNameEvidence(value.name, value.nameKey, mapping),
     recordIds: new Set(numericId(value.id) ? [numericId(value.id)] : []),
   };
 }
@@ -690,11 +693,13 @@ function partialRecords(request, context) {
     const segment = request.slice(start, end);
     const nameKey = readField(segment, 'nameKey');
     if (typeof nameKey !== 'string' || !nameKey) continue;
+    const mapping = mappingsFromText(segment, { ...context, nameKey });
     records.push({
       id: numericId(readField(segment, 'id')),
       name: nonEmptyString(readField(segment, 'name')),
       nameKey,
-      mapping: mappingsFromText(segment, { ...context, nameKey }),
+      mapping,
+      nameEvidence: originalNameEvidence(readField(segment, 'name'), nameKey, mapping),
       recordIds: new Set(numericId(readField(segment, 'id')) ? [numericId(readField(segment, 'id'))] : []),
     });
   }
@@ -768,6 +773,13 @@ function addMapping(mapping, fileName, candidate) {
   mapping.set(fileName, candidates);
 }
 
+function originalNameEvidence(name, nameKey, mapping) {
+  if (!usableName(name, nameKey) || mapping.hasRejectedOriginal) return null;
+  const sources = [...mapping.values()].flat().flatMap(item => item.sources || [])
+    .filter(source => source.kind === 'official-log').slice(0, 4);
+  return sources.length ? { name, sources } : null;
+}
+
 function mergeRecords(newer, older) {
   const mapping = new Map();
   for (const [fileName, candidates] of newer.mapping) {
@@ -780,6 +792,7 @@ function mergeRecords(newer, older) {
   return {
     id: newer.id ?? older.id,
     name: newer.name || older.name || null,
+    nameEvidence: newer.name ? newer.nameEvidence : older.nameEvidence,
     nameKey: newer.nameKey,
     mapping,
     recordIds: new Set([...(newer.recordIds ?? []), ...(older.recordIds ?? [])]),

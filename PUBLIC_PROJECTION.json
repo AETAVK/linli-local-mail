@@ -1,9 +1,9 @@
 {
   "format": 1,
   "generatedBy": "tools/export-public.mjs",
-  "canonicalCommit": "f11ca12ba58c41fa5f82e0ec09ecea8daca9779e",
-  "packageVersion": "0.11.15",
-  "releaseVersion": "0.11.15",
+  "canonicalCommit": "36ff66f549fc35673617ada8e49ba1dc254876be",
+  "packageVersion": "0.11.16",
+  "releaseVersion": "0.11.16",
   "files": [
     {
       "path": ".gitattributes",
@@ -11,9 +11,9 @@
       "sha256": "4ee8456f0a011f74e2e8fc1cf155849f19756f076c3851d647f02d974851f66f"
     },
     {
-      "path": ".github/release-notes/v0.11.15.md",
-      "gitBlob": "a634180dbdfad0695ddedc58df70a6bb019cd484",
-      "sha256": "adb7d97c07810b3bd9c8fc6a43f47b690e6b4f1a145ce5c9c47eeb08c609d5dd"
+      "path": ".github/release-notes/v0.11.16.md",
+      "gitBlob": "e7234cdc56fb3c8d0704c77764c66b0385aff7a6",
+      "sha256": "0f4b21bcdf68dcb65c058bec5756006ec2ee9c6b5d3a7bfcdb30375db245212f"
     },
     {
       "path": ".github/scripts/publish-gitee-release.mjs",
@@ -52,8 +52,8 @@
     },
     {
       "path": "frontend-src/local-mail-poc/01-core-styles.js",
-      "gitBlob": "d797d52510c93505a7e952d3cfd02085f180b9a5",
-      "sha256": "9d85c26cf16f4bfd6854ca8e8dba92a877b5e7bd66003e50c3355a1aabd06bb6"
+      "gitBlob": "7bbbbce07920887a615d877e31bbb6b78979f82f",
+      "sha256": "adfdeebc4069f551bf5408bf05d948305cca00885ea866b61aeffeac2e5ffa3e"
     },
     {
       "path": "frontend-src/local-mail-poc/02-mail-import-updater.js",
@@ -62,8 +62,8 @@
     },
     {
       "path": "frontend-src/local-mail-poc/03-settings.js",
-      "gitBlob": "6d2f9f43445dc6da5e12687202057edb4fca1f6b",
-      "sha256": "a9381ae1ac351cc4a027062591a8aeb6bac322ad4a86945fc8455964a175ee49"
+      "gitBlob": "b9afeba310a4ce4f38cd659327fb1a4d2826ab02",
+      "sha256": "782bb533e9e708d376a18526c29a6088030bb3ade789ded38ed52ae978083056"
     },
     {
       "path": "frontend-src/local-mail-poc/04-vue-pinia-navigation.js",
@@ -82,8 +82,8 @@
     },
     {
       "path": "frontend-src/local-mail-poc/05-music.js",
-      "gitBlob": "21455e1b59b7e1eaecae62d3ec58b7170591460c",
-      "sha256": "37969132c5b1d83d5a452f8345af7829664e37532044be52a6df95452aca83b1"
+      "gitBlob": "f7e39bc58f51f141139140e74943031f52473591",
+      "sha256": "a80ee88af13ba0425daa9e815acce60257806a313b57fdf99c434623a9697bef"
     },
     {
       "path": "frontend-src/local-mail-poc/05a-music-diagnostics.js",
@@ -92,8 +92,13 @@
     },
     {
       "path": "frontend-src/local-mail-poc/05b-visual-tasks.js",
-      "gitBlob": "a13f6f4ffdadcda2fadd2373463f89b01ea2d3c9",
-      "sha256": "6f482dabfbb2b470f7e9ff0a24de0deb9860e3ade0224cfb22bc51bf42a7c60a"
+      "gitBlob": "5e25e71f8090c96afd009e27782ae9f739ea05aa",
+      "sha256": "199e53d7e1f08bde6c2f570b0734818b4e675fea8bc5b1646fa3fa9b44298821"
+    },
+    {
+      "path": "frontend-src/local-mail-poc/05c-song-recognition.js",
+      "gitBlob": "5495dff452b9d41ba76d9bd7da667d2e49e605c2",
+      "sha256": "ad0974ef106f8aa99ca9edda1b6ddca24c062377495c9f2a9871f080c7077dbe"
     },
     {
       "path": "frontend-src/local-mail-poc/06-bootstrap.js",
@@ -102,8 +107,38 @@
     },
     {
       "path": "frontend/local-mail-poc.js",
-      "gitBlob": "20443e170ab0c58ffda824920f93ebe61c36cdb4",
-      "sha256": "75d399b753d1c9d0fa842b628a600664aea3bc7a2b832fe3bf44818972a9482f"
+      "gitBlob": "f54ff7f795819334f7edac3924c5d37ef5e2c9c0",
+      "sha256": "0dc30ffb0db98992135085b62946317ce6f83f8a30a32d994637a363d9b52069"
+    },
+    {
+      "path": "frontend/song-recognition-guide.html",
+      "gitBlob": "946a9fe2a357ded08a5523155d81da2f9d6896be",
+      "sha256": "38e9b28b5b8b17e14f2c47d7d018884c44323708087ce9f85f03525b46b2f101"
+    },
+    {
+      "path": "frontend/song-recognition-guide/create-project.jpg",
+      "gitBlob": "dfa9966e29fdcddf30f31231bb5b15eac6d28862",
+      "sha256": "223d2fabaea4035cd46ad0593536b579c46b1510dec143c79efcebee11c7a8e5"
+    },
+    {
+      "path": "frontend/song-recognition-guide/find-keys.png",
+      "gitBlob": "460f8163c2d9c9b8ddb6027946c278124643602a",
+      "sha256": "ebae5a0ab13cdd8476419dcdf24b9e5323eb001eab9ce0589021b910ae58d483"
+    },
+    {
+      "path": "frontend/song-recognition-guide/local-settings.jpg",
+      "gitBlob": "ada7f9bde53c59a960c87832e99b796c74d601b0",
+      "sha256": "c7a50bba14aa0a10885ea2c9c51e5212b6e67d4bc484fc0bbda32b533decbb3f"
+    },
+    {
+      "path": "frontend/song-recognition-guide/register.jpg",
+      "gitBlob": "3baac61fba060dcdba7ad7b12706ab2f553b83c9",
+      "sha256": "5e210fc3496db6b426f805ca10d3ea6562bc60ba211900af3a330af34a51eb91"
+    },
+    {
+      "path": "frontend/song-recognition-guide/trial-limits.jpg",
+      "gitBlob": "851685d20b5f0abf8b794204587231a7efda9b12",
+      "sha256": "cf60c347adca8f86fe703895ef4ff16153cf188f116b2a0e3531512f337c11fb"
     },
     {
       "path": "Install.cmd",
@@ -137,13 +172,13 @@
     },
     {
       "path": "package.json",
-      "gitBlob": "e66e068fdf8a7bfe994c4d106c767e4446caa854",
-      "sha256": "48eabd84c88ba9aeaaf113d32331688e81256828bd3b0ca3e46a524ed8365925"
+      "gitBlob": "40a50208eb2293bb0b342b12c3dfd96782da9bd6",
+      "sha256": "fafe25b7528c4e88a217808270512b8ba4ae6994f6f36c1537a410570ae075ac"
     },
     {
       "path": "README.md",
-      "gitBlob": "7e15fa8725623b9489f2774cc9712ce98a2c9c12",
-      "sha256": "58b5bd1038a925f5085bb6237f3829aa481c49b589f07cb8cf4d30791d799861"
+      "gitBlob": "4af5cce0042a454d43918b2b2fed903e3302361b",
+      "sha256": "4f2c09009c91b06f8aa245d850379fc0e33ce84a7b40167cc7dec82f98c87228"
     },
     {
       "path": "repo-role.json",
@@ -152,13 +187,13 @@
     },
     {
       "path": "server.mjs",
-      "gitBlob": "3bd3ddf37a8addf782b4b9c955eb010aaf0c1010",
-      "sha256": "ddecf5addaf81230ded70e1d98cb84fd76b88c2ac05ea0aba9fc290d768c7d30"
+      "gitBlob": "761f74a02f0ef3df98bdf57ffdc2f3f337e1b7e9",
+      "sha256": "11bf21b9798e0d170ba46f8933f3134b4e12178eead4b320bd95dfaaae3147d3"
     },
     {
       "path": "SOURCE_CODE.md",
-      "gitBlob": "6be41dded5ff23c55d5eb99b92552a3a9f346acb",
-      "sha256": "2d07645d357f34b9fefd29129daa7ecacda859aecb05fe8affa69d398f647bcc"
+      "gitBlob": "9cf86998d92b84fdbff29605d4c2c194aac66b40",
+      "sha256": "82e066cfe4e47f9a3a2ddce492c8f13e0d051513182e0ff9c2a1e6c7c6d04578"
     },
     {
       "path": "src/character.mjs",
@@ -172,8 +207,8 @@
     },
     {
       "path": "src/constants.mjs",
-      "gitBlob": "401d0fe83e6dd1d6babdc874150381f32081f052",
-      "sha256": "43868bc46e8a76187d0d32205e6d5e3b020172759e542c126f62707ef2551c32"
+      "gitBlob": "e81f6fb9b503bbc752d7160faa1f44206bfa0833",
+      "sha256": "5ad8082fe825a0db88febd065fefaf65a504f6962f1fd72ebf07a8bf6fdb571f"
     },
     {
       "path": "src/context-budget.mjs",
@@ -217,8 +252,8 @@
     },
     {
       "path": "src/custom-song-inputs.mjs",
-      "gitBlob": "6419cffa0057c522b51160fe6d10708243a73b59",
-      "sha256": "be2a2ca8d4c1abb23baedde49efb650c16887b3576764133754e997e8973ccce"
+      "gitBlob": "aef54a8a824e971bc631091ad540d7eefb8be2b2",
+      "sha256": "3436b50a31db1cb0ca5866e40defc946912eb69ab9c9065876c41c2bf52fb251"
     },
     {
       "path": "src/custom-song-mappings.mjs",
@@ -247,13 +282,13 @@
     },
     {
       "path": "src/custom-song-refresh.mjs",
-      "gitBlob": "1f8e164e8d338c68ced6cb8a6ddcb9631ee71137",
-      "sha256": "e99cc1e184dd72288198ec154788f0aa1b861b4b64e43c628150aee9f881e120"
+      "gitBlob": "68bb7fb3fb24311622c730deeddfcd742081da84",
+      "sha256": "96b95662515dce7d668cf7e898e74f817f19df24050404ff3670b8191173d613"
     },
     {
       "path": "src/custom-song-scan.mjs",
-      "gitBlob": "40a1e082fca66751dffb83306e54adbc730a2521",
-      "sha256": "c1de26d2b5bbb2e66de573d0215ee38a22e36984282576fccf8c1026ace706ea"
+      "gitBlob": "bfc9108c5519465574167d4fdb64253d7ecc9c93",
+      "sha256": "62dab7d118ad474675531fd76b032553f78290dc44096a00f6d04a405aba92f7"
     },
     {
       "path": "src/custom-song-structure.mjs",
@@ -287,8 +322,8 @@
     },
     {
       "path": "src/custom-songs.mjs",
-      "gitBlob": "eee7220049027022be4ee378c0c17546c7d5cc1f",
-      "sha256": "65a4722724cbbf21e2b0935fa57e31fbf6265480085fc553be38dce1fe7126cd"
+      "gitBlob": "cfb12c9f698b56d5c648669feed6052f5bc6ec33",
+      "sha256": "bc7f6f4a4ac0b4608b8f187765bdcd0489c6a99d9d2267fad2c9e235b3ca7176"
     },
     {
       "path": "src/database.mjs",
@@ -371,6 +406,11 @@
       "sha256": "3ec8f8d6d369c8397a691313addebee0b283b7be848aa4a54fe879635841c54e"
     },
     {
+      "path": "src/song-audio-sample.mjs",
+      "gitBlob": "c1e68a202be71daf70704a7373ccca9058402af9",
+      "sha256": "070c30ee1be92fbc5ec7ce48690cceb7052719027505cf942a9908acff79cbef"
+    },
+    {
       "path": "src/song-diagnostic-picker.mjs",
       "gitBlob": "77e858a38331d3a15f6d7f6abd04850b7d32c5ab",
       "sha256": "0d65af73b6eb700100f6aeff57b07f333e596325326ce303cf1b373876170e98"
@@ -379,6 +419,31 @@
       "path": "src/song-folder-picker.mjs",
       "gitBlob": "3c8018129367ef4b15004c302bb5af3f1c830935",
       "sha256": "81a24eaedb964edde5508d96148e8db8d3c12134edfbe78808b44b9e524d323f"
+    },
+    {
+      "path": "src/song-recognition-config.mjs",
+      "gitBlob": "48196b849431365bf1373908bb2506fd45e0153b",
+      "sha256": "f71e5340a62a4b3f95958513cccdccaa29de4b8e4de9680e99206fcda89b6cfb"
+    },
+    {
+      "path": "src/song-recognition-policy.mjs",
+      "gitBlob": "a14d4271496ef1c73b374dfbe69bfde86e4ffced",
+      "sha256": "813c7a5dd2c044eb834b591ce442f16f295f238427c2e22970162784356c9e8e"
+    },
+    {
+      "path": "src/song-recognition-provider.mjs",
+      "gitBlob": "afef50501b23fc3df8bebfb8b7063176ab06b291",
+      "sha256": "df98b34f3699fc5feb9cbc4db20504644a4f783a524d3c1dd74ee259c2135b03"
+    },
+    {
+      "path": "src/song-recognition-store.mjs",
+      "gitBlob": "6476e6dc480b3a786a6994a062393f781a83a636",
+      "sha256": "8fac7287a2f863bf344c4d635e4a7705a4518f8e4f68f433e9d87a68bb1dbb74"
+    },
+    {
+      "path": "src/song-recognition.mjs",
+      "gitBlob": "45cd75a9264600a4ad24d2e735f733480abd20bf",
+      "sha256": "9431fb3d19f2484240f23e1532bbfad51d46233d0ec72305ad6f2acc2685387a"
     },
     {
       "path": "src/update-preferences.mjs",
@@ -457,8 +522,8 @@
     },
     {
       "path": "tools/frontend-source.mjs",
-      "gitBlob": "923e30731af50e94067c1b81681225b50c8d5070",
-      "sha256": "9e5c0762a412a1b7fb1786f4ccca01395740c3f88cf71a1245c4a4e7628197c8"
+      "gitBlob": "37847f382dd1c35a5aba021475be77643eec6de1",
+      "sha256": "ead31822763eed7db3876e9c828bc47b9a4473be327bfca9733fb8cf231f4ac8"
     },
     {
       "path": "tools/generate-runtime-manifest.mjs",

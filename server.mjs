@@ -98,13 +98,14 @@ async function readImportDraftBody(req, maximumBytes) {
 }
 
 const database = new MailDatabase(DB_PATH, LEGACY_JSON_PATH);
+const secretStore = new SecretStore(SECRETS_PATH);
 const customSongs = new CustomSongCatalog({
   db: database.db, baseUrl: `http://${HOST}:${PORT}`,
   mediaRoot: process.env.LINLI_CUSTOM_SONG_ROOT,
   logRoot: process.env.LINLI_CUSTOM_SONG_LOG_ROOT,
-  mappingPath: path.join(path.dirname(DB_PATH), "custom-song-mappings.json")
+  mappingPath: path.join(path.dirname(DB_PATH), "custom-song-mappings.json"),
+  nameOptions: { secretStore }
 });
-const secretStore = new SecretStore(SECRETS_PATH);
 const worker = new GenerationWorker({ database, configRoot: CONFIG_ROOT, secretStore });
 const videoStore = new VideoAssetStore(MEDIA_ROOT);
 const remoteImporter = new RemoteImportManager({ database, mediaStore: videoStore });
@@ -145,11 +146,11 @@ function sendJson(req, res, status, body, extraHeaders = {}) {
   res.end(JSON.stringify(body));
 }
 
-function sendHtml(req, res, html) {
+function sendHtml(req, res, html, { images = false } = {}) {
   setCommonHeaders(req, res);
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
+    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'" + (images ? "; img-src 'self'" : "")
   );
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(html);
@@ -443,6 +444,16 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+    if (req.method === "GET" && url.pathname === "/song-recognition-guide") {
+      sendHtml(req, res, fs.readFileSync(path.join(ROOT, "frontend/song-recognition-guide.html"), "utf8"), { images: true });
+      return;
+    }
+    const guideAsset = req.method === "GET" && url.pathname.match(/^\/song-recognition-guide\/([a-z0-9-]+\.(?:png|jpg))$/);
+    if (guideAsset) {
+      const file = path.join(ROOT, "frontend/song-recognition-guide", guideAsset[1]);
+      if (!fs.existsSync(file)) { fail(req,res,404,"Unknown guide image"); return; }
+      setCommonHeaders(req,res);res.writeHead(200,{"Content-Type":guideAsset[1].endsWith(".jpg")?"image/jpeg":"image/png","Cache-Control":"no-cache"});res.end(fs.readFileSync(file));return;
+    }
     if (req.method === "GET" && url.pathname === "/settings") {
       sendHtml(req, res, settingsPage());
       return;
@@ -546,6 +557,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/custom-songs/search") {
       ok(req, res, await customSongs.search(await readJsonBody(req)));
+      return;
+    }
+    const nameAction = req.method === 'POST' && url.pathname.match(/^\/api\/custom-songs\/names\/(list|status|config|update|batch|undo|start|control)$/);
+    if (nameAction) {
+      const method = nameAction[1] === 'config' ? 'configure' : nameAction[1];
+      ok(req, res, await customSongs.nameRecognition[method](await readJsonBody(req)));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/custom-songs/choose-folder') {

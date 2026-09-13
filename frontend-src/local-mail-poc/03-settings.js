@@ -1062,7 +1062,7 @@
     },
     {
       key: "visionAutoFillEnabled",
-      label: "本地演奏自动整理",
+      label: "本地演奏时段自动识别",
       description: "首次使用默认开启，保留已有关闭选择。前端可用时识别并保存缺项，不覆盖手工设置；关闭不撤销已保存结果。"
     }
   ];
@@ -1128,8 +1128,9 @@
     if (patchSection && patchSection.parentElement === container && nextLocalElement(patchSection) !== section) {
       container.insertBefore(patchSection, localSection);
     }
-    if (nextLocalElement(section) !== localSection) {
-      container.insertBefore(section, localSection);
+    var nameSection=mountSongRecognitionSettings(container,localSection);
+    if (nextLocalElement(section) !== nameSection) {
+      container.insertBefore(section, nameSection);
     }
     bindMusicEnhancementSettings(section);
     updateMusicEnhancementSettings(section);
